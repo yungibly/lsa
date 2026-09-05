@@ -18,7 +18,7 @@ comparisons. Later storage-policy changes are covered separately by automation.
 | User's previously reported Ghostty 1.3.1 context | Kitty inline; supplied metadata/grouping and cache commands | User reported all commands worked exactly as expected at `7050349`; version/geometry/transport not separately resupplied | User-verified commands |
 | Kitty terminal; other terminals; SSH | Kitty inline | No terminal trials | Unverified |
 | tmux / screen / Zellij | Text in auto mode | Environment fallback tested for tmux; no passthrough implementation | Graphics unverified |
-| Any terminal | Interactive browser | Not implemented | — |
+| Local controlling PTY, injected Ghostty environment | Text alternate-screen browser; keyboard input, resize and signals | Browser interaction/restoration suite; no graphics or renderer | Automated pass; Ghostty visual check pending |
 | Any terminal | Sixel | Deferred, not implemented | — |
 
 PTY tests check quiet/chunked RGBA framing, decoded lengths, total image bytes,
@@ -116,3 +116,32 @@ both outcomes. Pixel dimensions may be estimated; note this when judging aspect.
 
 The example fixture generator refuses to overwrite an existing generated directory.
 No Ghostty UI automation was performed.
+
+## Browser checklist
+
+The new text browser has automated controlling-PTY coverage; no browser visual
+pass has been reported yet. Use the current release binary in Ghostty:
+
+```sh
+./target/release/lsa --browse --dirs-first img-test
+./target/release/lsa --browse -a img-test/generated
+./target/release/lsa --browse img-test/generated/many
+```
+
+- Use arrows or j/k, PgUp/PgDn, and g/G. Selection should stay visible in one
+  mixed listing. Enter a directory, then h/Left to return to its selected entry.
+- Press Space on a long name. Inspect the complete name/path with arrows/pages;
+  Esc closes it. Filenames remain selectable terminal text.
+- Resize narrow/wide and short/tall while browsing. Selection should survive;
+  below 12×5, a resize message replaces the view until it fits again.
+- Quit with q, then repeat and use Ctrl-C. The original shell screen, cursor, and
+  normal typed input should return. After Ctrl-C, `echo $?` should show 130.
+- Run again, press Ctrl-Z, type `fg`, and verify the browser redraws with the same
+  selection. Quit and confirm normal shell input/echo.
+- For inline lifetime separation, run `./target/release/lsa img-test`, then enter
+  and quit the browser. Note whether the prior inline images and shell history
+  remain intact. The text browser emits no image deletion commands.
+
+Report Ghostty version, geometry, and local/SSH/multiplexer context along with any
+visible clipping, flicker, or restoration problems. PTY escape/termios checks do
+not establish visible cursor, alternate-screen, resize, or scrollback behavior.

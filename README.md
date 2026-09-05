@@ -1,12 +1,13 @@
 # lsa
 
-A fast, human-oriented directory listing with inline image thumbnails. An explicit
-browser can follow. Kitty graphics first; Sixel is an optional future addition.
+A fast, human-oriented directory listing with inline image thumbnails and an
+explicit text browser. Kitty graphics first; Sixel is an optional future addition.
 
 **Status:** Rust CLI with compact text and automatic inline Kitty grids, both
 user-verified in Ghostty 1.3.1. Directories-first sorting, configurable long
 metadata, and opt-in cache commands also received a user pass at `7050349`.
 Improved cache replacement has automated tests and working-set measurements.
+The new `--browse` text slice is implemented; Ghostty visual verification is pending.
 See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
 
 ## Direction
@@ -39,12 +40,13 @@ cargo build --release --locked
 ./target/release/lsa --fields=size,modified -h img-test
 ./target/release/lsa --grid img-test
 ./target/release/lsa --grid --protocol=kitty img-test
+./target/release/lsa --browse --dirs-first img-test
 ./target/release/lsa --diagnose
 ```
 
 Rust 1.88+ declared; built/tested with 1.98.0. Unix only; Linux is not yet tested.
 No install step or external image program is needed. The release binary is about
-1.2 MiB on this Mac. Full option semantics: `lsa --help`.
+1.3 MiB on this Mac. Full option semantics: `lsa --help`.
 
 Supported: `-a`/`-A`, `-l`/`--long`, `-h`, `-1`, `-t`, `-S`, `-r`,
 `--dirs-first`, `--fields=LIST`, multiple operands, `--`,
@@ -55,8 +57,15 @@ fall back to text. Non-TTY output always stays text, including with an explicit
 override. `--diagnose PATH` reports the chosen layout, reason, candidate count,
 and estimated grid height without decoding images.
 Caching is opt-in via `--cache-dir=PATH`; `--no-cache` disables it and
-`--clear-cache` clears the selected cache. No terminal queries, stdin reads,
-paging, color, or configuration file yet.
+`--clear-cache` clears the selected cache. Inline output makes no terminal queries,
+reads no stdin, and uses no paging. No configuration file yet.
+
+`--browse [DIRECTORY]` explicitly enters a text browser on a foreground terminal.
+Arrows or j/k move; PgUp/PgDn scroll; Enter enters directories; h/Left returns;
+Space shows the full name/path; r refreshes; q quits. Resize, Ctrl-C restoration,
+and Ctrl-Z/`fg` are supported. Sorting and hidden flags apply. The first slice
+has no images or search and rejects inline layout flags and multiple operands.
+See [browser controls and limits](docs/browser.md).
 
 Deliberate `ls` differences: bytewise name order; `-a` and `-A` both omit `.`/`..`;
 directory/link/FIFO/socket suffixes; numeric uid/gid and local minute timestamps in
@@ -162,6 +171,7 @@ cargo build --release --locked --examples --bins
 python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
+python3 tests/check_browser.py
 python3 benchmarks/measure.py
 python3 benchmarks/cache.py
 python3 benchmarks/cache_working_set.py
@@ -178,9 +188,9 @@ byte-level display tests. See [decisions](docs/decisions.md) and
 1. Tune layouts and metadata controls from daily use.
 2. Evaluate the opt-in cache from daily use before choosing a default policy;
    add bounded parallel work only where measurements justify it.
-3. Add an alternate-screen browser with viewport-driven previews, stable
-   selection, stale-job rejection, and session-only image cleanup. Share entries
-   and decoding with inline output, not output lifetime assumptions.
+3. Verify the text browser in Ghostty, then add viewport-driven previews, stale-job
+   rejection, and session-only image cleanup. Share entries and decoding with
+   inline output, keeping output lifetimes separate.
 4. Package tested macOS/Linux targets; expand formats and terminals from demand.
 
 See [AGENTS.md](AGENTS.md) for development practice.

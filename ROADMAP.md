@@ -12,6 +12,8 @@ at `7050349`, in the previously reported Ghostty context. Cache replacement now
 uses eight candidates per key after independent-source/geometry measurements;
 that storage change has automated output-equivalence and compatibility coverage.
 Four user images and generated fixtures remain gitignored under `img-test/`.
+The explicit `--browse` text slice is now implemented, with a separate terminal
+lifetime and PTY interaction coverage. Its Ghostty visual pass is pending.
 
 ## 1. Useful inline prototype — complete for the tested Ghostty commands
 
@@ -105,13 +107,33 @@ make individual latency/hit rates vary; eight candidates are not fastest in ever
 overloaded case. [Cache design](docs/cache.md) records limits and tradeoffs. No
 worker concurrency or browser was added in the cache chunks.
 
-## 3. Explicit browser — pending
+## 3. Explicit browser — text slice implemented; Ghostty check pending
 
-Alternate screen; keyboard selection, scrolling, navigation, search, quit, resize,
-and Ctrl-C restoration. Names first; decode visible entries plus a small margin.
-Bound jobs, bytes, and terminal residency; ignore stale completions. Idle browsing
-should not spin. Open/copy actions require explicit user input. Validate image
-cleanup separately from inline persistence.
+- [x] `--browse` for one directory, alternate screen, mixed-entry selection,
+  arrows/j/k, paging, first/last, directory navigation, and explicit refresh.
+  Share existing entries, hidden filtering, sorting, and suffixes.
+- [x] Preserve raw-name selection on refresh/return and index fallback on removal.
+  Resolve directory links only on navigation; retain up to 64 return bookmarks.
+- [x] Full escaped name/path inspection with grapheme wrapping and scrolling;
+  selection survives resize, including temporarily unusable terminal dimensions.
+- [x] Separate browser terminal guard: raw input, cursor and alternate-screen
+  restoration, Ctrl-C and exit signals, Ctrl-Z/continue, and foreground TTY checks.
+  Reject pipes before consuming input; inline output never enters this lifecycle.
+- [x] Blocking `pselect` while idle, bounded input/escape buffers and redraw geometry,
+  no background refresh, graphics, cache access, or new dependencies.
+- [x] Unit and controlling-PTY checks cover interaction, restoration, screen bounds,
+  full names, safe input, failures, and idle CPU. See [browser design](docs/browser.md).
+  36 unit + 8 CLI tests, 25 browser + 16 protocol + 34 layout + 23 cache scenarios,
+  fmt, clippy, and release build pass. One idle trial emitted no bytes over one
+  second and used 1.87 ms child CPU including startup/quit; no renderer measured.
+- [ ] User checks the [Ghostty browser commands](docs/compatibility.md#browser-checklist).
+- [ ] Add viewport-driven preview jobs plus a small margin, bounded work/bytes/
+  terminal residency, stale-completion rejection, and session-only image cleanup.
+- [ ] Search and any explicit open/copy actions remain later work from daily use.
+
+The browser currently shows names only; inline metadata/layout flags cannot combine
+with it. Directory reads remain synchronous and can delay input/signals. Automated
+PTY checks do not verify visible Ghostty rendering or restoration of its scrollback.
 
 ## 4. Package and expand — pending
 
@@ -132,11 +154,10 @@ SVG, TIFF, AVIF, HEIC, Sixel, or other protocols only from concrete demand.
 
 ## Next task
 
-Start the explicit browser with a usable text-first slice: `--browse`, alternate
-screen, stable mixed-entry selection, keyboard scrolling and directory navigation,
-quit, resize, and reliable Ctrl-C/terminal restoration. Block while idle; retain
-complete filename access and existing sorting/hidden behavior. Test through a PTY,
-then let the user verify Ghostty. Add viewport-driven image jobs and session-only
-cleanup in a subsequent slice, sharing entries/decoding but keeping browser and
-inline output lifetimes distinct. Cache default/storage expansion and more terminal
-transports remain driven by concrete daily-use feedback.
+Obtain the user's Ghostty visual pass for the text browser: mixed selection,
+navigation/return, full-name scrolling, resize, q/Ctrl-C, and Ctrl-Z/`fg`. Fix any
+reported issues. Then add viewport-driven image jobs and session-only cleanup,
+sharing entries/decoding but keeping browser and inline output lifetimes distinct.
+Preserve responsive names/selection and bounded work; measure before adding decode
+concurrency. Cache default/storage expansion, search, and more terminal transports
+remain driven by concrete daily-use feedback.

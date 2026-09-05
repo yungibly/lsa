@@ -1,107 +1,121 @@
 # Fresh-session handoff
 
-2026-09-05; this commit measures larger cache working sets and improves replacement.
-Starting Git state was clean at `7050349`. Read README → ROADMAP, then check Git.
+2026-09-05; this chunk implements the explicit text browser described in the prior
+handoff. Starting Git state was clean at `d60d99c`. Read README → ROADMAP, then
+check Git rather than assuming this snapshot is current.
 
 ## Working agreement and user verification
 
-- Work/access files only inside this repo, including Cargo storage and experiments.
+- Work/access files only inside this repo; keep Cargo storage and experiments here.
 - Routine implementation and concise local commits are authorized; no per-chunk
   confirmation. Docs are working suggestions, not rigid requirements.
-- User handles Ghostty visual checks; do not use computer automation for terminals.
+- The user handles Ghostty visual checks; do not automate terminal applications.
   Preserve the four original ignored images under `img-test/`.
-- The user reported all supplied commands worked exactly as expected at `7050349`:
-  metadata/grouping and empty/warm/disabled cache commands now have a user pass.
-  Earlier reports established Ghostty 1.3.1, 122×40 / 8×17, arm64 macOS 26.6.2.
-  The latest report did not resupply version/geometry/transport; do not invent new
-  SSH/multiplexer/resize/theme evidence. See [compatibility](docs/compatibility.md).
-- Keep one ordered mixed listing, cheap text, complete filenames/fallback, Kitty
-  first, inline default, browsing explicit. No file mutations/file-manager expansion.
+- Inline commands/layouts have prior user passes in Ghostty 1.3.1, 122×40 / 8×17,
+  arm64 macOS 26.6.2. The user passed the metadata/grouping and cache command set
+  at `7050349`. That report did not resupply transport/theme/resize conditions.
+- **The new browser has no Ghostty visual pass yet.** PTY checks establish bytes,
+  interaction, and terminal attributes, not visible screen/scrollback behavior.
+- Keep one ordered mixed listing, cheap text, complete filename access, Kitty
+  first, inline default, explicit browsing, and distinct image/output lifetimes.
 
 ## This chunk
 
-- Measured 4/16/32/48/64/96 independent source identities with fixed and alternating
-  thumbnail geometry; originals were copied, never altered. Stable copies live in
-  ignored `benchmarks/local/working-set/`. They occupy about 119.5 MiB and are reused
-  across binaries because changing identities changes collision distribution.
-- Direct mapping missed excessively below capacity. Tested four and eight candidate
-  slots per key, retaining the same 64 total slots / 19,973,460-byte file-content cap.
-- Selected eight slots per group. Lookup probes at most eight bounded headers with
-  one candidate fd open at a time. Full keys/checksums still validate hits.
-- Insertion rechecks candidates under the existing exclusive lock: replace an
-  existing key, else a missing/unreadable/malformed-header slot, else a victim
-  selected by a per-invocation randomly seeded standard-library hash of the key.
-  Trace models showed FIFO thrashing on repeated scans above group capacity.
-  No hit-time writes, index, directory scan, new dependency, or background work.
-- Record format, v1 namespace, fixed filenames, lock, and atomic staging remain
-  unchanged. Old records in new candidate slots are reusable; other old placements
-  miss and repopulate. Old/new binaries share the same storage bound; no migration.
-- Source validation, decoder limits, output budgets, layout, CLI, and inline image
-  lifetime are unchanged. Cache is still opt-in via `--cache-dir`; no default path.
+- Added `--browse [DIRECTORY]`, a text-only alternate-screen browser. It reuses
+  existing entries/sorting/hidden filtering and suffixes. One directory operand;
+  `-l`, `--fields`, `-1`, `--grid`, `--diagnose`, `--clear-cache`, and multiple
+  operands are rejected when combined with browsing.
+- Arrows/j/k move; PgUp/PgDn page; g/G and Home/End jump; Enter/right/l enters a
+  directory; h/Left/Backspace returns along the route, then to physical parents.
+  Explicitly entered directory links resolve, but keep their listing identity.
+- Selection survives resize, refresh (`r`), and return by raw filename, falling
+  back to the nearest index if removed. Navigation history is at most 64 small
+  bookmarks; old entry lists are not retained. Failed navigation/refresh keeps
+  the previous view usable with an error status.
+- One entry per overview row; long labels show `>`. Space/Tab opens the complete
+  escaped name, kind, and path with grapheme wrapping and vertical scrolling.
+  Escape closes the detail view. Enter on a regular file also shows details.
+- Browser-only terminal guard owns raw mode, alternate screen, cursor, paste mode,
+  and temporary signal handlers. q/Ctrl-D exits 0; Ctrl-C exits 130;
+  SIGTERM/HUP/QUIT exit 128 + signal. Ctrl-Z restores before stopping and `fg`
+  re-enters/redraws with selection intact. Error exits and unwinding also restore.
+- Require stdin/stdout on the same foreground terminal. Reject pipes before input
+  consumption or mode changes. Open an independent nonblocking controlling-TTY
+  input descriptor so the shell's shared descriptor flags remain unaffected.
+- Block idle in `pselect`, atomically unblocking managed signals while waiting.
+  No periodic polling or refresh; a lone Escape has a 100 ms timeout. Input batches
+  are at most 256 bytes; escape state stores at most 32 bytes; bracketed paste is
+  ignored. Redraw only visible rows, capped at 512×256, leaving the last column free.
+- No image decoding, preview jobs, cache access, image deletion, search, external
+  open/copy actions, new dependencies, or file mutations. Directory reads are
+  synchronous and can delay input/signals. Inline rendering behavior is unchanged.
+
+Details: [browser controls/design](docs/browser.md), [decisions](docs/decisions.md),
+[Ghostty checklist](docs/compatibility.md#browser-checklist).
 
 ## Evidence
 
-[Saved comparison](benchmarks/cache-working-set.json) and [methods](benchmarks/README.md):
-
-- 32 repeated sources: 56.25% hits / 216.42 ms → 100% / 15.97 ms (~13.6×).
-- 16 alternating-size sources: 62.50% / 98.74 ms → 100% / 9.01 ms.
-- 48 repeated sources: 50% / 456.10 ms → 96.67% / 63.55 ms.
-- Four warm sources stay ~4.76 ms. 96 sources alternating two sizes exceed capacity
-  (192 keys) and gain little. Eight candidates are not fastest for every overloaded
-  case; random replacement and unequal codec costs affect individual runs.
-- Output digests match for all 18 cases across all three policies; no cache errors.
-  All 96 previews fit attempt/output caps. OS cache warm, fresh processes, drained
-  PTY, no renderer. Five timed repeated/off runs, ten alternating runs, two warmups.
-- Separate RSS: 32 repeated sources drop 35.97 → 2.09 MiB; four warm stay 2.03 MiB.
-  Cases decoding misses remain roughly 31–39 MiB; no hard process-memory bound.
-  Four-slot pilot has no RSS sample. The final release binary is 1,279,600 bytes.
-- 32 unit + 8 CLI tests; 16 original PTY + 34 layout + 23 cache scenarios pass.
-  Release build, fmt, clippy pass. New tests cover colliding-key coexistence,
-  full-group eviction, duplicate prevention, hits behind malformed candidates, and
-  prior direct-mapped records. Storage-policy changes have automated coverage;
-  the user visual pass belongs to the prior `7050349` command set.
+- 36 unit + 8 CLI tests; fmt, clippy, release binaries/examples build pass.
+- 25 new browser controlling-PTY/CLI scenarios pass, including comparison to normal
+  listing order, all sorting flags, links/parent navigation, refresh after changes,
+  full name/path content, fragmented keys/paste, safe Unicode/control names,
+  empty/failing paths, resize down to 1×1 and up to 1000×1000 (render capped),
+  termination signals, Ctrl-C, Ctrl-Z/continue, pipes, and unconsumed redirected input.
+- Idle empty-directory trial: no bytes during a 1-second idle window; 1.105 seconds
+  including quit observation, 1.87 ms child user+system CPU including startup/quit.
+  This is an application/PTY trial, not terminal rendering or an RSS benchmark.
+- Existing 16 protocol PTY + 34 layout + 23 cache scenarios pass. No new cache or
+  inline performance claims; the cache working-set benchmarks were not rerun.
+- Release binary: 1,330,128 bytes. Rust/Cargo 1.98.0 on the existing macOS host;
+  Linux and declared MSRV 1.88 remain unverified.
+- Harness details: drain output while polling process exit; inspect terminal modes
+  via the PTY master after a controlling session exits (macOS revokes the slave).
+  On suspend, mask macOS's transient PENDIN retype bit for comparison; all other
+  attributes/control bytes must match. Check that shared input/output descriptors
+  do not acquire O_NONBLOCK. Initial test-harness failures were fixed, not waived.
 
 ## Resume here
 
-Start an explicit browser as a usable text-first slice: `--browse`, alternate
-screen, mixed-entry selection, scrolling, directory navigation, quit, resize,
-and Ctrl-C/terminal restoration. Block while idle. Preserve sort/filter behavior
-and complete filename access. Validate with PTY input/output tests, then the user's
-Ghostty check. Viewport-driven images/jobs and session-only cleanup follow in a
-separate slice. Shared entries/decoding are useful; inline image IDs/lifetimes must
-not be reused as browser ownership. Keep cache opt-in until a concrete need changes
-its default/storage policy; avoid further cache tuning without new evidence.
+Get the user's Ghostty browser pass before treating visible interaction/restoration
+as verified. Provide the checklist, including mixed selection, navigation/return,
+Space/full-name scrolling, resize, q/Ctrl-C, Ctrl-Z/`fg`, and prior inline-image
+retention after entering/quitting the browser. Fix any reported issues.
 
-Code: `src/entry.rs`, `src/layout.rs`, `src/cli.rs`, `src/main.rs` for listing and
-orchestration; `src/cache.rs` for storage; `src/preview.rs` for source/decode checks;
-`src/grid.rs`, `src/kitty.rs` for inline output. Cache details: [docs/cache.md](docs/cache.md).
+Then add viewport-driven image jobs, a small prefetch margin, stale-result rejection,
+and bounded session-owned image cleanup. Share entries/decoding but do not reuse
+inline image ownership or lifetime assumptions. Keep names responsive and measure
+before adding concurrency. Cache default/storage expansion and search remain driven
+by concrete use; do not resume cache tuning without new evidence.
+
+Code: `src/browser.rs` (state, input parsing, rendering), `src/browser_terminal.rs`
+(terminal/signal lifetime), `src/cli.rs`, and the early browser branch in
+`src/main.rs`. Existing inline code is separate. Tests: `tests/check_browser.py`.
 
 ## Local checks
 
-Set `export CARGO_HOME="$PWD/.cargo-home"` and run:
+Keep Cargo storage local:
 
 ```sh
+export CARGO_HOME="$PWD/.cargo-home"
 cargo fmt --check
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked --examples --bins
+python3 tests/check_browser.py
 python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
-python3 benchmarks/cache_working_set.py --label current
-python3 benchmarks/cache_working_set.py --label current --memory-only
 ```
 
-Memory-only augments an existing timing report on macOS and verifies its binary
-hash. Reports stay in `benchmarks/local/working-set-LABEL.json`; the committed
-summary is not overwritten. Saved ignored binaries: `target/lsa-before-cache-associativity`
-(the `7050349` binary), `target/lsa-cache-four-way` (pilot), and `target/lsa-before-cache`
-(the earlier metadata binary). Use `--binary` and a distinct `--label` to compare.
-Do not recreate the working-set sources between comparisons.
+The existing socket fixture needs local Unix-socket permission; use normal sandbox
+escalation on that failure. The final browser/protocol/layout/cache suites ran in
+the sandbox. Focused PTY/process diagnostics during harness debugging also used
+normal escalation. No computer use or files outside this repository were used
+for implementation; the executable naturally accesses its controlling terminal.
 
-`benchmarks/cache.py` remains the original cache benchmark; `benchmarks/measure.py`
-remains the broader listing baseline. Generated image fixtures already exist; the
-generator refuses to overwrite them. Full tests need local Unix-socket permission;
-macOS memory measurement needs kernel timing permission. Both use normal sandbox
-escalation. PTY checks ran in the sandbox. Linux/MSRV 1.88 remain unverified;
-Rust/Cargo 1.98.0 is the local tested toolchain.
+Cache measurements remain in [benchmarks/cache-working-set.json](benchmarks/cache-working-set.json)
+and [benchmarks/README.md](benchmarks/README.md). Stable independent-source copies
+remain ignored in `benchmarks/local/working-set/` (~119.5 MiB); do not recreate or
+alter them between cache-policy comparisons. Prior ignored comparison binaries
+and the four original test images are preserved. Generated fixtures already exist;
+the generator refuses to overwrite them.

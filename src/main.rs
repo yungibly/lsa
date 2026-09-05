@@ -1,3 +1,5 @@
+mod browser;
+mod browser_terminal;
 mod cache;
 mod cli;
 mod columns;
@@ -43,6 +45,9 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
     if opts.version {
         writeln!(out, "lsa {}", env!("CARGO_PKG_VERSION"))?;
         return Ok(0);
+    }
+    if opts.browse {
+        return browser::run(opts, out);
     }
     if opts.clear_cache {
         return match cache::clear(opts.cache_dir.as_deref().unwrap()) {

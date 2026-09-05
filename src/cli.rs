@@ -27,6 +27,7 @@ pub struct Options {
     pub dirs_first: bool,
     pub fields: Vec<crate::metadata::Field>,
     pub grid: bool,
+    pub browse: bool,
     pub one: bool,
     pub no_images: bool,
     pub protocol: Protocol,
@@ -54,6 +55,7 @@ Usage: lsa [OPTIONS] [PATH ...]
   -r                     Reverse the selected order
   --dirs-first           Directories first; -r reverses within each group
   --grid                 Mixed-entry thumbnail grid on a graphics terminal
+  --browse               Text browser for one directory; requires stdin/stdout TTY
   --no-images            Compact text only; never open image contents
   --protocol=auto|kitty|none
                          Auto recognizes direct Ghostty/Kitty sessions
@@ -75,6 +77,14 @@ Preview errors retain entries and do not fail the listing. Exit: 0 success,
 Caching is off by default. Text, diagnostics, and exhausted preview budgets never
 open the cache. Cache I/O failures fall back to decoding. Storage uses 64 replaceable
 slots plus one staging file (under 20 MiB of file contents); collisions evict a slot.
+
+Browser: arrows or j/k move; PgUp/PgDn page; Home/End or g/G jump;
+Enter/right/l enters a directory; left/h/Backspace returns or goes to the parent;
+Space shows the full name/path (scroll with arrows/pages, Esc closes); r refreshes;
+q or Ctrl-D quits; Ctrl-C exits with 130; Ctrl-Z suspends with terminal restored.
+Sorting and hidden flags apply. Browser currently shows names only, without images
+or cache access. It cannot combine with -l, --fields, -1, --grid, --diagnose,
+--clear-cache, or multiple paths. Redirected --browse fails without reading stdin.
 ";
 
 impl Options {
@@ -103,6 +113,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--help" => opts.help = true,
             "--version" => opts.version = true,
             "--grid" => opts.grid = true,
+            "--browse" => opts.browse = true,
             "--long" => opts.long = true,
             "--dirs-first" => opts.dirs_first = true,
             "--no-images" => opts.no_images = true,
@@ -174,6 +185,16 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
     if opts.paths.is_empty() && !opts.clear_cache {
         opts.paths.push(".".into());
     }
+    if opts.browse
+        && (opts.paths.len() != 1
+            || opts.long
+            || opts.one
+            || opts.grid
+            || opts.diagnose
+            || opts.clear_cache)
+    {
+        return Err("--browse requires one directory and cannot combine with -l, --fields, -1, --grid, --diagnose, or --clear-cache".into());
+    }
     Ok(opts)
 }
 
@@ -193,7 +214,7 @@ mod tests {
     #[test]
     fn rejects_unknown_and_unbounded_options() {
         for a in [
-            "--browse",
+            "--unknown",
             "-z",
             "--protocol=sixel",
             "--preview-limit=-1",
@@ -202,6 +223,25 @@ mod tests {
             assert!(args(&[a]).is_err(), "{a}");
         }
         assert_eq!(args(&["--preview-limit=0"]).unwrap().preview_limit, 0);
+    }
+
+    #[test]
+    fn browser_options() {
+        let o = args(&["--browse", "-aSr", "--dirs-first"]).unwrap();
+        assert!(o.browse && o.all && o.reverse && o.dirs_first);
+        assert_eq!(o.sort, Sort::Size);
+        assert_eq!(o.paths, [PathBuf::from(".")]);
+        for flags in [
+            vec!["--browse", "a", "b"],
+            vec!["--browse", "-l"],
+            vec!["--browse", "--fields=size"],
+            vec!["--browse", "-1"],
+            vec!["--browse", "--grid"],
+            vec!["--browse", "--diagnose"],
+            vec!["--browse", "--clear-cache", "--cache-dir=cache"],
+        ] {
+            assert!(args(&flags).is_err(), "{flags:?}");
+        }
     }
     #[test]
     fn metadata_options() {
