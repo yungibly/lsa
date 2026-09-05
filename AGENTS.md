@@ -2,6 +2,10 @@
 
 Read [README.md](README.md) for product direction, then [ROADMAP.md](ROADMAP.md) for current status, acceptance criteria, and the next development task.
 
+Please only work and access files within this directory. The img-test directory (gitignored) has a few test images you can use. If you ever want more, feel free to ask me.
+
+Ghostty is the current target/test terminal. I can do visual verification for you; handle everything you can do without computer use.
+
 ## Preserve these decisions
 
 - Images, ordinary files, folders, and symlinks form one listing with shared ordering and interaction. A preview is an entry representation; do not split the default experience into image and non-image sections.
