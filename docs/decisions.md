@@ -14,6 +14,7 @@
 | Shared grid geometry | Selection and rendering use the same tile size and wrapped-label height. Large directories fail the cheap minimum-height check before candidate classification or label formatting. Diagnose can deliberately calculate full estimates. |
 | Sequential decode, optional cache | Decode concurrency/queues remain one/zero. The opt-in cache skips decoding on hits while preserving source checks and attempt/output budgets. No hard decode deadline. |
 | Fixed cache slots and raw RGBA | The four-image warm case falls from 71.76 to 4.60 ms. 64 replaceable slots bound storage without an index, scans, or writes on hits; collisions may lower hit rate. Versioned full keys and checksums reject stale/corrupt records. One staging file and nonblocking local locks bound concurrent writes; atomic rename publishes complete pixels. Details in [cache design](cache.md). |
+| Eight candidates per cache key | Measured direct mapping hit only 56.25% for 32 independent sources. Eight-slot groups reached 100% / 15.97 ms versus 216.42 ms, keeping the 64-record cap. A four-slot trial also helped, but retained misses in that case. Header probes have a fixed bound. Randomly seeded victim selection avoids repeated-listing FIFO churn without writes on hits; overloaded working sets still have limited benefit. |
 | Directories-first grouping | Sort actual directory entries ahead of others, then apply the selected sort/reverse within groups. Reuse existing entry kinds; no symlink-target or extra metadata lookup. |
 | Configurable long fields | `--fields` selects/reorders a bounded six-field vocabulary and implies long text. Filenames always remain. Numeric IDs keep account lookup out of the pipeline; no xattr/ACL expansion yet. |
 | Content-sized long columns | Two passes retain only six widths and format ASCII fields as needed. This adds ~3.3 ms to the 10,000-entry long case versus fixed widths, with similar RSS; the ordinary text path is unchanged. |
@@ -29,8 +30,9 @@ The [Kitty specification](https://sw.kovidgoyal.net/kitty/graphics-protocol/) de
 direct transmission, 4096-byte base64 chunks, quiet replies, and cursor control.
 Automated tests decode emitted payloads and model the cursor subset; the original
 inline renderer is user-verified in Ghostty 1.3.1. Default selection/columns
-are now user-verified as well. Directories-first, custom metadata controls, and
-cached/uncached output equivalence have automated coverage. Anonymous inline images avoid ID reuse across
+are now user-verified as well. The user passed metadata/grouping and cache commands
+at `7050349`; subsequent replacement changes have automated output equivalence
+and compatibility coverage. Anonymous inline images avoid ID reuse across
 invocations. Browser image ownership will need a separate implementation.
 
 [`image::Limits`](https://docs.rs/image/0.25.10/image/struct.Limits.html) distinguishes

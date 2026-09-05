@@ -1,7 +1,8 @@
 # Thumbnail cache experiment
 
 Implemented and automated-tested on arm64 macOS 26.6.2 with Rust 1.98.0.
-Caching remains opt-in. No new Ghostty visual pass or Linux verification is claimed.
+Caching remains opt-in. The user passed all supplied Ghostty commands at `7050349`;
+the subsequent replacement-policy change has automated coverage. Linux is unverified.
 
 ## Controls and lazy behavior
 
@@ -44,7 +45,8 @@ avoid running another image codec on hits and match the existing Kitty payload.
 The version must change when the record, decoder/limits, orientation, resize, or
 checker transform changes. Both the namespace and record magic are versioned.
 
-A checksum of the key chooses one of 64 slots. A hit requires the complete key to
+A checksum of the key chooses one of eight groups, each containing eight slots.
+A lookup probes only that group. A hit requires the complete key to
 match; hash collisions cannot return another source's thumbnail. Reads validate
 regular-file type, bounded/exact length, and checksum before returning pixels.
 Truncation, corruption, and old versions become misses and are replaced after a
@@ -53,11 +55,31 @@ Identity assumes trustworthy filesystem metadata; there is no source-content has
 
 ## Storage and concurrency
 
-Direct mapping deliberately replaces an LRU index: there is no directory scan,
-access-time update, background cleaner, or unbounded record list. A collision
-replaces its slot even if other slots are empty. Old source/geometry versions can
-occupy slots until replaced or cleared. A small or unlucky working set can thrash;
-64 slots do not promise 64 simultaneously useful hits.
+The initial direct-mapped cache had avoidable collisions even for small listings.
+It now uses eight candidate slots per key, keeping 64 total slots. Lookup reads at
+most eight bounded headers, with only one candidate file open at a time; matching
+records are length/checksum-validated before use. An invalid earlier candidate
+cannot hide a valid hit later in the group. Insertion checks the same candidates
+under its exclusive lock: replace an existing copy of the key first, otherwise use
+a missing/unreadable/malformed-header slot, otherwise choose a victim in the full
+group. Rechecking prevents concurrent decoders inserting duplicate keys into free
+slots. There is still no directory scan, index, access-time update, or background
+cleaner, and hits do not write anything.
+
+Full groups choose a victim using a per-invocation randomly seeded standard-library
+hash of the complete key. This avoids the systematic eviction cycles seen in FIFO
+trace models for repeated listings above capacity. No extra dependency, persistent
+random state, or hit-time write is needed. The seed is created only when optional
+storage opens. Random replacement can vary individual hit rates and latency; it
+does not promise a particular hit rate or outperform every policy in every workload.
+Old source/geometry versions can occupy slots until replaced or cleared, and even
+64 total slots do not guarantee 64 simultaneously useful hits.
+
+The record/key format, namespace, and 64 slot filenames stay at v1. Only the slot
+selection rule changed. Existing records in candidate slots remain readable;
+others become ordinary misses and are repopulated. Old and new binaries can share
+the same lock and bounded namespace; clear handles all 64 names. There is no
+second cache directory or migration scan.
 
 At most 64 records plus one staging file contain lsa-written data. Each is at most
 307,284 bytes (84-byte header plus 320×240×4 pixels), for **19,973,460 bytes** total,
@@ -89,13 +111,18 @@ fail. The selected parent path follows normal filesystem path resolution.
 `cargo test --locked` covers identity/mtime restoration, replacement, link sharing
 and retargeting, geometry, corruption, obsolete versions, oversized records,
 collision eviction, the full storage cap, stale staging, read-only storage, source
-permissions, lock contention, safe clear, and symlink refusal.
+permissions, lock contention, safe clear, and symlink refusal. Additional tests
+verify coexistence of colliding keys, full-group eviction, duplicate prevention,
+valid hits behind malformed candidates, and reuse of the prior slot namespace.
 `python3 tests/check_cache.py` adds 23 release-binary PTY/CLI scenarios including
 lazy paths, exact output equivalence, budgets across operands, concurrent fresh
 processes, source replacement with FIFO/oversized files, and graceful fallback.
 
-[The measurements](../benchmarks/README.md) show a large benefit for the four user
-images, a smaller benefit for a cheap shared synthetic source, and steady text
-cost. Keep the experiment opt-in while gathering a Ghostty empty/warm/disabled
-visual comparison and daily-directory hit rates. These results do not yet justify
-parallel decoding, a default cache location, or a browser implementation.
+[The measurements](../benchmarks/README.md) compare independent working sets of
+4/16/32/48/64/96 sources and fixed/alternating geometry, preserving identical output.
+Eight candidates improve the 32-source repeated case from 56.25% hits / 216.42 ms
+to 100% / 15.97 ms in this fixture. A 96-source alternating-size case has little
+benefit: 192 distinct thumbnail keys exceed the 64-record cap. Keep the cache
+opt-in with its current storage bound; larger cache sizes or default locations
+need a concrete daily-use requirement. The next product slice is explicit browsing,
+with a separate output lifetime and later viewport-driven preview work.

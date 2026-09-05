@@ -1,9 +1,11 @@
-//! Opt-in, direct-mapped thumbnail experiment. No directory scans, access-time
+//! Opt-in, bounded thumbnail experiment. No directory scans, access-time
 //! writes, terminal IDs, or work until a budgeted preview actually needs it.
 use image::RgbaImage;
 use std::{
+    collections::hash_map::RandomState,
     ffi::CString,
     fs::{self, File, Metadata, OpenOptions},
+    hash::BuildHasher,
     io::{self, Read, Write},
     os::{
         fd::{AsRawFd, FromRawFd},
@@ -17,6 +19,7 @@ use std::{
 pub const NAMESPACE: &str = "lsa-thumbnails-v1";
 const MAGIC: &[u8; 8] = b"LSATHM01";
 pub const SLOTS: usize = 64;
+const WAYS: usize = 8;
 const KEY_LEN: usize = 80;
 const HEADER_LEN: usize = KEY_LEN + 4;
 pub const STORAGE_LIMIT: usize = (SLOTS + 1) * (HEADER_LEN + 320 * 240 * 4);
@@ -54,8 +57,9 @@ impl Key {
         Ok((width as u32, height as u32))
     }
 
-    fn name(&self) -> String {
-        format!("{:02}.rgba", crc32fast::hash(&self.0) as usize % SLOTS)
+    fn slots(&self) -> std::ops::Range<usize> {
+        let start = crc32fast::hash(&self.0) as usize % (SLOTS / WAYS) * WAYS;
+        start..start + WAYS
     }
 }
 
@@ -124,6 +128,15 @@ fn invalid(message: &str) -> io::Error {
 struct Store {
     directory: File,
     lock: File,
+    // Seeded only when the optional cache opens. A fresh seed per invocation
+    // avoids repeated listings cycling through FIFO victims in lockstep.
+    eviction: RandomState,
+}
+
+struct Record {
+    file: File,
+    header: [u8; HEADER_LEN],
+    length: u64,
 }
 
 impl Store {
@@ -172,17 +185,49 @@ impl Store {
         {
             return Err(invalid("invalid cache lock"));
         }
-        Ok(Self { directory, lock })
+        Ok(Self {
+            directory,
+            lock,
+            eviction: RandomState::new(),
+        })
     }
 
     fn get(&self, key: &Key) -> io::Result<Option<RgbaImage>> {
         let (width, height) = key.dimensions()?;
         let _guard = self.acquire(libc::LOCK_SH)?;
-        let mut file = match open_at(&self.directory, &key.name(), libc::O_RDONLY) {
+        let mut error = None;
+        for slot in key.slots() {
+            let record = match self.record(slot) {
+                Ok(record) => record,
+                Err(e) => {
+                    error = Some(e);
+                    continue;
+                }
+            };
+            let Some(mut record) = record else {
+                continue;
+            };
+            // Slot selection is only a hint; compare the complete key.
+            if record.header[..KEY_LEN] != key.0 {
+                continue;
+            }
+            match Self::pixels(&mut record, key, width, height) {
+                Ok(image) => return Ok(Some(image)),
+                Err(e) => error = Some(e),
+            }
+        }
+        match error {
+            Some(e) => Err(e),
+            None => Ok(None),
+        }
+    }
+
+    // Read at most a bounded header per candidate, one open fd at a time.
+    fn record(&self, slot: usize) -> io::Result<Option<Record>> {
+        let mut file = match open_at(&self.directory, &format!("{slot:02}.rgba"), libc::O_RDONLY) {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
             result => result?,
         };
-        let length = width as usize * height as usize * 4;
         let meta = file.metadata()?;
         if !meta.is_file()
             || meta.len() < HEADER_LEN as u64
@@ -192,19 +237,25 @@ impl Store {
         }
         let mut header = [0; HEADER_LEN];
         file.read_exact(&mut header)?;
-        // Hashes select slots only; compare the complete key to reject collisions.
-        if header[..KEY_LEN] != key.0 {
-            return Ok(None);
-        }
-        if meta.len() != (HEADER_LEN + length) as u64 {
+        Ok(Some(Record {
+            file,
+            header,
+            length: meta.len(),
+        }))
+    }
+
+    fn pixels(record: &mut Record, key: &Key, width: u32, height: u32) -> io::Result<RgbaImage> {
+        let length = width as usize * height as usize * 4;
+        if record.length != (HEADER_LEN + length) as u64 {
             return Err(invalid("invalid thumbnail record size"));
         }
         let mut pixels = vec![0; length];
-        file.read_exact(&mut pixels)?;
-        if checksum(key, &pixels).to_le_bytes() != header[KEY_LEN..] {
+        record.file.read_exact(&mut pixels)?;
+        if checksum(key, &pixels).to_le_bytes() != record.header[KEY_LEN..] {
             return Err(invalid("thumbnail checksum mismatch"));
         }
-        Ok(RgbaImage::from_raw(width, height, pixels))
+        RgbaImage::from_raw(width, height, pixels)
+            .ok_or_else(|| invalid("invalid thumbnail pixels"))
     }
 
     fn put(&self, key: &Key, image: &RgbaImage) -> io::Result<()> {
@@ -215,6 +266,24 @@ impl Store {
         // not source reads, decoding, or terminal output. Shared readers prevent
         // retaining unlinked records while concurrent writers fill the slots.
         let _guard = self.acquire(libc::LOCK_EX)?;
+        let mut available = None;
+        let mut existing = None;
+        for slot in key.slots() {
+            match self.record(slot) {
+                Ok(Some(record)) if record.header[..KEY_LEN] == key.0 => {
+                    existing = Some(slot);
+                    break;
+                }
+                Ok(Some(_)) => {}
+                // A missing/invalid record is preferable to evicting another key.
+                _ => {
+                    available.get_or_insert(slot);
+                }
+            }
+        }
+        let slot = existing
+            .or(available)
+            .unwrap_or_else(|| key.slots().start + self.eviction.hash_one(key.0) as usize % WAYS);
         remove_at(&self.directory, STAGING)?;
         let result = (|| {
             let mut file = open_at(
@@ -227,7 +296,7 @@ impl Store {
             file.write_all(image.as_raw())?;
             // Disposable cache: atomic publication, no fsync durability promise.
             let from = CString::new(STAGING).unwrap();
-            let to = CString::new(key.name()).unwrap();
+            let to = CString::new(format!("{slot:02}.rgba")).unwrap();
             // SAFETY: both names and the directory fd remain valid for the call.
             if unsafe {
                 libc::renameat(
@@ -362,6 +431,13 @@ mod tests {
         }
     }
 
+    fn record_path(root: &Path, key: &Key) -> PathBuf {
+        key.slots()
+            .map(|slot| root.join(NAMESPACE).join(format!("{slot:02}.rgba")))
+            .find(|path| fs::read(path).is_ok_and(|bytes| bytes.starts_with(&key.0)))
+            .expect("record was stored")
+    }
+
     #[test]
     fn hits_match_decode_and_invalidate_edits_replacement_links_and_geometry() {
         let f = Fixture::new();
@@ -427,8 +503,8 @@ mod tests {
         let mut cache = Cache::new(Some(&f.0));
         let expected = preview::load(&source, 32, 24, &mut cache).unwrap();
         let key = Key::new(&fs::metadata(source.clone()).unwrap(), 32, 24);
-        let record = f.0.join(NAMESPACE).join(key.name());
         for damage in 0..4 {
+            let record = record_path(&f.0, &key);
             let mut bytes = fs::read(&record).unwrap();
             match damage {
                 0 => bytes[HEADER_LEN + 10] ^= 1,
@@ -459,18 +535,23 @@ mod tests {
         let source = f.source("source.png", 255);
         let base = Key::new(&fs::metadata(source).unwrap(), 320, 240);
         let store = Store::open(&f.0, true).unwrap();
-        let mut previous = std::collections::HashMap::new();
+        let mut keys = Vec::new();
         for i in 0..256_u64 {
             let mut key = base.clone();
             key.0[16..24].copy_from_slice(&i.to_le_bytes());
             let image = RgbaImage::from_pixel(320, 240, Rgba([i as u8, 0, 0, 255]));
             store.put(&key, &image).unwrap();
             assert_eq!(store.get(&key).unwrap().unwrap(), image);
-            if let Some(old) = previous.insert(key.name(), key) {
-                assert!(store.get(&old).unwrap().is_none());
+            keys.push((key, i as u8));
+        }
+        let mut retained = 0;
+        for (key, color) in keys {
+            if let Some(image) = store.get(&key).unwrap() {
+                assert_eq!(image.get_pixel(0, 0), &Rgba([color, 0, 0, 255]));
+                retained += 1;
             }
         }
-        assert_eq!(previous.len(), SLOTS);
+        assert_eq!(retained, SLOTS);
         let namespace = f.0.join(NAMESPACE);
         // Interrupted writers leave only the single reserved staging pathname.
         fs::write(namespace.join(STAGING), vec![0; HEADER_LEN + 320 * 240 * 4]).unwrap();
@@ -497,6 +578,99 @@ mod tests {
             fs::metadata(namespace.join("lock")).unwrap().ino(),
             lock_inode
         );
+    }
+
+    #[test]
+    fn colliding_keys_coexist_and_only_a_full_set_evicts() {
+        let f = Fixture::new();
+        let source = f.source("source.png", 255);
+        let base = Key::new(&fs::metadata(source).unwrap(), 32, 24);
+        let store = Store::open(&f.0, true).unwrap();
+        let image = RgbaImage::new(32, 24);
+        let mut keys = Vec::new();
+        for value in 0..10000_u64 {
+            let mut key = base.clone();
+            key.0[16..24].copy_from_slice(&value.to_le_bytes());
+            if key.slots() == base.slots() {
+                keys.push(key);
+            }
+            if keys.len() == WAYS + 1 {
+                break;
+            }
+        }
+        assert_eq!(keys.len(), WAYS + 1);
+        for key in &keys[..WAYS] {
+            store.put(key, &image).unwrap();
+        }
+        for key in &keys[..WAYS] {
+            assert_eq!(store.get(key).unwrap(), Some(image.clone()));
+        }
+        // Another invocation fills a previously missed key while this one decodes;
+        // insertion must replace that key, not consume a second slot for it.
+        let concurrent = Store::open(&f.0, true).unwrap();
+        concurrent.put(&keys[0], &image).unwrap();
+        for key in &keys[..WAYS] {
+            assert!(store.get(key).unwrap().is_some());
+        }
+        store.put(&keys[WAYS], &image).unwrap();
+        assert!(store.get(&keys[WAYS]).unwrap().is_some());
+        assert_eq!(
+            keys.iter()
+                .filter(|key| store.get(key).unwrap().is_some())
+                .count(),
+            WAYS
+        );
+        // A malformed early candidate cannot mask a valid hit later in the set.
+        let first =
+            f.0.join(NAMESPACE)
+                .join(format!("{:02}.rgba", base.slots().start));
+        fs::write(&first, b"broken").unwrap();
+        assert_eq!(
+            keys.iter()
+                .filter(|key| matches!(store.get(key), Ok(Some(_))))
+                .count(),
+            WAYS - 1
+        );
+    }
+
+    #[test]
+    fn previous_slot_mapping_shares_the_same_bounded_namespace() {
+        let f = Fixture::new();
+        let source = f.source("source.png", 255);
+        let base = Key::new(&fs::metadata(source).unwrap(), 32, 24);
+        let store = Store::open(&f.0, true).unwrap();
+        let mut previous = std::collections::HashMap::new();
+        for value in 0..256_u64 {
+            let mut key = base.clone();
+            key.0[16..24].copy_from_slice(&value.to_le_bytes());
+            let old_slot = crc32fast::hash(&key.0) as usize % SLOTS;
+            previous.insert(old_slot, key);
+        }
+        assert_eq!(previous.len(), SLOTS);
+        let image = RgbaImage::from_pixel(32, 24, Rgba([11, 22, 33, 255]));
+        // Reproduce the prior binary's valid record layout and direct slot rule.
+        for (slot, key) in &previous {
+            let mut bytes = key.0.to_vec();
+            bytes.extend(checksum(key, image.as_raw()).to_le_bytes());
+            bytes.extend(image.as_raw());
+            fs::write(f.0.join(NAMESPACE).join(format!("{slot:02}.rgba")), bytes).unwrap();
+        }
+        for (slot, key) in &previous {
+            assert_eq!(
+                store.get(key).unwrap().is_some(),
+                key.slots().contains(slot)
+            );
+        }
+        for key in previous.values() {
+            store.put(key, &image).unwrap();
+            assert_eq!(store.get(key).unwrap(), Some(image.clone()));
+        }
+        assert_eq!(
+            fs::read_dir(f.0.join(NAMESPACE)).unwrap().count(),
+            SLOTS + 1
+        );
+        clear(&f.0).unwrap();
+        assert_eq!(fs::read_dir(f.0.join(NAMESPACE)).unwrap().count(), 1);
     }
 
     #[test]
@@ -572,7 +746,7 @@ mod tests {
         let mut cache = Cache::new(Some(&f.0));
         preview::load(&source, 32, 24, &mut cache).unwrap();
         let key = Key::new(&fs::metadata(&source).unwrap(), 32, 24);
-        let record = f.0.join(NAMESPACE).join(key.name());
+        let record = record_path(&f.0, &key);
         fs::remove_file(&record).unwrap();
         symlink(&unavailable, &record).unwrap();
         assert_eq!(

@@ -5,7 +5,8 @@ browser can follow. Kitty graphics first; Sixel is an optional future addition.
 
 **Status:** Rust CLI with compact text and automatic inline Kitty grids, both
 user-verified in Ghostty 1.3.1. Directories-first sorting, configurable long
-metadata, and an opt-in thumbnail cache are implemented and automated-tested.
+metadata, and opt-in cache commands also received a user pass at `7050349`.
+Improved cache replacement has automated tests and working-set measurements.
 See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
 
 ## Direction
@@ -114,9 +115,8 @@ Names wrap at grapheme boundaries; missing previews keep their tiles and labels.
 
 One synchronous decode at a time; no worker queue. Optional cache hits skip decoding.
 Per invocation: 64 preview attempts by default (including failures), hard maximum
-256, and 8 MiB
-of image commands. Per source: 32 MiB input, 16 million pixels, 16,384 pixels per
-axis, 64 MiB decoded output, and a **best-effort** 64 MiB decoder allocation limit.
+256, and 8 MiB of image commands. Per source: 32 MiB input, 16 million pixels,
+16,384 pixels per axis, 64 MiB decoded output, and a **best-effort** 64 MiB decoder allocation limit.
 Thumbnails fit within 320×240 pixels. These are starting caps, not performance
 claims or a hard process-memory/time sandbox. Preview work can delay a row; there
 is no timeout for slow filesystems or in-progress decodes. Names are never omitted
@@ -139,16 +139,18 @@ inside this repository; run the first command twice to compare misses and hits:
 ./target/release/lsa --cache-dir=benchmarks/local/thumbnails --clear-cache
 ```
 
-The cache stores thumbnail pixels in 64 replaceable slots, with versioned source
-identity/timestamp/size/geometry keys, checksums, atomic writes, and less than
-20 MiB of file contents including staging. Collisions evict a slot; storage errors
-fall back to decoding. Text output, diagnostics, and exhausted preview budgets
+The cache stores thumbnail pixels in 64 slots, with eight candidate slots per key,
+versioned source identity/timestamp/size/geometry keys, checksums, atomic writes,
+and less than 20 MiB of file contents including staging. Full groups randomly
+evict a slot; storage errors fall back to decoding. Text output, diagnostics, and exhausted preview budgets
 never open storage. Hits still consume preview and output budgets.
 
 On this Mac, the four user images took **4.60 ms warm versus 71.76 ms uncached**
 through a drained PTY, with identical output and ~2 MiB versus ~31 MiB application
 RSS. These measure application work and PTY transport, not visible terminal rendering.
 See [cache behavior and limits](docs/cache.md) and [measurements](benchmarks/README.md).
+The larger-working-set follow-up improved a repeated 32-source listing from
+216 ms to 16 ms by reducing collisions, with the same storage and output limits.
 
 ## Check
 
@@ -162,6 +164,7 @@ python3 tests/check_layout.py
 python3 tests/check_cache.py
 python3 benchmarks/measure.py
 python3 benchmarks/cache.py
+python3 benchmarks/cache_working_set.py
 ```
 
 Tests keep scratch files under `target/`; fixtures and measurements are gitignored.

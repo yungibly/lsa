@@ -1,8 +1,74 @@
 # Application measurements
 
+## Cache working sets: 2026-09-05 follow-up
+
+[Saved comparison](cache-working-set.json), same M4 / 16 GiB host and Rust 1.98.0.
+The four originals are copied into 96 separate files (distinct device/inode keys),
+then prefix cohorts of 4/16/32/48/64/96 are listed. Content cycles through the four
+source images and their decode costs; this is a controlled identity/collision experiment, not a sample of
+96 different photographs. Sources occupy about 120 MiB and remain unchanged across
+the three binary runs. Recreating their identities changes hash collisions.
+
+Each listing is an explicit grid, with `--preview-limit=256`; all names/previews
+fit the existing 8 MiB output cap. Geometry A is 122×40 cells at 8×17 pixels/cell
+(176×85 thumbnail), and B uses 8×16 (176×80). Fixed-size cases repeat A; alternating
+cases switch A/B. The OS cache is warm, with two full passes before timing, then
+five fresh processes for fixed/off modes and ten for alternating mode. A drained
+PTY has no terminal renderer. Cache stats are included in every timed invocation.
+
+| Sources / pattern | Direct slot: hits / median | Four-slot pilot | Eight-slot selected |
+| --- | ---: | ---: | ---: |
+| 4, repeated | 100% / 4.76 ms | 100% / 4.98 ms | 100% / 4.76 ms |
+| 16, alternating | 62.50% / 98.74 ms | 100% / 9.17 ms | 100% / 9.01 ms |
+| 32, repeated | 56.25% / 216.42 ms | 93.12% / 35.52 ms | 100% / 15.97 ms |
+| 32, alternating | 15.62% / 477.11 ms | 68.44% / 208.30 ms | 77.50% / 157.29 ms |
+| 48, repeated | 50.00% / 456.10 ms | 87.50% / 97.61 ms | 96.67% / 63.55 ms |
+| 64, repeated | 43.75% / 621.44 ms | 73.75% / 220.10 ms | 82.19% / 224.10 ms |
+| 96, repeated | 25.00% / 1,239.89 ms | 39.79% / 899.61 ms | 44.79% / 976.11 ms |
+| 96, alternating | 6.25% / 1,692.69 ms | 4.06% / 1,654.36 ms | 6.04% / 1,664.10 ms |
+
+Eight candidates materially improve small/medium working sets without raising the
+64-record / 19.05 MiB storage bound or writing on hits. The 32-source repeated
+case is about 13.6× faster than direct mapping. The four-slot trial is cheaper in
+some overloaded cases; eight is not universally fastest. Random victims and the
+different costs of JPEG/GIF/WebP misses mean hit percentage does not map directly
+to elapsed time. These are modest sample counts with no statistical-significance
+claim; the report retains minima/maxima where collected.
+
+The 96-source alternating case requests 192 thumbnail keys from 64 slots and gains
+little versus uncached (~1,692 ms for current geometry A). Keep caching opt-in and
+avoid increasing storage without a daily-use need. The uncached fixed runs remain
+close across binaries (e.g. 32 sources: 540/545/550 ms); four warm sources remain
+about 4.8 ms. No text/layout/decoder path was changed by this chunk.
+
+Trace-only models also compare 1/2/4/8-way FIFO and 2/4/8-way random replacement.
+For 64 sources alternating sizes, both four/eight-way FIFO models get zero hits
+after warmup: sequential listings evict the next required record. Random-victim
+models avoid that systematic pattern without persisting access times. Model
+numbers are not timings; Python seeded random sampling approximates the Rust
+per-invocation randomly seeded key hash. The actual executable measurements above
+are the evidence for the selected policy.
+
+Separate RSS samples at geometry A show the 32-source repeated case dropping from
+35.97 to 2.09 MiB. Four warm sources remain 2.03 MiB. Cases that decode misses
+still reach about 31–39 MiB; the 96-source alternating sample rises from 32.64 to
+39.28 MiB with different missed sources/allocator reuse. No new process-memory
+bound is claimed. The four-slot pilot has no RSS sample. Output digests match
+across every policy/mode; the largest listing emits ~7.7 MB and retains all 96
+previews. All measured cache error counts are zero.
+
+Reproduce with `python3 benchmarks/cache_working_set.py --label current`.
+On macOS, append `--memory-only` after the timing run to add separate RSS samples
+(kernel timing permission is required). To compare a saved binary, supply
+`--binary target/lsa-before-cache-associativity --label direct`; do not recreate
+the ignored fixture between comparisons. Reports go to
+`benchmarks/local/working-set-LABEL.json`; the committed summary stays unchanged.
+The final release binary is 1,279,600 bytes, 144 more than `7050349`.
+
 ## Opt-in thumbnail cache: 2026-09-05 experiment
 
-Same Apple M4 / 16 GiB host, arm64 macOS 26.6.2, Rust 1.98.0 release build.
+Initial direct-mapped implementation at `7050349`; same Apple M4 / 16 GiB host,
+arm64 macOS 26.6.2, Rust 1.98.0 release build.
 [Saved results](cache.json). Graphics use 122×40 cells, 8×17 pixels per cell,
 15 fresh timed processes after three warmups, warmed OS cache, and a drained PTY
 without a renderer. RSS uses a separate `/usr/bin/time -l` process.

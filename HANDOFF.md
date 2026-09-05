@@ -1,95 +1,107 @@
 # Fresh-session handoff
 
-2026-09-05; implementation: bounded opt-in thumbnail cache, included in the same
-commit as this handoff. Starting Git state was clean at `9ec490a`; cache work is
-now implemented and measured. Read README → ROADMAP, then recheck Git state.
+2026-09-05; this commit measures larger cache working sets and improves replacement.
+Starting Git state was clean at `7050349`. Read README → ROADMAP, then check Git.
 
-## Working agreement
+## Working agreement and user verification
 
 - Work/access files only inside this repo, including Cargo storage and experiments.
-- Docs are flexible suggestions. User authorized routine implementation and concise
-  commits; no per-chunk confirmation needed.
-- Kitty first; Sixel optional later. Keep one mixed listing, cheap ordinary text,
-  complete filenames/fallback, inline output by default, browsing explicit.
-- User handles Ghostty visual checks. Do not use computer automation to access
-  terminals. Preserve the original ignored images in `img-test/`.
+- Routine implementation and concise local commits are authorized; no per-chunk
+  confirmation. Docs are working suggestions, not rigid requirements.
+- User handles Ghostty visual checks; do not use computer automation for terminals.
+  Preserve the four original ignored images under `img-test/`.
+- The user reported all supplied commands worked exactly as expected at `7050349`:
+  metadata/grouping and empty/warm/disabled cache commands now have a user pass.
+  Earlier reports established Ghostty 1.3.1, 122×40 / 8×17, arm64 macOS 26.6.2.
+  The latest report did not resupply version/geometry/transport; do not invent new
+  SSH/multiplexer/resize/theme evidence. See [compatibility](docs/compatibility.md).
+- Keep one ordered mixed listing, cheap text, complete filenames/fallback, Kitty
+  first, inline default, browsing explicit. No file mutations/file-manager expansion.
 
-## Implemented in this session
+## This chunk
 
-- `--cache-dir=PATH` or `--cache-dir PATH` opts in; `--no-cache` wins in either
-  order. `--clear-cache` clears and exits; requires a cache directory and no
-  operands/diagnose/no-cache. `--cache-stats` prints counters to stderr.
-- Cache initialization is lazy, after a budgeted source is opened and validated.
-  Text, pipes, diagnose, non-candidates, and exhausted budgets never access it.
-- 64 direct-mapped slots, one staging file, one persistent empty lock. Raw RGBA
-  records have versioned full device/inode/size/mtime/ctime/pixel-size keys and
-  CRC32 checksums. Collisions evict safely; no index/scans or writes on hits.
-- Bound is 19,973,460 bytes of lsa-written file contents in one namespace,
-  including maximum staging, plus filesystem overhead. Directory is private.
-  Nonblocking shared/exclusive flock serializes bounded cache I/O only; busy or
-  broken storage falls back to decoding. Atomic rename, no fsync promise.
-- Source fd metadata is rechecked after hits and before insertion. Cached
-  thumbnails still count against attempt and byte budgets. No terminal IDs cached.
-- Added `crc32fast` as a direct dependency; its version was already in Cargo.lock.
-  No new dependency download. Details and limitations: [cache design](docs/cache.md).
+- Measured 4/16/32/48/64/96 independent source identities with fixed and alternating
+  thumbnail geometry; originals were copied, never altered. Stable copies live in
+  ignored `benchmarks/local/working-set/`. They occupy about 119.5 MiB and are reused
+  across binaries because changing identities changes collision distribution.
+- Direct mapping missed excessively below capacity. Tested four and eight candidate
+  slots per key, retaining the same 64 total slots / 19,973,460-byte file-content cap.
+- Selected eight slots per group. Lookup probes at most eight bounded headers with
+  one candidate fd open at a time. Full keys/checksums still validate hits.
+- Insertion rechecks candidates under the existing exclusive lock: replace an
+  existing key, else a missing/unreadable/malformed-header slot, else a victim
+  selected by a per-invocation randomly seeded standard-library hash of the key.
+  Trace models showed FIFO thrashing on repeated scans above group capacity.
+  No hit-time writes, index, directory scan, new dependency, or background work.
+- Record format, v1 namespace, fixed filenames, lock, and atomic staging remain
+  unchanged. Old records in new candidate slots are reusable; other old placements
+  miss and repopulate. Old/new binaries share the same storage bound; no migration.
+- Source validation, decoder limits, output budgets, layout, CLI, and inline image
+  lifetime are unchanged. Cache is still opt-in via `--cache-dir`; no default path.
 
-## Verification and measurements
+## Evidence
 
-- Rust/Cargo 1.98.0, arm64 macOS 26.6.2; declared MSRV 1.88, Linux unverified.
-- 30 unit + 8 CLI tests; 16 original PTY + 34 layout + 23 cache scenarios pass.
-  Release build, fmt, clippy pass. Cache tests cover invalidation, restored mtime,
-  replacement/links, geometry, corruption, read-only storage, concurrent processes,
-  eviction/full byte cap, stale staging, lock contention, safe clear, and limits.
-- [Saved cache measurements](benchmarks/cache.json): four originals at 122×40 /
-  8×17 take 71.76 ms uncached, 71.82 ms empty, 4.60 ms warm (~15.6× faster);
-  application RSS 31.36 → 2.03 MiB. Four records occupy 239,696 bytes. PTY output
-  is byte-identical in these modes. Invalidated copies take 72.34 ms.
-- 40 links to one cheap synthetic source take 27.16 ms disabled, 17.17 ms empty
-  (one miss, 39 same-invocation hits), 17.43 ms warm. Plain 10,000 names remain
-  ~7.2–7.3 ms in a before/after comparison, even with cache configured but unused.
-- OS cache was warm; no visible terminal rendering or terminal memory measured.
-  Cache remains **off by default**. Original images were not modified.
-- User visually passed inline graphics (`f079a23`) and layouts (`364976f`) in
-  Ghostty 1.3.1, 122×40 / 8×17. Metadata/grouping and this cache have automated
-  coverage only. [Cache visual commands](docs/compatibility.md) are ready for the
-  user. SSH, multiplexers, resize/theme/retention still need terminal trials.
+[Saved comparison](benchmarks/cache-working-set.json) and [methods](benchmarks/README.md):
+
+- 32 repeated sources: 56.25% hits / 216.42 ms → 100% / 15.97 ms (~13.6×).
+- 16 alternating-size sources: 62.50% / 98.74 ms → 100% / 9.01 ms.
+- 48 repeated sources: 50% / 456.10 ms → 96.67% / 63.55 ms.
+- Four warm sources stay ~4.76 ms. 96 sources alternating two sizes exceed capacity
+  (192 keys) and gain little. Eight candidates are not fastest for every overloaded
+  case; random replacement and unequal codec costs affect individual runs.
+- Output digests match for all 18 cases across all three policies; no cache errors.
+  All 96 previews fit attempt/output caps. OS cache warm, fresh processes, drained
+  PTY, no renderer. Five timed repeated/off runs, ten alternating runs, two warmups.
+- Separate RSS: 32 repeated sources drop 35.97 → 2.09 MiB; four warm stay 2.03 MiB.
+  Cases decoding misses remain roughly 31–39 MiB; no hard process-memory bound.
+  Four-slot pilot has no RSS sample. The final release binary is 1,279,600 bytes.
+- 32 unit + 8 CLI tests; 16 original PTY + 34 layout + 23 cache scenarios pass.
+  Release build, fmt, clippy pass. New tests cover colliding-key coexistence,
+  full-group eviction, duplicate prevention, hits behind malformed candidates, and
+  prior direct-mapped records. Storage-policy changes have automated coverage;
+  the user visual pass belongs to the prior `7050349` command set.
 
 ## Resume here
 
-Evaluate hit rate/latency on independent-source working sets near/above 64 slots,
-and alternating geometry, before changing replacement or default policy. The
-four-image case shows clear benefit but cannot establish broader hit rates.
-Gather the user's Ghostty empty/warm/disabled comparison and daily-use feedback.
-Keep experiment data inside the repo and cache opt-in. No concurrency/browser
-expansion without new evidence; no default storage path has been chosen.
+Start an explicit browser as a usable text-first slice: `--browse`, alternate
+screen, mixed-entry selection, scrolling, directory navigation, quit, resize,
+and Ctrl-C/terminal restoration. Block while idle. Preserve sort/filter behavior
+and complete filename access. Validate with PTY input/output tests, then the user's
+Ghostty check. Viewport-driven images/jobs and session-only cleanup follow in a
+separate slice. Shared entries/decoding are useful; inline image IDs/lifetimes must
+not be reused as browser ownership. Keep cache opt-in until a concrete need changes
+its default/storage policy; avoid further cache tuning without new evidence.
 
-Code: `src/cache.rs` owns records/storage/locking/tests; `src/preview.rs` owns
-source checks/decoding; `src/grid.rs` still owns preview budgets/emission.
-CLI/orchestration: `src/cli.rs`, `src/main.rs`. Existing layout/entry behavior is
-unchanged. Inline lifetime stays anonymous/history-retained; a future browser
-needs separate image ownership and cleanup.
+Code: `src/entry.rs`, `src/layout.rs`, `src/cli.rs`, `src/main.rs` for listing and
+orchestration; `src/cache.rs` for storage; `src/preview.rs` for source/decode checks;
+`src/grid.rs`, `src/kitty.rs` for inline output. Cache details: [docs/cache.md](docs/cache.md).
 
 ## Local checks
 
-Set `export CARGO_HOME="$PWD/.cargo-home"`. Run `cargo fmt --check`,
-`cargo test --locked`, `cargo clippy --locked --all-targets -- -D warnings`, and
-`cargo build --release --locked --examples --bins`, then:
+Set `export CARGO_HOME="$PWD/.cargo-home"` and run:
 
 ```sh
+cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo build --release --locked --examples --bins
 python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
-python3 benchmarks/cache.py --before target/lsa-before-cache
+python3 benchmarks/cache_working_set.py --label current
+python3 benchmarks/cache_working_set.py --label current --memory-only
 ```
 
-The before binary is a saved ignored copy of the metadata build; omit `--before`
-if absent. Cache measurements write `benchmarks/local/cache.json`; committed
-reports are not overwritten. `benchmarks/measure.py` remains the broader baseline
-and writes `benchmarks/local/metadata.json`. Generated fixtures already exist;
-the generator refuses to overwrite them.
+Memory-only augments an existing timing report on macOS and verifies its binary
+hash. Reports stay in `benchmarks/local/working-set-LABEL.json`; the committed
+summary is not overwritten. Saved ignored binaries: `target/lsa-before-cache-associativity`
+(the `7050349` binary), `target/lsa-cache-four-way` (pilot), and `target/lsa-before-cache`
+(the earlier metadata binary). Use `--binary` and a distinct `--label` to compare.
+Do not recreate the working-set sources between comparisons.
 
-Full tests need local Unix-socket permission; macOS RSS measurement needs kernel
-timing permission. Both needed normal sandbox escalation this session. PTY checks
-ran within the sandbox. Invalid-byte filename integration remains Linux-only;
-macOS uses byte-level display tests. In-process decoder allocations are best
-effort; filesystem/decode/terminal time and total process memory are not sandboxed.
+`benchmarks/cache.py` remains the original cache benchmark; `benchmarks/measure.py`
+remains the broader listing baseline. Generated image fixtures already exist; the
+generator refuses to overwrite them. Full tests need local Unix-socket permission;
+macOS memory measurement needs kernel timing permission. Both use normal sandbox
+escalation. PTY checks ran in the sandbox. Linux/MSRV 1.88 remain unverified;
+Rust/Cargo 1.98.0 is the local tested toolchain.

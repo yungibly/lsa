@@ -2,8 +2,9 @@
 
 2026-09-05. **Original inline commands are user-verified in Ghostty 1.3.1.**
 Automatic layouts and compact columns also received a clear user visual pass at
-`364976f`. New directories-first, metadata controls, and cache behavior are
-automated-tested; their visual verification remains separate.
+`364976f`. The user subsequently reported that all supplied commands worked as
+expected at `7050349`, including metadata/grouping and empty/warm/disabled cache
+comparisons. Later storage-policy changes are covered separately by automation.
 
 | Environment | Protocol / mode / transport | Evidence | Status |
 | --- | --- | --- | --- |
@@ -13,7 +14,8 @@ automated-tested; their visual verification remains separate.
 | Ghostty 1.3.1 stable, macOS/CoreText/Metal build; 122×40 cells, 8×17 pixels/cell | Kitty inline; user session, transport not separately stated | User reported all original checklist commands worked as expected at `f079a23` | User-verified commands |
 | Ghostty 1.3.1, same reported geometry | Automatic grid and row-wise text columns | User reported all new commands look good; visual testing is a clear pass at `364976f` | User-verified commands |
 | Local PTY, 122×40 / 8×17 and boundary cases | Layouts, directories-first, custom long fields | 34 layout scenarios plus the original 16 protocol scenarios | Automated pass |
-| Local PTY, 80×24 and 122×40 / 8×17 benchmark geometry | Opt-in cached Kitty inline output | 23 cache PTY/CLI scenarios; empty/warm/disabled output matches exactly; concurrency, failures, and budgets checked | Automated pass; no new Ghostty visual pass |
+| Local PTY, 80×24 and 122×40 / 8×17 benchmark geometry | Opt-in cached Kitty inline output | 23 cache PTY/CLI scenarios; empty/warm/disabled output matches exactly; concurrency, failures, and budgets checked | Automated pass; no renderer |
+| User's previously reported Ghostty 1.3.1 context | Kitty inline; supplied metadata/grouping and cache commands | User reported all commands worked exactly as expected at `7050349`; version/geometry/transport not separately resupplied | User-verified commands |
 | Kitty terminal; other terminals; SSH | Kitty inline | No terminal trials | Unverified |
 | tmux / screen / Zellij | Text in auto mode | Environment fallback tested for tmux; no passthrough implementation | Graphics unverified |
 | Any terminal | Interactive browser | Not implemented | — |
@@ -33,7 +35,10 @@ The user supplied `TERM_PROGRAM=ghostty`, version 1.3.1, `stdout_tty=true`, geom
 commands below worked exactly as expected. `layout=text` in the original diagnostic
 was expected without `--grid`; the updated diagnostic now examines each operand.
 The subsequent user report explicitly passed all new default commands visually.
-Directories-first and custom metadata were added after that report.
+Directories-first and custom metadata were added after that report. Following
+`7050349`, the user also passed all supplied commands, including metadata/grouping
+and cache comparisons. That follow-up did not resupply terminal/version/geometry
+or establish new SSH/multiplexer/resize/theme conditions.
 
 Build details supplied: stable channel, Zig 0.15.2, ReleaseFast, app runtime `.none`,
 CoreText font engine, generic Metal renderer, kqueue libxev. This establishes the
@@ -67,7 +72,7 @@ Default commands, now user-verified:
 ./target/release/lsa --diagnose img-test     # explain the selected layout
 ```
 
-New metadata/grouping examples:
+Metadata/grouping examples, now user-verified:
 
 ```sh
 ./target/release/lsa --dirs-first img-test
@@ -76,11 +81,11 @@ New metadata/grouping examples:
 ./target/release/lsa --fields=size,modified -h img-test
 ```
 
-These have automated text/order checks; no new visual pass is claimed yet.
+These have automated text/order checks and the user's `7050349` command pass.
 Text reads across each row, like the grid. Verify column alignment, complete names,
 and ordering. Automatic grids should look like `--grid` for the same directory.
 
-Cache comparison, still awaiting a user visual check:
+Cache comparison, user-verified at `7050349`:
 
 ```sh
 ./target/release/lsa --cache-dir=benchmarks/local/thumbnails --clear-cache

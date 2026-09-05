@@ -1,0 +1,1021 @@
+{
+  "date": "2026-09-05",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "conditions": "OS cache warmed, not flushed. Fresh processes, drained PTY, no renderer. Two warmup passes before timed repeats. Cache stats included in all timings. All previews fit existing attempt/output caps.",
+  "fixtures": "96 independent file copies, cycling four user images; stable inodes reused across binary comparisons. Different identities can change collisions.",
+  "source_bytes": 125272176,
+  "geometry_a": "122x40, 8x17 cell pixels; 176x85 thumbnails",
+  "geometry_b": "122x40, 8x16 cell pixels; 176x80 thumbnails",
+  "build": "Rust/Cargo 1.98.0; release, thin LTO, stripped",
+  "rss_conditions": "Separate macOS /usr/bin/time -l invocations at geometry A after two warmups; four-way pilot RSS not measured. Samples with random replacement can decode different sources from timed runs.",
+  "policies": {
+    "direct": {
+      "binary_bytes": 1279456,
+      "binary_sha256": "99131d062f1b854bd14266c92d4396d56dd0db2f8a869e971b0fca5e36309b6c",
+      "implementation": "7050349: one direct slot per key"
+    },
+    "four-way": {
+      "binary_bytes": 1279600,
+      "binary_sha256": "1677559bf10bc499dbbd139cf211c02c57a673f0e80b6b2af3d5d42caa78873f",
+      "implementation": "pilot: four candidates, random full-group victim; one redundant cache fstat per hit removed before final eight-way build"
+    },
+    "eight-way": {
+      "binary_bytes": 1279600,
+      "binary_sha256": "22a60b18b62923b492076531667c8ccaf0bdb359d6763793a6a5f672a58914db",
+      "implementation": "selected: eight candidates, random full-group victim"
+    }
+  },
+  "cases": {
+    "4_off": {
+      "direct": {
+        "median_ms": 70.87,
+        "min_ms": 70.754,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 32899072,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "four-way": {
+        "median_ms": 72.322,
+        "min_ms": 71.71,
+        "max_ms": 73.023,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "eight-way": {
+        "median_ms": 71.899,
+        "min_ms": 71.78,
+        "max_ms": 72.632,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 32899072,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "output_bytes_last_run": 320519,
+      "output_sha256": {
+        "0": "107c3e22c660225ac2b5c54ef65b004ff3941e1087e20448990b0aab3677b6c0"
+      }
+    },
+    "4_repeat": {
+      "direct": {
+        "median_ms": 4.758,
+        "min_ms": 4.482,
+        "runs": 5,
+        "hits": 20,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 2129920,
+        "stored_records": 4,
+        "stored_bytes": 239696
+      },
+      "four-way": {
+        "median_ms": 4.978,
+        "min_ms": 4.702,
+        "max_ms": 5.573,
+        "runs": 5,
+        "hits": 20,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 4,
+        "stored_bytes": 239696
+      },
+      "eight-way": {
+        "median_ms": 4.759,
+        "min_ms": 4.593,
+        "max_ms": 4.964,
+        "runs": 5,
+        "hits": 20,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 2129920,
+        "stored_records": 4,
+        "stored_bytes": 239696
+      },
+      "output_bytes_last_run": 320519,
+      "output_sha256": {
+        "0": "107c3e22c660225ac2b5c54ef65b004ff3941e1087e20448990b0aab3677b6c0"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 100.0,
+          "2": 100.0,
+          "4": 100.0,
+          "8": 100.0
+        },
+        "random_mean_10_seeds": {
+          "2": 100.0,
+          "4": 100.0,
+          "8": 100.0
+        }
+      }
+    },
+    "4_alternate": {
+      "direct": {
+        "median_ms": 4.721,
+        "min_ms": 4.437,
+        "runs": 10,
+        "hits": 40,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 2129920,
+        "stored_records": 8,
+        "stored_bytes": 465312
+      },
+      "four-way": {
+        "median_ms": 4.765,
+        "min_ms": 4.635,
+        "max_ms": 5.329,
+        "runs": 10,
+        "hits": 40,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 8,
+        "stored_bytes": 465312
+      },
+      "eight-way": {
+        "median_ms": 4.686,
+        "min_ms": 4.452,
+        "max_ms": 5.201,
+        "runs": 10,
+        "hits": 40,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 2146304,
+        "stored_records": 8,
+        "stored_bytes": 465312
+      },
+      "output_bytes_last_run": 301699,
+      "output_sha256": {
+        "0": "107c3e22c660225ac2b5c54ef65b004ff3941e1087e20448990b0aab3677b6c0",
+        "1": "513a66a7eb034c390c4c0550093480b275340e58338aa4b203fee3a09e31fb9a"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 100.0,
+          "2": 100.0,
+          "4": 100.0,
+          "8": 100.0
+        },
+        "random_mean_10_seeds": {
+          "2": 100.0,
+          "4": 100.0,
+          "8": 100.0
+        }
+      }
+    },
+    "16_off": {
+      "direct": {
+        "median_ms": 275.504,
+        "min_ms": 269.579,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 33128448,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "four-way": {
+        "median_ms": 274.451,
+        "min_ms": 272.811,
+        "max_ms": 275.701,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "eight-way": {
+        "median_ms": 275.002,
+        "min_ms": 274.693,
+        "max_ms": 279.417,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 33128448,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "output_bytes_last_run": 1282076,
+      "output_sha256": {
+        "0": "f5e4614da6732c9b219039aad0123d5d5cddad7fb97f82faa18ebe01ce2fd49d"
+      }
+    },
+    "16_repeat": {
+      "direct": {
+        "median_ms": 36.136,
+        "min_ms": 35.64,
+        "runs": 5,
+        "hits": 70,
+        "misses": 10,
+        "hit_percent": 87.5,
+        "writes": 10,
+        "errors": 0,
+        "peak_rss_bytes": 11042816,
+        "stored_records": 15,
+        "stored_bytes": 898860
+      },
+      "four-way": {
+        "median_ms": 9.086,
+        "min_ms": 8.741,
+        "max_ms": 9.318,
+        "runs": 5,
+        "hits": 80,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 16,
+        "stored_bytes": 958784
+      },
+      "eight-way": {
+        "median_ms": 9.198,
+        "min_ms": 8.826,
+        "max_ms": 9.445,
+        "runs": 5,
+        "hits": 80,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 2146304,
+        "stored_records": 16,
+        "stored_bytes": 958784
+      },
+      "output_bytes_last_run": 1282076,
+      "output_sha256": {
+        "0": "f5e4614da6732c9b219039aad0123d5d5cddad7fb97f82faa18ebe01ce2fd49d"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 87.5,
+          "2": 100.0,
+          "4": 100.0,
+          "8": 100.0
+        },
+        "random_mean_10_seeds": {
+          "2": 100.0,
+          "4": 100.0,
+          "8": 100.0
+        }
+      }
+    },
+    "16_alternate": {
+      "direct": {
+        "median_ms": 98.743,
+        "min_ms": 97.631,
+        "runs": 10,
+        "hits": 100,
+        "misses": 60,
+        "hit_percent": 62.5,
+        "writes": 60,
+        "errors": 0,
+        "peak_rss_bytes": 32980992,
+        "stored_records": 26,
+        "stored_bytes": 1505224
+      },
+      "four-way": {
+        "median_ms": 9.166,
+        "min_ms": 8.623,
+        "max_ms": 9.288,
+        "runs": 10,
+        "hits": 160,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 32,
+        "stored_bytes": 1861248
+      },
+      "eight-way": {
+        "median_ms": 9.008,
+        "min_ms": 8.35,
+        "max_ms": 9.819,
+        "runs": 10,
+        "hits": 160,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 2129920,
+        "stored_records": 32,
+        "stored_bytes": 1861248
+      },
+      "output_bytes_last_run": 1206796,
+      "output_sha256": {
+        "0": "f5e4614da6732c9b219039aad0123d5d5cddad7fb97f82faa18ebe01ce2fd49d",
+        "1": "ab0e1ac2ad990ba5683ff7ef58f3ef5edb84b02cf9667f488415221bbe7b4c54"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 62.5,
+          "2": 81.25,
+          "4": 100.0,
+          "8": 100.0
+        },
+        "random_mean_10_seeds": {
+          "2": 88.19,
+          "4": 100.0,
+          "8": 100.0
+        }
+      }
+    },
+    "32_off": {
+      "direct": {
+        "median_ms": 540.088,
+        "min_ms": 537.797,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 33325056,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "four-way": {
+        "median_ms": 545.492,
+        "min_ms": 543.895,
+        "max_ms": 551.626,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "eight-way": {
+        "median_ms": 550.096,
+        "min_ms": 547.066,
+        "max_ms": 602.827,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 33341440,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "output_bytes_last_run": 2564125,
+      "output_sha256": {
+        "0": "4d097ae1fd41cb7cfc429c590a6bb628f1b22d28618ba9cbd6362d2bd676d71b"
+      }
+    },
+    "32_repeat": {
+      "direct": {
+        "median_ms": 216.422,
+        "min_ms": 215.03,
+        "runs": 5,
+        "hits": 90,
+        "misses": 70,
+        "hit_percent": 56.25,
+        "writes": 70,
+        "errors": 0,
+        "peak_rss_bytes": 37715968,
+        "stored_records": 25,
+        "stored_bytes": 1498100
+      },
+      "four-way": {
+        "median_ms": 35.517,
+        "min_ms": 21.812,
+        "max_ms": 78.439,
+        "runs": 5,
+        "hits": 149,
+        "misses": 11,
+        "hit_percent": 93.12,
+        "writes": 11,
+        "errors": 0,
+        "stored_records": 31,
+        "stored_bytes": 1857644
+      },
+      "eight-way": {
+        "median_ms": 15.969,
+        "min_ms": 15.761,
+        "max_ms": 16.335,
+        "runs": 5,
+        "hits": 160,
+        "misses": 0,
+        "hit_percent": 100.0,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 2195456,
+        "stored_records": 32,
+        "stored_bytes": 1917568
+      },
+      "output_bytes_last_run": 2564125,
+      "output_sha256": {
+        "0": "4d097ae1fd41cb7cfc429c590a6bb628f1b22d28618ba9cbd6362d2bd676d71b"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 56.25,
+          "2": 81.25,
+          "4": 84.38,
+          "8": 100.0
+        },
+        "random_mean_10_seeds": {
+          "2": 87.31,
+          "4": 93.62,
+          "8": 100.0
+        }
+      }
+    },
+    "32_alternate": {
+      "direct": {
+        "median_ms": 477.105,
+        "min_ms": 470.422,
+        "runs": 10,
+        "hits": 50,
+        "misses": 270,
+        "hit_percent": 15.62,
+        "writes": 270,
+        "errors": 0,
+        "peak_rss_bytes": 33243136,
+        "stored_records": 34,
+        "stored_bytes": 1949416
+      },
+      "four-way": {
+        "median_ms": 208.297,
+        "min_ms": 154.999,
+        "max_ms": 253.07,
+        "runs": 10,
+        "hits": 219,
+        "misses": 101,
+        "hit_percent": 68.44,
+        "writes": 101,
+        "errors": 0,
+        "stored_records": 52,
+        "stored_bytes": 3017488
+      },
+      "eight-way": {
+        "median_ms": 157.286,
+        "min_ms": 89.259,
+        "max_ms": 209.39,
+        "runs": 10,
+        "hits": 248,
+        "misses": 72,
+        "hit_percent": 77.5,
+        "writes": 72,
+        "errors": 0,
+        "peak_rss_bytes": 33128448,
+        "stored_records": 56,
+        "stored_bytes": 3250144
+      },
+      "output_bytes_last_run": 2413565,
+      "output_sha256": {
+        "0": "4d097ae1fd41cb7cfc429c590a6bb628f1b22d28618ba9cbd6362d2bd676d71b",
+        "1": "e6de93cf18e4cbf8be1dff2e18faa02c8cd96fe651e4589a75076abe4794da17"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 15.62,
+          "2": 34.38,
+          "4": 56.25,
+          "8": 62.5
+        },
+        "random_mean_10_seeds": {
+          "2": 50.12,
+          "4": 69.75,
+          "8": 77.28
+        }
+      }
+    },
+    "48_off": {
+      "direct": {
+        "median_ms": 824.672,
+        "min_ms": 819.983,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 33357824,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "four-way": {
+        "median_ms": 833.394,
+        "min_ms": 829.294,
+        "max_ms": 852.897,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "eight-way": {
+        "median_ms": 825.497,
+        "min_ms": 823.222,
+        "max_ms": 828.848,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 33439744,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "output_bytes_last_run": 3846174,
+      "output_sha256": {
+        "0": "953c2a656a2e015252a23e2f662680ef82401a6f1af71e78c65057d056afa52e"
+      }
+    },
+    "48_repeat": {
+      "direct": {
+        "median_ms": 456.098,
+        "min_ms": 453.038,
+        "runs": 5,
+        "hits": 120,
+        "misses": 120,
+        "hit_percent": 50.0,
+        "writes": 120,
+        "errors": 0,
+        "peak_rss_bytes": 37847040,
+        "stored_records": 35,
+        "stored_bytes": 2097340
+      },
+      "four-way": {
+        "median_ms": 97.605,
+        "min_ms": 95.564,
+        "max_ms": 125.57,
+        "runs": 5,
+        "hits": 210,
+        "misses": 30,
+        "hit_percent": 87.5,
+        "writes": 30,
+        "errors": 0,
+        "stored_records": 45,
+        "stored_bytes": 2696580
+      },
+      "eight-way": {
+        "median_ms": 63.548,
+        "min_ms": 21.48,
+        "max_ms": 70.513,
+        "runs": 5,
+        "hits": 232,
+        "misses": 8,
+        "hit_percent": 96.67,
+        "writes": 8,
+        "errors": 0,
+        "peak_rss_bytes": 2998272,
+        "stored_records": 47,
+        "stored_bytes": 2816428
+      },
+      "output_bytes_last_run": 3846174,
+      "output_sha256": {
+        "0": "953c2a656a2e015252a23e2f662680ef82401a6f1af71e78c65057d056afa52e"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 50.0,
+          "2": 60.42,
+          "4": 77.08,
+          "8": 81.25
+        },
+        "random_mean_10_seeds": {
+          "2": 72.21,
+          "4": 87.92,
+          "8": 95.89
+        }
+      }
+    },
+    "48_alternate": {
+      "direct": {
+        "median_ms": 743.581,
+        "min_ms": 730.267,
+        "runs": 10,
+        "hits": 70,
+        "misses": 410,
+        "hit_percent": 14.58,
+        "writes": 410,
+        "errors": 0,
+        "peak_rss_bytes": 33439744,
+        "stored_records": 46,
+        "stored_bytes": 2633304
+      },
+      "four-way": {
+        "median_ms": 542.961,
+        "min_ms": 449.966,
+        "max_ms": 598.646,
+        "runs": 10,
+        "hits": 171,
+        "misses": 309,
+        "hit_percent": 35.62,
+        "writes": 309,
+        "errors": 0,
+        "stored_records": 60,
+        "stored_bytes": 3468720
+      },
+      "eight-way": {
+        "median_ms": 524.831,
+        "min_ms": 255.734,
+        "max_ms": 586.035,
+        "runs": 10,
+        "hits": 213,
+        "misses": 267,
+        "hit_percent": 44.38,
+        "writes": 267,
+        "errors": 0,
+        "peak_rss_bytes": 33406976,
+        "stored_records": 64,
+        "stored_bytes": 3690816
+      },
+      "output_bytes_last_run": 3620334,
+      "output_sha256": {
+        "0": "953c2a656a2e015252a23e2f662680ef82401a6f1af71e78c65057d056afa52e",
+        "1": "772a86f30b9400b0e23d6f6f7c6695992fc3a23832383ed30e6987480de04090"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 14.58,
+          "2": 16.67,
+          "4": 12.5,
+          "8": 0.0
+        },
+        "random_mean_10_seeds": {
+          "2": 30.36,
+          "4": 36.83,
+          "8": 42.54
+        }
+      }
+    },
+    "64_off": {
+      "direct": {
+        "median_ms": 1133.125,
+        "min_ms": 1105.922,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 36159488,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "four-way": {
+        "median_ms": 1108.905,
+        "min_ms": 1099.191,
+        "max_ms": 1113.272,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "eight-way": {
+        "median_ms": 1130.088,
+        "min_ms": 1125.865,
+        "max_ms": 1164.845,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 33439744,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "output_bytes_last_run": 5128223,
+      "output_sha256": {
+        "0": "b56a743b6efd8b288cd36784161e8c9fb5151232a57c5f409e3b2bb4d3478f54"
+      }
+    },
+    "64_repeat": {
+      "direct": {
+        "median_ms": 621.435,
+        "min_ms": 614.9,
+        "runs": 5,
+        "hits": 140,
+        "misses": 180,
+        "hit_percent": 43.75,
+        "writes": 180,
+        "errors": 0,
+        "peak_rss_bytes": 37912576,
+        "stored_records": 42,
+        "stored_bytes": 2516808
+      },
+      "four-way": {
+        "median_ms": 220.096,
+        "min_ms": 210.129,
+        "max_ms": 247.444,
+        "runs": 5,
+        "hits": 236,
+        "misses": 84,
+        "hit_percent": 73.75,
+        "writes": 84,
+        "errors": 0,
+        "stored_records": 54,
+        "stored_bytes": 3235896
+      },
+      "eight-way": {
+        "median_ms": 224.105,
+        "min_ms": 178.102,
+        "max_ms": 231.668,
+        "runs": 5,
+        "hits": 263,
+        "misses": 57,
+        "hit_percent": 82.19,
+        "writes": 57,
+        "errors": 0,
+        "peak_rss_bytes": 33161216,
+        "stored_records": 58,
+        "stored_bytes": 3475592
+      },
+      "output_bytes_last_run": 5128223,
+      "output_sha256": {
+        "0": "b56a743b6efd8b288cd36784161e8c9fb5151232a57c5f409e3b2bb4d3478f54"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 43.75,
+          "2": 40.62,
+          "4": 59.38,
+          "8": 65.62
+        },
+        "random_mean_10_seeds": {
+          "2": 55.8,
+          "4": 73.0,
+          "8": 82.61
+        }
+      }
+    },
+    "64_alternate": {
+      "direct": {
+        "median_ms": 994.578,
+        "min_ms": 981.09,
+        "runs": 10,
+        "hits": 90,
+        "misses": 550,
+        "hit_percent": 14.06,
+        "writes": 550,
+        "errors": 0,
+        "peak_rss_bytes": 33390592,
+        "stored_records": 54,
+        "stored_bytes": 3088056
+      },
+      "four-way": {
+        "median_ms": 878.985,
+        "min_ms": 769.723,
+        "max_ms": 1013.19,
+        "runs": 10,
+        "hits": 150,
+        "misses": 490,
+        "hit_percent": 23.44,
+        "writes": 490,
+        "errors": 0,
+        "stored_records": 64,
+        "stored_bytes": 3669696
+      },
+      "eight-way": {
+        "median_ms": 908.168,
+        "min_ms": 717.3,
+        "max_ms": 1053.038,
+        "runs": 10,
+        "hits": 141,
+        "misses": 499,
+        "hit_percent": 22.03,
+        "writes": 499,
+        "errors": 0,
+        "peak_rss_bytes": 33538048,
+        "stored_records": 64,
+        "stored_bytes": 3669696
+      },
+      "output_bytes_last_run": 4827103,
+      "output_sha256": {
+        "0": "b56a743b6efd8b288cd36784161e8c9fb5151232a57c5f409e3b2bb4d3478f54",
+        "1": "3f7327514e28f0081225d04b464ba752e96af8ab8ac2e0f11918b9a2c29863dc"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 14.06,
+          "2": 9.38,
+          "4": 0.0,
+          "8": 0.0
+        },
+        "random_mean_10_seeds": {
+          "2": 17.39,
+          "4": 20.5,
+          "8": 19.92
+        }
+      }
+    },
+    "96_off": {
+      "direct": {
+        "median_ms": 1665.938,
+        "min_ms": 1656.024,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 36519936,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "four-way": {
+        "median_ms": 1705.437,
+        "min_ms": 1685.691,
+        "max_ms": 1720.158,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "eight-way": {
+        "median_ms": 1691.583,
+        "min_ms": 1684.341,
+        "max_ms": 1705.329,
+        "runs": 5,
+        "hits": 0,
+        "misses": 0,
+        "hit_percent": null,
+        "writes": 0,
+        "errors": 0,
+        "peak_rss_bytes": 36798464,
+        "stored_records": 0,
+        "stored_bytes": 0
+      },
+      "output_bytes_last_run": 7692348,
+      "output_sha256": {
+        "0": "82a3b3fdd22f6421993413d4eda41e266cf5468f1aa85ca76179cb59db0bd1d0"
+      }
+    },
+    "96_repeat": {
+      "direct": {
+        "median_ms": 1239.887,
+        "min_ms": 1233.211,
+        "runs": 5,
+        "hits": 120,
+        "misses": 360,
+        "hit_percent": 25.0,
+        "writes": 360,
+        "errors": 0,
+        "peak_rss_bytes": 38273024,
+        "stored_records": 52,
+        "stored_bytes": 3116048
+      },
+      "four-way": {
+        "median_ms": 899.607,
+        "min_ms": 833.689,
+        "max_ms": 1200.275,
+        "runs": 5,
+        "hits": 191,
+        "misses": 289,
+        "hit_percent": 39.79,
+        "writes": 289,
+        "errors": 0,
+        "stored_records": 61,
+        "stored_bytes": 3655364
+      },
+      "eight-way": {
+        "median_ms": 976.107,
+        "min_ms": 871.14,
+        "max_ms": 1022.852,
+        "runs": 5,
+        "hits": 215,
+        "misses": 265,
+        "hit_percent": 44.79,
+        "writes": 265,
+        "errors": 0,
+        "peak_rss_bytes": 38699008,
+        "stored_records": 64,
+        "stored_bytes": 3835136
+      },
+      "output_bytes_last_run": 7692348,
+      "output_sha256": {
+        "0": "82a3b3fdd22f6421993413d4eda41e266cf5468f1aa85ca76179cb59db0bd1d0"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 25.0,
+          "2": 21.88,
+          "4": 17.71,
+          "8": 8.33
+        },
+        "random_mean_10_seeds": {
+          "2": 35.59,
+          "4": 38.85,
+          "8": 43.16
+        }
+      }
+    },
+    "96_alternate": {
+      "direct": {
+        "median_ms": 1692.693,
+        "min_ms": 1655.159,
+        "runs": 10,
+        "hits": 60,
+        "misses": 900,
+        "hit_percent": 6.25,
+        "writes": 900,
+        "errors": 0,
+        "peak_rss_bytes": 34226176,
+        "stored_records": 62,
+        "stored_bytes": 3532248
+      },
+      "four-way": {
+        "median_ms": 1654.355,
+        "min_ms": 1593.005,
+        "max_ms": 1751.797,
+        "runs": 10,
+        "hits": 39,
+        "misses": 921,
+        "hit_percent": 4.06,
+        "writes": 921,
+        "errors": 0,
+        "stored_records": 64,
+        "stored_bytes": 3655616
+      },
+      "eight-way": {
+        "median_ms": 1664.099,
+        "min_ms": 1598.936,
+        "max_ms": 1733.613,
+        "runs": 10,
+        "hits": 58,
+        "misses": 902,
+        "hit_percent": 6.04,
+        "writes": 902,
+        "errors": 0,
+        "peak_rss_bytes": 41189376,
+        "stored_records": 64,
+        "stored_bytes": 3648576
+      },
+      "output_bytes_last_run": 7240668,
+      "output_sha256": {
+        "0": "82a3b3fdd22f6421993413d4eda41e266cf5468f1aa85ca76179cb59db0bd1d0",
+        "1": "bf81e77d1f189513a27f8ea2a4d89b66016b4b31b2fa44c159f9218ac68cdf1d"
+      },
+      "model_hit_percent": {
+        "fifo": {
+          "1": 6.25,
+          "2": 0.0,
+          "4": 0.0,
+          "8": 0.0
+        },
+        "random_mean_10_seeds": {
+          "2": 4.11,
+          "4": 4.63,
+          "8": 4.94
+        }
+      }
+    }
+  }
+}
