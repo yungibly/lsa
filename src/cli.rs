@@ -24,6 +24,8 @@ pub struct Options {
     pub human: bool,
     pub reverse: bool,
     pub sort: Sort,
+    pub dirs_first: bool,
+    pub fields: Vec<crate::metadata::Field>,
     pub grid: bool,
     pub one: bool,
     pub no_images: bool,
@@ -39,11 +41,14 @@ pub const HELP: &str = "lsa — directory listings with inline Kitty thumbnails
 Usage: lsa [OPTIONS] [PATH ...]
 
   -a, -A                 Include hidden entries (neither adds . or ..)
-  -l                     Long text listing: mode, links, uid, gid, size, local time
+  -l, --long             Long text listing: mode, links, uid, gid, size, local time
   -h                     Human-readable sizes with -l
+  --fields=LIST          Choose long columns: mode,links,uid,gid,size,modified
+                         Comma-separated; names always follow the selected fields
   -1                     One name per line
   -t / -S                Sort newest / largest first; ties by raw filename bytes
   -r                     Reverse the selected order
+  --dirs-first           Directories first; -r reverses within each group
   --grid                 Mixed-entry thumbnail grid on a graphics terminal
   --no-images            Compact text only; never open image contents
   --protocol=auto|kitty|none
@@ -80,8 +85,14 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--help" => opts.help = true,
             "--version" => opts.version = true,
             "--grid" => opts.grid = true,
+            "--long" => opts.long = true,
+            "--dirs-first" => opts.dirs_first = true,
             "--no-images" => opts.no_images = true,
             "--diagnose" => opts.diagnose = true,
+            _ if s.starts_with("--fields=") => {
+                opts.fields = crate::metadata::parse_fields(&s[9..])?;
+                opts.long = true;
+            }
             _ if s.starts_with("--protocol=") => {
                 opts.protocol = match &s[11..] {
                     "auto" => Protocol::Auto,
@@ -152,5 +163,27 @@ mod tests {
             assert!(args(&[a]).is_err(), "{a}");
         }
         assert_eq!(args(&["--preview-limit=0"]).unwrap().preview_limit, 0);
+    }
+    #[test]
+    fn metadata_options() {
+        let o = args(&["--fields=size,modified", "--dirs-first", "-hr"]).unwrap();
+        assert!(o.long && o.dirs_first && o.human && o.reverse);
+        assert_eq!(
+            o.fields,
+            [
+                crate::metadata::Field::Size,
+                crate::metadata::Field::Modified
+            ]
+        );
+        assert!(args(&["--long"]).unwrap().long);
+        for a in [
+            "--fields=",
+            "--fields=name",
+            "--fields=size,size",
+            "--fields=size,",
+            "--fields=unknown",
+        ] {
+            assert!(args(&[a]).is_err(), "{a}");
+        }
     }
 }

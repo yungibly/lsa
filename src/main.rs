@@ -5,6 +5,7 @@ mod entry;
 mod grid;
 mod kitty;
 mod layout;
+mod metadata;
 mod preview;
 mod terminal;
 

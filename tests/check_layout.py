@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from check_pty import APC, BIN, ROOT, capture, check_cursor, images
+from check_pty import APC, CSI, BIN, ROOT, capture, check_cursor, images
 
 
 def run(args, **kwargs):
@@ -85,6 +85,31 @@ def main():
         assert b"layout=grid" in diagnostic and b"preview_candidates=4" in diagnostic
         assert b"\x1b" not in diagnostic
         cases += 1
+
+        groups = root / "groups"
+        groups.mkdir()
+        for name in ["b-dir", "z-dir"]:
+            (groups / name).mkdir()
+        for name in ["a.png", "c.png", "d.png", "y.png"]:
+            (groups / name).symlink_to(image)
+        (groups / "x.txt").touch()
+        (groups / "m-link").symlink_to("z-dir")
+        forward = ["b-dir/", "z-dir/", "a.png@", "c.png@", "d.png@", "m-link@", "x.txt", "y.png@"]
+        reverse = ["z-dir/", "b-dir/", "y.png@", "x.txt", "m-link@", "d.png@", "c.png@", "a.png@"]
+        for args in [["-1"], ["--no-images"], [], ["--grid"]]:
+            for order, extra in [(forward, []), (reverse, ["-r"])]:
+                data = run(["--dirs-first", *args, *extra, groups], **geometry)
+                plain = CSI.sub(b"", APC.sub(b"", data)).decode()
+                positions = [plain.index(name) for name in order]
+                assert positions == sorted(positions), plain
+                assert all(plain.count(name) == 1 for name in order)
+                assert len(images(data)) == (0 if args in [["-1"], ["--no-images"]] else 4)
+                cases += 1
+        for args in [["--fields=size,modified", "--grid"], ["--grid", "--fields=size,modified"], ["--long"], ["-l"]]:
+            data = run(["--dirs-first", *args, groups], **geometry)
+            assert b"\x1b" not in data and len(data.splitlines()) == 8
+            assert b"layout=long" in run(["--diagnose", *args, groups], **geometry)
+            cases += 1
 
     many = ROOT / "img-test/generated/many"
     data = run([many], cols=122, rows=40)

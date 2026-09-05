@@ -1,7 +1,8 @@
 # Compatibility
 
 2026-09-05. **Original inline commands are user-verified in Ghostty 1.3.1.**
-New automatic layout and compact columns are headless-tested; visual check pending.
+Automatic layouts and compact columns also received a clear user visual pass at
+`364976f`. New directories-first and metadata controls are automated-tested.
 
 | Environment | Protocol / mode / transport | Evidence | Status |
 | --- | --- | --- | --- |
@@ -9,7 +10,8 @@ New automatic layout and compact columns are headless-tested; visual check pendi
 | Same host, Python 3.14.7 PTY; injected Ghostty environment | Kitty inline bytes; local pseudo-terminal | 16 scenarios; 40 placements at 80×24, 80×8, 12×8, 200×50; cursor model starts at top/bottom; modes unchanged | Automated pass; no renderer |
 | Same PTY, four user JPEG/GIF/WebP files | Kitty inline bytes | Four decoded images transmitted successfully | Local automated pass; no renderer |
 | Ghostty 1.3.1 stable, macOS/CoreText/Metal build; 122×40 cells, 8×17 pixels/cell | Kitty inline; user session, transport not separately stated | User reported all original checklist commands worked as expected at `f079a23` | User-verified commands |
-| Local PTY, 122×40 / 8×17 and width/height boundary cases | Automatic grid and row-wise text columns | 22 layout scenarios plus the original 16 protocol scenarios | Automated pass; visual pending |
+| Ghostty 1.3.1, same reported geometry | Automatic grid and row-wise text columns | User reported all new commands look good; visual testing is a clear pass at `364976f` | User-verified commands |
+| Local PTY, 122×40 / 8×17 and boundary cases | Layouts, directories-first, custom long fields | 34 layout scenarios plus the original 16 protocol scenarios | Automated pass |
 | Kitty terminal; other terminals; SSH | Kitty inline | No terminal trials | Unverified |
 | tmux / screen / Zellij | Text in auto mode | Environment fallback tested for tmux; no passthrough implementation | Graphics unverified |
 | Any terminal | Interactive browser | Not implemented | — |
@@ -28,6 +30,8 @@ The user supplied `TERM_PROGRAM=ghostty`, version 1.3.1, `stdout_tty=true`, geom
 122×40, measured cell pixels 8×17, and `kitty=true`. They reported that all original
 commands below worked exactly as expected. `layout=text` in the original diagnostic
 was expected without `--grid`; the updated diagnostic now examines each operand.
+The subsequent user report explicitly passed all new default commands visually.
+Directories-first and custom metadata were added after that report.
 
 Build details supplied: stable channel, Zig 0.15.2, ReleaseFast, app runtime `.none`,
 CoreText font engine, generic Metal renderer, kqueue libxev. This establishes the
@@ -51,7 +55,7 @@ From this repository, in a direct Ghostty shell:
 ./target/release/lsa --grid img-test | cat
 ```
 
-Additional commands for the new defaults:
+Default commands, now user-verified:
 
 ```sh
 ./target/release/lsa                         # compact source listing
@@ -61,6 +65,16 @@ Additional commands for the new defaults:
 ./target/release/lsa --diagnose img-test     # explain the selected layout
 ```
 
+New metadata/grouping examples:
+
+```sh
+./target/release/lsa --dirs-first img-test
+./target/release/lsa --dirs-first -r img-test
+./target/release/lsa -lh --dirs-first img-test
+./target/release/lsa --fields=size,modified -h img-test
+```
+
+These have automated text/order checks; no new visual pass is claimed yet.
 Text reads across each row, like the grid. Verify column alignment, complete names,
 and ordering. Automatic grids should look like `--grid` for the same directory.
 

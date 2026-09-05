@@ -107,6 +107,69 @@ fn sizes_times_reverse_and_long_symlinks() {
 }
 
 #[test]
+fn directories_first_preserves_groups_under_reverse_and_other_sorts() {
+    let f = Fixture::new();
+    fs::create_dir(f.0.join("b-dir")).unwrap();
+    fs::create_dir(f.0.join("y-dir")).unwrap();
+    f.touch("a", b"1");
+    f.touch("z", b"123456789");
+    symlink("b-dir", f.0.join("c-link")).unwrap();
+    assert_eq!(
+        f.run(&["--dirs-first"]).stdout,
+        b"b-dir/\ny-dir/\na\nc-link@\nz\n"
+    );
+    assert_eq!(
+        f.run(&["--dirs-first", "-r"]).stdout,
+        b"y-dir/\nb-dir/\nz\nc-link@\na\n"
+    );
+    assert_eq!(
+        f.run(&["--dirs-first", "-S"]).stdout,
+        b"b-dir/\ny-dir/\nz\nc-link@\na\n"
+    );
+    let earlier = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+    for name in ["b-dir", "z"] {
+        fs::File::open(f.0.join(name))
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(earlier))
+            .unwrap();
+    }
+    fs::File::open(f.0.join("a"))
+        .unwrap()
+        .set_times(fs::FileTimes::new().set_modified(earlier + std::time::Duration::from_secs(10)))
+        .unwrap();
+    assert_eq!(
+        f.run(&["--dirs-first", "-t"]).stdout,
+        b"y-dir/\nb-dir/\nc-link@\na\nz\n"
+    );
+    // Sorting applies inside directory listings; explicit operands retain order.
+    assert_eq!(f.run(&["--dirs-first", "z", "a"]).stdout, b"z\na\n");
+}
+
+#[test]
+fn selected_metadata_aligns_and_preserves_names_and_links() {
+    let f = Fixture::new();
+    f.touch("a", b"1");
+    f.touch("large", &vec![0; 1536]);
+    fs::set_permissions(f.0.join("a"), fs::Permissions::from_mode(0o640)).unwrap();
+    fs::set_permissions(f.0.join("large"), fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(f.run(&["--fields=size"]).stdout, b"   1 a\n1536 large\n");
+    assert_eq!(
+        f.run(&["--fields=size,mode", "-h"]).stdout,
+        b"   1 -rw-r----- a\n1.5K -rw------- large\n"
+    );
+    assert_eq!(f.run(&["--long"]).stdout, f.run(&["-l"]).stdout);
+    symlink("target\n\x1b", f.0.join("link")).unwrap();
+    let out = f.run(&["--fields=mode"]);
+    assert!(out.status.success());
+    assert!(
+        String::from_utf8(out.stdout)
+            .unwrap()
+            .ends_with("link@ -> target\\n\\u{1b}\n")
+    );
+    assert_eq!(f.run(&["--fields=size,size"]).status.code(), Some(2));
+}
+
+#[test]
 fn operands_and_partial_errors() {
     let f = Fixture::new();
     f.touch("-name", b"");

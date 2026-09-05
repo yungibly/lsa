@@ -184,123 +184,29 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
                 .map(|m| (m.mtime(), m.mtime_nsec()))
                 .cmp(&a.metadata.as_ref().map(|m| (m.mtime(), m.mtime_nsec()))),
         };
-        primary.then_with(|| a.name.as_encoded_bytes().cmp(b.name.as_encoded_bytes()))
+        let within_group =
+            primary.then_with(|| a.name.as_encoded_bytes().cmp(b.name.as_encoded_bytes()));
+        let within_group = if opts.reverse {
+            within_group.reverse()
+        } else {
+            within_group
+        };
+        let group = if opts.dirs_first {
+            (b.kind == Kind::Directory).cmp(&(a.kind == Kind::Directory))
+        } else {
+            std::cmp::Ordering::Equal
+        };
+        group.then(within_group)
     });
-    if opts.reverse {
-        result.entries.reverse();
-    }
     result
 }
 
 pub fn write_text(out: &mut impl Write, entries: &[Entry], opts: &Options) -> io::Result<()> {
+    if opts.long {
+        return crate::metadata::write(out, entries, opts);
+    }
     for e in entries {
-        if opts.long {
-            if let Some(m) = &e.metadata {
-                write!(
-                    out,
-                    "{} {:>3} {:>5} {:>5} {:>10} {} ",
-                    permissions(m.mode()),
-                    m.nlink(),
-                    m.uid(),
-                    m.gid(),
-                    size(m.len(), opts.human),
-                    timestamp(m.mtime())
-                )?;
-            } else {
-                write!(
-                    out,
-                    "??????????   ?     ?     ?          ? ????-??-?? ??:?? "
-                )?;
-            }
-        }
-        write!(out, "{}", e.label())?;
-        if opts.long && e.kind == Kind::Link {
-            match fs::read_link(&e.path) {
-                Ok(target) => write!(out, " -> {}", escape(target.as_os_str()))?,
-                Err(_) => write!(out, " -> ?")?,
-            }
-        }
-        writeln!(out)?;
+        writeln!(out, "{}", e.label())?;
     }
     Ok(())
-}
-
-fn size(n: u64, human: bool) -> String {
-    if !human || n < 1024 {
-        return n.to_string();
-    }
-    let mut v = n as f64;
-    let mut unit = "";
-    for u in ["K", "M", "G", "T", "P", "E"] {
-        v /= 1024.0;
-        unit = u;
-        if v < 1024.0 {
-            break;
-        }
-    }
-    format!("{v:.1}{unit}")
-}
-
-fn timestamp(seconds: i64) -> String {
-    let time = seconds as libc::time_t;
-    let mut tm = std::mem::MaybeUninit::<libc::tm>::uninit();
-    // SAFETY: both pointers are valid, and tm is read only after success.
-    if unsafe { libc::localtime_r(&time, tm.as_mut_ptr()) }.is_null() {
-        return "????-??-?? ??:??".into();
-    }
-    let tm = unsafe { tm.assume_init() };
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}",
-        tm.tm_year + 1900,
-        tm.tm_mon + 1,
-        tm.tm_mday,
-        tm.tm_hour,
-        tm.tm_min
-    )
-}
-
-fn permissions(mode: u32) -> String {
-    let mut out = String::from(match mode & libc::S_IFMT as u32 {
-        x if x == libc::S_IFDIR as u32 => "d",
-        x if x == libc::S_IFLNK as u32 => "l",
-        x if x == libc::S_IFIFO as u32 => "p",
-        x if x == libc::S_IFSOCK as u32 => "s",
-        x if x == libc::S_IFCHR as u32 => "c",
-        x if x == libc::S_IFBLK as u32 => "b",
-        _ => "-",
-    });
-    for shift in [6, 3, 0] {
-        out.push(if mode & (4 << shift) != 0 { 'r' } else { '-' });
-        out.push(if mode & (2 << shift) != 0 { 'w' } else { '-' });
-        let exec = mode & (1 << shift) != 0;
-        let special =
-            mode & (if shift == 6 {
-                0o4000
-            } else if shift == 3 {
-                0o2000
-            } else {
-                0o1000
-            }) != 0;
-        out.push(match (exec, special, shift) {
-            (true, true, 0) => 't',
-            (false, true, 0) => 'T',
-            (true, true, _) => 's',
-            (false, true, _) => 'S',
-            (true, false, _) => 'x',
-            _ => '-',
-        });
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn unix_modes_and_sizes() {
-        assert_eq!(permissions(libc::S_IFDIR as u32 | 0o1777), "drwxrwxrwt");
-        assert_eq!(permissions(libc::S_IFREG as u32 | 0o4644), "-rwSr--r--");
-        assert_eq!(size(1536, true), "1.5K");
-        assert_eq!(size(1536, false), "1536");
-    }
 }

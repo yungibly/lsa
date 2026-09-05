@@ -1,5 +1,31 @@
 # Application measurements
 
+## Metadata controls: 2026-09-05 update
+
+Same host, 10,000 ordinary files, warmed OS cache, output to sink. Twenty-one fresh
+processes after three warmups; RSS measured separately. [Saved results](metadata.json).
+The before binary was copied from `364976f` before rebuilding; comparison used the
+same prepared directory in one session. No image decoding in these cases.
+
+| Invocation | Before | After | After peak RSS |
+| --- | ---: | ---: | ---: |
+| `-1` | 6.76 ms | 6.77 ms | 3.59 MiB |
+| `-l` | 21.62 ms | 24.87 ms | 5.33 MiB |
+| `--fields=size,modified -h` | — | 22.53 ms | 5.34 MiB |
+| `--dirs-first -1` | — | 7.04 ms | 3.59 MiB |
+
+Dynamic metadata alignment adds a formatting pass and about 3.3 ms to this large
+long listing, retaining only six widths. Both long modes request the same metadata;
+selecting fewer fields reduces formatting, not filesystem calls. The default path
+stayed steady. Grouping correctness is tested on mixed fixtures; the timing fixture
+contains ordinary files. No claim about a different filesystem or cold OS cache.
+
+Reproduce with `python3 benchmarks/measure.py --before target/lsa-before-metadata`
+when that saved binary is available, or omit `--before` for current-only results.
+The script now writes `benchmarks/local/metadata.json`; committed reports remain
+unchanged. Release binary: 1,262,304 bytes. Existing image/default PTY cases were
+rerun and are included in the saved data.
+
 ## Default layouts: 2026-09-05 update
 
 Same Apple M4 / 16 GiB host and build settings; binary 1,262,288 bytes. The original
@@ -22,7 +48,8 @@ The old sink/explicit-grid workloads were rerun alongside these: 10,000 names to
 sink took 6.71 ms versus the original 6.69 ms; four user images with explicit grid
 at 80×24 took 71.30 ms versus 71.05 ms. Both stayed close to the initial baseline.
 Reproduce with `python3 benchmarks/measure.py`;
-the script writes `benchmarks/local/defaults.json` and does not replace saved reports.
+that report was saved as `defaults.json`; the current script includes those workloads
+and writes `benchmarks/local/metadata.json` without replacing committed reports.
 
 ## Original inline prototype
 

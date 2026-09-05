@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local application baseline; creates fixtures only in benchmarks/local/."""
 import importlib.util
+import argparse
 from datetime import date
 import json
 import os
@@ -29,6 +30,9 @@ def peak_rss(stderr):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--before", type=Path, help="Optional previous lsa binary for plain/long comparison")
+    args = parser.parse_args()
     local = ROOT / "benchmarks/local"
     empty, text = local / "empty", local / "text-10000"
     empty.mkdir(parents=True, exist_ok=True)
@@ -39,7 +43,7 @@ def main():
               "machine": platform.machine(), "binary_bytes": BIN.stat().st_size,
               "build": "cargo build --release; thin LTO; stripped",
               "cache": "No thumbnail cache. OS cache warmed, not flushed.",
-              "text": {}, "graphics_pty": {}, "default_pty": {}}
+              "text": {}, "graphics_pty": {}, "default_pty": {}, "metadata_sink": {}}
     env = {**os.environ, "LC_ALL": "C"}
     for label, fixture in [("empty", empty), ("10000_files", text)]:
         for name, cmd in [("lsa", [str(BIN), "-1", str(fixture)]),
@@ -97,7 +101,30 @@ def main():
             assert code == 0
             record["peak_rss_bytes"] = peak_rss(err)
         result["default_pty"][label] = record
-    report = local / "defaults.json"
+    # Plain and long runs against the same prepared directory, including process
+    # startup. The optional old binary permits a same-session before/after check.
+    variants = [("after", BIN)]
+    if args.before:
+        variants.insert(0, ("before", args.before.resolve()))
+    for version, binary in variants:
+        cases = [("plain", ["-1"]), ("long", ["-l"])]
+        if version == "after":
+            cases += [("selected_fields", ["--fields=size,modified", "-h"]),
+                      ("dirs_first", ["--dirs-first", "-1"])]
+        for label, flags in cases:
+            cmd = [str(binary), *flags, str(text)]
+            samples = []
+            for i in range(24):
+                start = time.perf_counter()
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True, env=env)
+                if i >= 3:
+                    samples.append(time.perf_counter() - start)
+            record = summary(samples)
+            if platform.system() == "Darwin":
+                measured = subprocess.run(["/usr/bin/time", "-l", *cmd], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True, env=env)
+                record["peak_rss_bytes"] = peak_rss(measured.stderr)
+            result["metadata_sink"][f"{version}_{label}"] = record
+    report = local / "metadata.json"
     report.write_text(json.dumps(result, indent=2) + "\n")
     print(report.read_text())
 
