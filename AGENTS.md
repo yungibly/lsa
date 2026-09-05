@@ -1,6 +1,7 @@
 # Working on lsa
 
 Read [README.md](README.md) for product direction, then [ROADMAP.md](ROADMAP.md) for current status, acceptance criteria, and the next development task.
+See [HANDOFF.md](HANDOFF.md) for recent session context; recheck Git state before relying on its snapshot.
 
 Please only work and access files within this directory. The img-test directory (gitignored) has a few test images you can use. If you ever want more, feel free to ask me.
 
