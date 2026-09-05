@@ -1,0 +1,54 @@
+{
+  "date": "2026-09-05",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "binary_bytes": 1245792,
+  "build": "cargo build --release; thin LTO; stripped",
+  "cache": "No thumbnail cache. OS cache warmed, not flushed.",
+  "text": {
+    "empty_lsa": {
+      "median_ms": 1.843,
+      "min_ms": 1.613,
+      "runs": 21,
+      "peak_rss_bytes": 1753088
+    },
+    "empty_ls": {
+      "median_ms": 1.341,
+      "min_ms": 1.26,
+      "runs": 21,
+      "peak_rss_bytes": 1245184
+    },
+    "10000_files_lsa": {
+      "median_ms": 6.693,
+      "min_ms": 6.514,
+      "runs": 21,
+      "peak_rss_bytes": 3768320
+    },
+    "10000_files_ls": {
+      "median_ms": 11.52,
+      "min_ms": 10.973,
+      "runs": 21,
+      "peak_rss_bytes": 2703360
+    }
+  },
+  "graphics_pty": {
+    "40_synthetic": {
+      "median_ms": 26.583,
+      "min_ms": 25.706,
+      "runs": 7,
+      "output_bytes": 3290658,
+      "image_bytes": 3288680,
+      "images": 40,
+      "peak_rss_bytes": 2703360
+    },
+    "user_images": {
+      "median_ms": 71.054,
+      "min_ms": 70.875,
+      "runs": 7,
+      "output_bytes": 329263,
+      "image_bytes": 328868,
+      "images": 4,
+      "peak_rss_bytes": 32866304
+    }
+  }
+}

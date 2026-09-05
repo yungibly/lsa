@@ -7,24 +7,29 @@ Updated 2026-09-05. Working sequence; change it as evidence arrives.
 Documentation-only Git repository at session start. Rust 1.98.0 and Cargo 1.98.0
 are available on arm64 macOS 26.6.2. The execution environment reports `TERM=dumb`;
 Ghostty is the user's visual test terminal, unavailable through this shell's PATH.
-The previously mentioned `img-test/` directory is absent. Generate local fixtures.
+The user supplied four JPEG/GIF/WebP images during implementation; synthetic
+fixtures were added in gitignored `img-test/generated/`.
 
-## 1. Useful inline prototype — in progress
+## 1. Useful inline prototype — implemented, visual check pending
 
 - [x] Inspect workspace/toolchain; narrow graphics scope to Kitty.
-- [ ] Implement paths, hidden filtering, deterministic ordering, basic long
+- [x] Implement paths, hidden filtering, deterministic ordering, basic long
   output, safe filename display, partial errors, and normal closed-pipe behavior.
-- [ ] Keep redirected/text output free of graphics and content reads.
-- [ ] Build one mixed-entry grid, bounded static decoding, quiet chunked Kitty
+- [x] Keep redirected/text output free of graphics and content reads.
+- [x] Build one mixed-entry grid, bounded static decoding, quiet chunked Kitty
   transmission, and visible placeholders for failures or exhausted budgets.
-- [ ] Test CLI behavior, special/non-UTF-8 files, image limits, protocol framing,
+- [x] Test CLI behavior, special files, invalid-byte display, image limits, protocol framing,
   and headless terminal output. Generate a reproducible mixed fixture.
-- [ ] Record application timing, memory, payload size, and dependency choices.
+- [x] Record application timing, memory, payload size, and dependency choices.
 - [ ] Verify visually in Ghostty: multiple rows, bottom edge, repeated output,
   prompt, scrollback, resize, light/dark backgrounds. Record version and transport.
 
-Exit: a runnable prototype with reproducible automated evidence and honest visual
-status. Headless protocol tests do not establish terminal rendering compatibility.
+Evidence: 14 unit tests, 6 CLI integration tests, 16 PTY scenarios, clean fmt/clippy,
+release build, and [application baseline](benchmarks/README.md). Protocol checks
+include all four user images (separate local run), generated static formats,
+orientation, first-frame GIF offsets, corruption, bounds, and special files.
+[Compatibility](docs/compatibility.md) separates automated and visual evidence.
+The terminal acceptance gate remains open.
 
 ## 2. Daily inline use — pending
 
@@ -62,6 +67,8 @@ SVG, TIFF, AVIF, HEIC, Sixel, or other protocols only from concrete demand.
 
 ## Next task
 
-Implement and test the inline slice, record results, then provide concise Ghostty
-reproduction commands for user visual verification. Browser and cache wait for
-inline feedback.
+Run the [Ghostty checklist](docs/compatibility.md#ghostty-checklist) and record
+terminal version, local/SSH/multiplexer conditions, placement/scrolling, prompt,
+resize, and transparency results. Fix observed inline issues before auto-layout,
+caching, or browsing. Application output is ready; visual compatibility is not
+yet established.

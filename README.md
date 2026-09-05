@@ -3,8 +3,9 @@
 A fast, human-oriented directory listing with inline image thumbnails. An explicit
 browser can follow. Kitty graphics first; Sixel is an optional future addition.
 
-**Status:** Implementation starting. Ghostty is the first visual test target;
-terminal compatibility is not yet verified. See [ROADMAP.md](ROADMAP.md).
+**Status:** Runnable Rust prototype: text listings and an explicit Kitty grid.
+Automated checks pass on arm64 macOS; visible Ghostty rendering is **unverified**.
+See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
 
 ## Direction
 
@@ -25,22 +26,75 @@ useful slice over speculative interfaces. Exact BSD/GNU `ls` parity, file mutati
 indexing services, plugins, animation, and broad preview providers are outside the
 initial scope.
 
-## First slice
+## Run
 
-Build a small Rust CLI with ordinary text listings and an explicit mixed-entry
-Kitty grid. Use direct image transmission, so no terminal-side filesystem access
-is required. Keep decoding separate from output; defer a backend framework until
-another backend exists.
+```sh
+# Keep Cargo downloads and build outputs inside this repository.
+export CARGO_HOME="$PWD/.cargo-home"
+cargo build --release --locked
+./target/release/lsa
+./target/release/lsa -lah img-test
+./target/release/lsa --grid img-test
+./target/release/lsa --grid --protocol=kitty img-test
+./target/release/lsa --diagnose
+```
 
-Start with static PNG, JPEG, GIF, WebP, and BMP through selected `image` crate
-features. Reject excessive input before full decoding; process one preview at a
-time. Add workers, caching, and reduced-resolution decoding only where measured
-latency justifies them. Decoder limits are not a process memory or time sandbox.
+Rust 1.88+ declared; built/tested with 1.98.0. Unix only; Linux is not yet tested.
+No install step or external image program is needed. The release binary is about
+1.2 MiB on this Mac. Default output is currently one name per line; use `--grid`
+for previews. Full option semantics: `lsa --help`.
 
-Use conservative environment detection and terminal dimensions without reading
-stdin. Explicit overrides should be available; non-TTY output always stays text.
-Multiplexers need their own validation. Names sort by raw Unix bytes, are retained
-losslessly internally, and are escaped for safe display.
+Supported: `-a`/`-A`, `-l`, `-h`, `-1`, `-t`, `-S`, `-r`, multiple operands, `--`,
+`--grid`, `--no-images`, `--protocol=auto|kitty|none`, `--preview-limit=0..256`,
+`--diagnose`. Text flags override grid regardless of option order. Auto graphics
+uses direct Ghostty/Kitty environment hints; unknown terminals/multiplexers fall
+back to text. Non-TTY output always stays text, including with an explicit override.
+No terminal queries, stdin reads, paging, color, configuration, or cache yet.
+
+Deliberate `ls` differences: bytewise name order; `-a` and `-A` both omit `.`/`..`;
+directory/link/FIFO/socket suffixes; numeric uid/gid and local minute timestamps in
+long output; directory symlink operands remain links. Time/size sorts use names to
+break ties. Reverse applies to the full order; operands retain argument order.
+Exit codes: 0 success (including broken pipe), 1 listing/output error, 2 bad options.
+
+## Previews and limits
+
+Static PNG/JPEG/GIF/WebP/BMP, JPEG EXIF orientation, aspect-preserving letterboxing,
+and a neutral checker under transparency. GIF uses the first frame on its logical
+canvas. Symlinks to regular images can preview while retaining their link marker.
+Names wrap at grapheme boundaries; missing previews keep their tiles and labels.
+
+One synchronous decode at a time; no worker queue or disk cache. Per invocation:
+64 preview attempts by default (including failures), hard maximum 256, and 8 MiB
+of image commands. Per source: 32 MiB input, 16 million pixels, 16,384 pixels per
+axis, 64 MiB decoded output, and a **best-effort** 64 MiB decoder allocation limit.
+Thumbnails fit within 320×240 pixels. These are starting caps, not performance
+claims or a hard process-memory/time sandbox. Preview work can delay a row; there
+is no timeout for slow filesystems or in-progress decodes. Names are never omitted
+after preview limits; stderr reports unavailable/limited previews.
+
+Grid requires at least 12 columns × 8 rows. Cell pixels come from the terminal's
+window size; if missing, 8×16 is estimated and aspect may be imperfect. Geometry is
+chosen once per invocation; resize/reflow and scrollback retention need Ghostty
+verification. Inline images use anonymous placements and are left in terminal
+history; no global image deletion. Terminal storage may evict old previews.
+
+## Check
+
+```sh
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo build --release --locked --examples
+./target/release/examples/fixtures  # creates img-test/generated once
+python3 tests/check_pty.py
+python3 benchmarks/measure.py
+```
+
+Tests keep scratch files under `target/`; fixtures and measurements are gitignored.
+The socket integration test needs local Unix-socket creation permission. Invalid
+UTF-8 filesystem names are tested on Linux; APFS rejects them, so macOS uses the
+byte-level display tests. See [decisions](docs/decisions.md) and
+[measurements](benchmarks/README.md) for evidence and remaining limits.
 
 ## Later slices
 

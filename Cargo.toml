@@ -1,0 +1,21 @@
+[package]
+name = "lsa"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "A human-oriented directory listing with inline Kitty thumbnails"
+publish = false
+
+[dependencies]
+base64 = "0.22.1"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+libc = "0.2"
+unicode-segmentation = "1.12"
+unicode-width = "0.2"
+
+[dev-dependencies]
+gif = "0.14.2"
+
+[profile.release]
+lto = "thin"
+strip = true
