@@ -4,13 +4,12 @@ Updated 2026-09-05. Working sequence; change it as evidence arrives.
 
 ## Current state
 
-Documentation-only Git repository at session start. Rust 1.98.0 and Cargo 1.98.0
-are available on arm64 macOS 26.6.2. The execution environment reports `TERM=dumb`;
-Ghostty is the user's visual test terminal, unavailable through this shell's PATH.
-The user supplied four JPEG/GIF/WebP images during implementation; synthetic
-fixtures were added in gitignored `img-test/generated/`.
+Rust CLI on arm64 macOS 26.6.2, built with Rust/Cargo 1.98.0. Inline Kitty output
+was user-verified in Ghostty 1.3.1 at 122×40 cells, 8×17 pixels per cell. Compact
+columns and automatic grid selection are now implemented and headless-tested.
+Four user images and generated fixtures remain gitignored under `img-test/`.
 
-## 1. Useful inline prototype — implemented, visual check pending
+## 1. Useful inline prototype — complete for the tested Ghostty commands
 
 - [x] Inspect workspace/toolchain; narrow graphics scope to Kitty.
 - [x] Implement paths, hidden filtering, deterministic ordering, basic long
@@ -21,24 +20,32 @@ fixtures were added in gitignored `img-test/generated/`.
 - [x] Test CLI behavior, special files, invalid-byte display, image limits, protocol framing,
   and headless terminal output. Generate a reproducible mixed fixture.
 - [x] Record application timing, memory, payload size, and dependency choices.
-- [ ] Verify visually in Ghostty: multiple rows, bottom edge, repeated output,
-  prompt, scrollback, resize, light/dark backgrounds. Record version and transport.
+- [x] User verified all supplied Ghostty commands: mixed/full/limited grids,
+  diagnostic output, and pipes. Exact version and geometry recorded. Detailed
+  resize/theme/transport trials remain follow-up compatibility work.
 
-Evidence: 14 unit tests, 6 CLI integration tests, 16 PTY scenarios, clean fmt/clippy,
-release build, and [application baseline](benchmarks/README.md). Protocol checks
-include all four user images (separate local run), generated static formats,
-orientation, first-frame GIF offsets, corruption, bounds, and special files.
-[Compatibility](docs/compatibility.md) separates automated and visual evidence.
-The terminal acceptance gate remains open.
+Evidence: [compatibility report](docs/compatibility.md), original application
+[baseline](benchmarks/README.md), generated fixtures, and protocol/CLI tests.
 
-## 2. Daily inline use — pending
+## 2. Daily inline use — default layouts implemented
 
-Use the prototype before fixing thresholds or adding infrastructure. Improve
-compact listings, auto-layout, image quality/orientation, responsiveness, and
-diagnostics where needed. Measure large ordinary and image-heavy directories.
-If caching is justified, use versioned metadata keys, bounded storage, atomic
-writes, graceful corruption handling, and disable/clear controls. Keep names
-complete after preview limits; avoid revisiting inline rows that have scrolled away.
+- [x] Compact row-wise text columns, Unicode display widths, complete filenames,
+  narrow-window fallback, and stable ordering.
+- [x] Conservative automatic grid selection from count/proportion, shared grid
+  geometry, wrapped label height, and configured preview budgets; no content reads
+  to choose a layout. Text and explicit grid overrides remain available.
+- [x] Per-path diagnostics explain layout selection without decoding images.
+- [x] 21 unit + 6 CLI tests, 16 original PTY + 22 new layout checks; fmt/clippy clean.
+- [x] Benchmark default paths at 122×40; preserve original baseline for comparison.
+  Piped 10,000-name listing remains ~6.7 ms; compact PTY output ~9.8 ms / 3.69 MiB.
+- [ ] User visual check of new defaults. Computer Use denied Ghostty access;
+  the user's window was not touched.
+
+[Latest measurements](benchmarks/defaults.json) separate sink, explicit grid,
+and automatic TTY output. No cache, concurrency, or browser added in this chunk.
+Use daily feedback to decide whether those additions are justified. If caching
+comes next, require versioned keys, bounded storage, atomic writes, graceful
+corruption handling, and disable/clear controls.
 
 ## 3. Explicit browser — pending
 
@@ -67,8 +74,8 @@ SVG, TIFF, AVIF, HEIC, Sixel, or other protocols only from concrete demand.
 
 ## Next task
 
-Run the [Ghostty checklist](docs/compatibility.md#ghostty-checklist) and record
-terminal version, local/SSH/multiplexer conditions, placement/scrolling, prompt,
-resize, and transparency results. Fix observed inline issues before auto-layout,
-caching, or browsing. Application output is ready; visual compatibility is not
-yet established.
+Try plain `lsa` in source and image directories, `--no-images` for compact text,
+and `--diagnose PATH` to inspect the selection. Confirm the new defaults visually
+in Ghostty, then tune density/heuristics if needed. Additional implementation scope
+should be agreed with the user before starting another chunk. Detailed resize,
+theme, SSH/multiplexer behavior, caching, and browsing remain future work.

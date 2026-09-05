@@ -39,7 +39,7 @@ def main():
               "machine": platform.machine(), "binary_bytes": BIN.stat().st_size,
               "build": "cargo build --release; thin LTO; stripped",
               "cache": "No thumbnail cache. OS cache warmed, not flushed.",
-              "text": {}, "graphics_pty": {}}
+              "text": {}, "graphics_pty": {}, "default_pty": {}}
     env = {**os.environ, "LC_ALL": "C"}
     for label, fixture in [("empty", empty), ("10000_files", text)]:
         for name, cmd in [("lsa", [str(BIN), "-1", str(fixture)]),
@@ -75,7 +75,29 @@ def main():
             assert code == 0
             record["peak_rss_bytes"] = peak_rss(err)
         result["graphics_pty"][label] = record
-    report = local / "baseline.json"
+    # Measure the new default path at the user's reported Ghostty geometry.
+    geometry = dict(cols=122, rows=40, pixels=(976, 680))
+    for label, path in [("empty", empty), ("10000_files", text), *fixtures]:
+        samples = []
+        for i in range(10):
+            code, data, err, elapsed = pty_check.capture([path], **geometry)
+            assert code == 0 and not err, err
+            if i >= 3:
+                samples.append(elapsed)
+        record = summary(samples)
+        record["output_bytes"] = len(data)
+        record["images"] = len(pty_check.images(data))
+        if not record["images"]:
+            record["text_lines"] = len(data.splitlines())
+        code, diagnostic, err, _ = pty_check.capture(["--diagnose", path], **geometry)
+        assert code == 0 and not err
+        record["layout"] = re.search(rb"^layout=(\w+)", diagnostic, re.M)[1].decode()
+        if platform.system() == "Darwin":
+            code, _, err, _ = pty_check.capture([path], prefix=("/usr/bin/time", "-l"), **geometry)
+            assert code == 0
+            record["peak_rss_bytes"] = peak_rss(err)
+        result["default_pty"][label] = record
+    report = local / "defaults.json"
     report.write_text(json.dumps(result, indent=2) + "\n")
     print(report.read_text())
 

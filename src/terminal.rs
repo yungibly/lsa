@@ -72,22 +72,19 @@ impl Terminal {
         }
         result
     }
-    pub fn grid(&self, opts: &Options) -> bool {
-        opts.grid && self.kitty && self.cols >= 12 && self.rows >= 8
-    }
 }
 
 fn select(tty: bool, opts: &Options, mux: bool, known: bool) -> (bool, &'static str) {
     if !tty {
         (false, "stdout is not a terminal")
-    } else if opts.text || opts.long || opts.protocol == Protocol::None {
+    } else if opts.no_images || opts.one || opts.long || opts.protocol == Protocol::None {
         (false, "text requested")
     } else if opts.protocol == Protocol::Kitty {
-        (true, "explicit Kitty override (unverified)")
+        (true, "explicit Kitty override")
     } else if mux {
         (false, "multiplexer: graphics not auto-enabled")
     } else if known {
-        (true, "Kitty/Ghostty environment hint (unverified)")
+        (true, "Kitty/Ghostty environment hint")
     } else {
         (false, "unknown terminal")
     }
@@ -106,7 +103,7 @@ mod tests {
         opts.protocol = Protocol::Kitty;
         assert!(select(true, &opts, true, false).0);
         assert!(!select(false, &opts, false, true).0);
-        opts.text = true;
+        opts.no_images = true;
         assert!(!select(true, &opts, false, true).0);
     }
 }

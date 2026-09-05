@@ -1,4 +1,30 @@
-# Initial application baseline
+# Application measurements
+
+## Default layouts: 2026-09-05 update
+
+Same Apple M4 / 16 GiB host and build settings; binary 1,262,288 bytes. The original
+results below remain unchanged. [New results](defaults.json) include default TTY
+output at the user's 122×40 geometry, with 8×17 pixels per cell.
+
+| Default invocation | Layout | Median elapsed | App peak RSS | Output |
+| --- | --- | ---: | ---: | --- |
+| Empty directory | Columns | 1.96 ms | 1.70 MiB | 0 bytes |
+| 10,000 ordinary files | 7 text columns | 9.79 ms | 3.69 MiB | 1,429 lines, 170,000 bytes |
+| 40 synthetic image links | 8 text columns | 2.95 ms | 1.81 MiB | 5 lines, 600 bytes; no decoding |
+| Four user images plus generated folder | Automatic grid | 71.01 ms | 31.27 MiB | 4 previews, 320,685 bytes |
+
+Seven measured runs after three warmups, fresh processes, warmed OS cache, no
+thumbnail cache. PTY times include Python drain/poll overhead; no visible terminal
+rendering is measured. The larger image fixture stays text because its grid would
+exceed one screen. Column planning stores one width per entry, not escaped labels.
+
+The old sink/explicit-grid workloads were rerun alongside these: 10,000 names to a
+sink took 6.71 ms versus the original 6.69 ms; four user images with explicit grid
+at 80×24 took 71.30 ms versus 71.05 ms. Both stayed close to the initial baseline.
+Reproduce with `python3 benchmarks/measure.py`;
+the script writes `benchmarks/local/defaults.json` and does not replace saved reports.
+
+## Original inline prototype
 
 2026-09-05; Apple M4, 16 GiB RAM; local macOS 26.6.2 (25G83), arm64.
 Rust/Cargo 1.98.0, release build with thin LTO and stripping; binary 1,245,792 bytes.

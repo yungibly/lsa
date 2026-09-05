@@ -9,7 +9,9 @@
 | Small direct Kitty writer | Inline lifetime needs ordered rows, no alternate screen or event loop. Quiet RGBA chunks, anonymous placements, cursor control, and exact byte accounting are enough for this experiment. |
 | `image` with five format features | One decoder interface; no external image executables or native codec libraries in the tested build. Default features disabled. JPEG orientation and offset GIF first-frame behavior tested. |
 | `libc`, `unicode-width`, `unicode-segmentation`, `base64` | Window size, safe regular-file opens, Unix metadata/time; grapheme-aware text wrapping; protocol encoding. Five direct runtime crates total, including `image`. |
-| Explicit grid, environment hints | Useful experiment without query delays, raw mode, stdin consumption, or premature auto-layout thresholds. Hints are not capability verification. Text wins on pipes. |
+| Automatic layout, environment hints | After the explicit grid was user-verified, add conservative defaults: ≥4 candidates, ≥50%, full grid within screen minus two rows and configured preview caps. Text wins on pipes; explicit overrides win on TTYs. No queries, raw mode, or stdin consumption. |
+| Row-wise text columns | Preserve the grid reading order. Measure escaped labels with Unicode display widths, retain only widths, search at most 64 column counts, and omit trailing padding. A very long name can reduce the listing to one column. |
+| Shared grid geometry | Selection and rendering use the same tile size and wrapped-label height. Large directories fail the cheap minimum-height check before candidate classification or label formatting. Diagnose can deliberately calculate full estimates. |
 | Sequential decode, no cache | Keeps concurrency/queues at one/zero and exposes cold-thumbnail work. Source/geometry/allocation/output caps first; measure before adding workers/cache. No hard decode deadline. |
 | Box optional metadata | The first 10,000-file baseline showed unused stat storage inflated ordinary listing memory. Boxing requested metadata cut measured peak RSS about 46%. Names/path collection still scales with directory size. |
 | Fixed inline rows | Reserve vertical room before placements, leave rightmost column unused, wrap names, flush each tile/row. Decode with cursor below placements. Nothing rewrites old rows after emission. |
@@ -21,8 +23,9 @@ benchmark of TUI stacks.
 
 The [Kitty specification](https://sw.kovidgoyal.net/kitty/graphics-protocol/) defines
 direct transmission, 4096-byte base64 chunks, quiet replies, and cursor control.
-Automated tests decode emitted payloads and model the cursor subset; visible
-terminal behavior is still untested. Anonymous inline images avoid ID reuse across
+Automated tests decode emitted payloads and model the cursor subset; the original
+inline renderer is user-verified in Ghostty 1.3.1. New default selection/columns
+remain headless-tested. Anonymous inline images avoid ID reuse across
 invocations. Browser image ownership will need a separate implementation.
 
 [`image::Limits`](https://docs.rs/image/0.25.10/image/struct.Limits.html) distinguishes

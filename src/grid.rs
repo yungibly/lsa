@@ -10,24 +10,71 @@ use unicode_width::UnicodeWidthStr;
 
 const ROWS: usize = 5;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Geometry {
+    pub columns: usize,
+    pub tile: usize,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: usize,
+}
+
+impl Geometry {
+    pub fn new(term: &Terminal) -> Option<Self> {
+        if term.cols < 12 || term.rows < 8 {
+            return None;
+        }
+        // Reserve the rightmost cell; bound row scratch space on very wide TTYs.
+        let available = (term.cols - 1).min(240);
+        let columns = (available / 24).clamp(1, 10);
+        let tile = available / columns;
+        let width = (tile - 2) as f64 * f64::from(term.cell_width);
+        let height = ROWS as f64 * f64::from(term.cell_height);
+        let scale = (320.0 / width).min(240.0 / height).min(1.0);
+        let width = (width * scale).round().max(1.0) as u32;
+        let height = (height * scale).round().max(1.0) as u32;
+        Some(Self {
+            columns,
+            tile,
+            width,
+            height,
+            bytes: kitty::byte_len(width, height, tile - 2, ROWS),
+        })
+    }
+
+    pub fn minimum_rows(&self, entries: usize) -> usize {
+        entries.div_ceil(self.columns).saturating_mul(ROWS + 2)
+    }
+
+    pub fn output_rows(&self, entries: &[Entry]) -> usize {
+        entries
+            .chunks(self.columns)
+            .map(|row| {
+                let lines = row
+                    .iter()
+                    .map(|e| wrap(&e.label(), self.tile - 2).len())
+                    .max()
+                    .unwrap_or(0);
+                ROWS + lines + 1
+            })
+            .sum()
+    }
+}
+
 pub fn write(
     out: &mut impl Write,
     entries: &[Entry],
-    term: &Terminal,
+    geometry: Geometry,
     budget: &mut Budget,
 ) -> io::Result<()> {
-    // Leave the rightmost terminal column unused to avoid delayed autowrap.
-    // Also bound row scratch space even for an implausibly wide reported terminal.
-    let available = (term.cols - 1).min(240);
-    let columns = (available / 24).clamp(1, 10);
-    let tile = available / columns;
+    let Geometry {
+        columns,
+        tile,
+        width,
+        height,
+        bytes,
+    } = geometry;
     let image_cols = tile - 2;
-    let width = image_cols as f64 * f64::from(term.cell_width);
-    let height = ROWS as f64 * f64::from(term.cell_height);
-    let scale = (320.0 / width).min(240.0 / height).min(1.0);
-    let width = (width * scale).round().max(1.0) as u32;
-    let height = (height * scale).round().max(1.0) as u32;
-    let bytes = kitty::byte_len(width, height, image_cols, ROWS);
     for row in entries.chunks(columns) {
         // Reserve the image area AND a label line before placing images. This
         // scrolls first, so a placement never extends below the visible screen.

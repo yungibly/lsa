@@ -25,7 +25,8 @@ pub struct Options {
     pub reverse: bool,
     pub sort: Sort,
     pub grid: bool,
-    pub text: bool,
+    pub one: bool,
+    pub no_images: bool,
     pub protocol: Protocol,
     pub preview_limit: usize,
     pub diagnose: bool,
@@ -40,19 +41,21 @@ Usage: lsa [OPTIONS] [PATH ...]
   -a, -A                 Include hidden entries (neither adds . or ..)
   -l                     Long text listing: mode, links, uid, gid, size, local time
   -h                     Human-readable sizes with -l
-  -1                     One name per line (currently the default)
+  -1                     One name per line
   -t / -S                Sort newest / largest first; ties by raw filename bytes
   -r                     Reverse the selected order
   --grid                 Mixed-entry thumbnail grid on a graphics terminal
-  --no-images            Text only; never open image contents
+  --no-images            Compact text only; never open image contents
   --protocol=auto|kitty|none
                          Auto recognizes direct Ghostty/Kitty sessions
   --preview-limit=N      Attempt at most N previews per invocation (0..256; default 64)
-  --diagnose             Print terminal selection and limits, then exit
+  --diagnose             Explain layout for each path without decoding images
   --help / --version     Show help / version
   --                     End options, including for paths beginning with -
 
-Non-TTY output is always plain text. -l, -1, --no-images, and protocol=none
+TTY output defaults to row-wise text columns. Image-heavy listings that fit
+one screen and the preview budget automatically use a grid. Non-TTY output
+is always one entry per line. -l, -1, --no-images, and protocol=none
 override --grid. Unknown terminals and multiplexers default to text.
 Preview errors retain entries and do not fail the listing. Exit: 0 success,
 1 listing/output errors, 2 invalid options. Closed pipes exit successfully.
@@ -77,7 +80,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--help" => opts.help = true,
             "--version" => opts.version = true,
             "--grid" => opts.grid = true,
-            "--no-images" => opts.text = true,
+            "--no-images" => opts.no_images = true,
             "--diagnose" => opts.diagnose = true,
             _ if s.starts_with("--protocol=") => {
                 opts.protocol = match &s[11..] {
@@ -103,7 +106,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                         'a' | 'A' => opts.all = true,
                         'l' => opts.long = true,
                         'h' => opts.human = true,
-                        '1' => opts.text = true,
+                        '1' => opts.one = true,
                         'r' => opts.reverse = true,
                         't' => opts.sort = Sort::Time,
                         'S' => opts.sort = Sort::Size,

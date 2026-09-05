@@ -3,8 +3,9 @@
 A fast, human-oriented directory listing with inline image thumbnails. An explicit
 browser can follow. Kitty graphics first; Sixel is an optional future addition.
 
-**Status:** Runnable Rust prototype: text listings and an explicit Kitty grid.
-Automated checks pass on arm64 macOS; visible Ghostty rendering is **unverified**.
+**Status:** Rust CLI with compact text and automatic inline Kitty grids. The
+original inline renderer is user-verified in Ghostty 1.3.1; the new default layouts
+pass automated checks and await a visual check.
 See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
 
 ## Direction
@@ -41,14 +42,15 @@ cargo build --release --locked
 
 Rust 1.88+ declared; built/tested with 1.98.0. Unix only; Linux is not yet tested.
 No install step or external image program is needed. The release binary is about
-1.2 MiB on this Mac. Default output is currently one name per line; use `--grid`
-for previews. Full option semantics: `lsa --help`.
+1.2 MiB on this Mac. Full option semantics: `lsa --help`.
 
 Supported: `-a`/`-A`, `-l`, `-h`, `-1`, `-t`, `-S`, `-r`, multiple operands, `--`,
 `--grid`, `--no-images`, `--protocol=auto|kitty|none`, `--preview-limit=0..256`,
-`--diagnose`. Text flags override grid regardless of option order. Auto graphics
-uses direct Ghostty/Kitty environment hints; unknown terminals/multiplexers fall
-back to text. Non-TTY output always stays text, including with an explicit override.
+`--diagnose`. Text flags override grid regardless of option order. Graphics
+selection uses Ghostty/Kitty environment hints; unknown terminals/multiplexers
+fall back to text. Non-TTY output always stays text, including with an explicit
+override. `--diagnose PATH` reports the chosen layout, reason, candidate count,
+and estimated grid height without decoding images.
 No terminal queries, stdin reads, paging, color, configuration, or cache yet.
 
 Deliberate `ls` differences: bytewise name order; `-a` and `-A` both omit `.`/`..`;
@@ -56,6 +58,27 @@ directory/link/FIFO/socket suffixes; numeric uid/gid and local minute timestamps
 long output; directory symlink operands remain links. Time/size sorts use names to
 break ties. Reverse applies to the full order; operands retain argument order.
 Exit codes: 0 success (including broken pipe), 1 listing/output error, 2 bad options.
+
+## Default layout
+
+Each operand chooses its layout once, after hidden filtering and sorting:
+
+- On a TTY, use aligned text columns, reading across each row. Widths include
+  Unicode and escaped controls. Keep a two-space gap and leave the rightmost cell
+  free; fall back to one column when names are too wide. Names are never shortened.
+- Automatically use a grid only with Kitty enabled, at least four preview
+  candidates, at least half the entries eligible, and the full grid fitting within
+  terminal height minus two rows. Wrapped labels count toward that height. Check
+  candidates against the configured attempt and byte caps before decoding.
+- `--grid` bypasses those heuristics. `--no-images` and `--protocol=none` force
+  compact text; `-1` forces one entry per line; `-l` forces long text. Pipes use one
+  entry per line (long metadata remains available with `-l`).
+
+The four user images plus `generated/` choose a grid at 122×40. The 40-image fixture
+chooses text; use `--grid` to preview it. These thresholds are provisional. Candidate
+extensions/types are cheap hints: decode failures never change the chosen layout.
+The preview budget is shared across operands, so later grids may reach the limit.
+Text planning retains only widths, with a search capped at 64 columns.
 
 ## Previews and limits
 
@@ -75,8 +98,8 @@ after preview limits; stderr reports unavailable/limited previews.
 
 Grid requires at least 12 columns × 8 rows. Cell pixels come from the terminal's
 window size; if missing, 8×16 is estimated and aspect may be imperfect. Geometry is
-chosen once per invocation; resize/reflow and scrollback retention need Ghostty
-verification. Inline images use anonymous placements and are left in terminal
+chosen once per invocation; resize during output is not handled. Detailed resize,
+theme, and retention trials are not yet recorded. Inline images use anonymous placements and are left in terminal
 history; no global image deletion. Terminal storage may evict old previews.
 
 ## Check
@@ -87,6 +110,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked --examples
 ./target/release/examples/fixtures  # creates img-test/generated once
 python3 tests/check_pty.py
+python3 tests/check_layout.py
 python3 benchmarks/measure.py
 ```
 
@@ -98,10 +122,9 @@ byte-level display tests. See [decisions](docs/decisions.md) and
 
 ## Later slices
 
-1. Validate inline geometry, bottom-row output, repeated invocations, scrollback,
-   resize, and return to the prompt in Ghostty. Record exact conditions.
-2. Improve density and latency from actual directories: compact text columns,
-   auto-layout, thumbnail cache, and bounded parallel work as needed.
+1. Visually check the new defaults in Ghostty and tune them from daily use.
+2. Improve latency from actual directories: thumbnail cache and bounded parallel
+   work only where measurements justify them.
 3. Add an alternate-screen browser with viewport-driven previews, stable
    selection, stale-job rejection, and session-only image cleanup. Share entries
    and decoding with inline output, not output lifetime assumptions.

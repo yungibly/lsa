@@ -121,6 +121,11 @@ fn operands_and_partial_errors() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("missing:"));
     assert_eq!(f.run(&["--unknown"]).status.code(), Some(2));
     assert_eq!(f.run(&["dir"]).stdout, b"inside\n");
+    let diagnostic = f.run(&["--diagnose", "missing", "dir"]);
+    assert_eq!(diagnostic.status.code(), Some(1));
+    let report = String::from_utf8(diagnostic.stdout).unwrap();
+    assert!(report.contains("path=dir\nentries=1\npreview_candidates=0\nlayout=lines\n"));
+    assert!(String::from_utf8_lossy(&diagnostic.stderr).contains("missing:"));
 }
 
 #[test]

@@ -1,8 +1,10 @@
 mod cli;
+mod columns;
 mod display;
 mod entry;
 mod grid;
 mod kitty;
+mod layout;
 mod preview;
 mod terminal;
 
@@ -44,7 +46,7 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
     if opts.diagnose {
         writeln!(
             out,
-            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\nlayout={}\npreview_attempts={}\nimage_output_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ncache=none\nterminal_validation=pending",
+            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\npreview_attempts={}\nimage_output_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ncache=none\nterminal_validation=see docs/compatibility.md",
             term.tty,
             term.name,
             term.version,
@@ -59,14 +61,12 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
             },
             term.kitty,
             term.reason,
-            if term.grid(opts) { "grid" } else { "text" },
             opts.preview_limit,
             preview::OUTPUT_LIMIT,
             preview::INPUT_LIMIT,
             preview::PIXEL_LIMIT,
             preview::ALLOC_LIMIT
         )?;
-        return Ok(0);
     }
     let mut failed = false;
     let mut printed = false;
@@ -80,16 +80,36 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
         if !listing.valid {
             continue;
         }
+        let choice = layout::choose(&listing.entries, &term, opts);
+        if opts.diagnose {
+            writeln!(
+                out,
+                "\npath={}\nentries={}\npreview_candidates={}\nlayout={}\nlayout_reason={}\nestimated_grid_rows={}",
+                display::escape(path.as_os_str()),
+                listing.entries.len(),
+                listing.entries.iter().filter(|e| e.candidate()).count(),
+                choice.layout.name(),
+                choice.reason,
+                grid::Geometry::new(&term)
+                    .map(|g| g.output_rows(&listing.entries).to_string())
+                    .unwrap_or_else(|| "unavailable".into())
+            )?;
+            continue;
+        }
         if opts.paths.len() > 1 && listing.directory {
             if printed {
                 writeln!(out)?;
             }
             writeln!(out, "{}:", display::escape(path.as_os_str()))?;
         }
-        if term.grid(opts) {
-            grid::write(out, &listing.entries, &term, &mut budget)?;
-        } else {
-            entry::write_text(out, &listing.entries, opts)?;
+        match choice.layout {
+            layout::Layout::Grid(geometry) => {
+                grid::write(out, &listing.entries, geometry, &mut budget)?
+            }
+            layout::Layout::Columns => columns::write(out, &listing.entries, term.cols)?,
+            layout::Layout::Long | layout::Layout::Lines => {
+                entry::write_text(out, &listing.entries, opts)?
+            }
         }
         printed = true;
     }

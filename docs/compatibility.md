@@ -1,13 +1,15 @@
 # Compatibility
 
-2026-09-05. **No real terminal has been visually validated yet.**
+2026-09-05. **Original inline commands are user-verified in Ghostty 1.3.1.**
+New automatic layout and compact columns are headless-tested; visual check pending.
 
 | Environment | Protocol / mode / transport | Evidence | Status |
 | --- | --- | --- | --- |
 | macOS 26.6.2 (25G83), arm64; Rust 1.98.0 | Plain text, stdout pipe | CLI tests, error/closed-pipe tests, benchmarks | Automated pass |
 | Same host, Python 3.14.7 PTY; injected Ghostty environment | Kitty inline bytes; local pseudo-terminal | 16 scenarios; 40 placements at 80×24, 80×8, 12×8, 200×50; cursor model starts at top/bottom; modes unchanged | Automated pass; no renderer |
 | Same PTY, four user JPEG/GIF/WebP files | Kitty inline bytes | Four decoded images transmitted successfully | Local automated pass; no renderer |
-| Ghostty, version not supplied | Kitty inline, direct local terminal | User verification pending | Unverified |
+| Ghostty 1.3.1 stable, macOS/CoreText/Metal build; 122×40 cells, 8×17 pixels/cell | Kitty inline; user session, transport not separately stated | User reported all original checklist commands worked as expected at `f079a23` | User-verified commands |
+| Local PTY, 122×40 / 8×17 and width/height boundary cases | Automatic grid and row-wise text columns | 22 layout scenarios plus the original 16 protocol scenarios | Automated pass; visual pending |
 | Kitty terminal; other terminals; SSH | Kitty inline | No terminal trials | Unverified |
 | tmux / screen / Zellij | Text in auto mode | Environment fallback tested for tmux; no passthrough implementation | Graphics unverified |
 | Any terminal | Interactive browser | Not implemented | — |
@@ -19,6 +21,22 @@ narrow/short/unknown-terminal fallback, corrupt/oversized files, and image-named
 FIFOs/symlinks. They do not prove image visibility, scrollback, clipping, resize,
 prompt interaction, or cleanup in Ghostty. Environment detection is a hint; it
 does not read a graphics query response.
+
+## User report
+
+The user supplied `TERM_PROGRAM=ghostty`, version 1.3.1, `stdout_tty=true`, geometry
+122×40, measured cell pixels 8×17, and `kitty=true`. They reported that all original
+commands below worked exactly as expected. `layout=text` in the original diagnostic
+was expected without `--grid`; the updated diagnostic now examines each operand.
+
+Build details supplied: stable channel, Zig 0.15.2, ReleaseFast, app runtime `.none`,
+CoreText font engine, generic Metal renderer, kqueue libxev. This establishes the
+reported session, not every Ghostty build or transport. Specific resize/theme trials
+and SSH/multiplexer conditions were not separately logged.
+
+During the default-layout chunk, Computer Use rejected access to
+`com.mitchellh.ghostty` for safety reasons. No new window was opened and the user's
+existing window was untouched. This tool restriction is not an lsa rendering failure.
 
 ## Ghostty checklist
 
@@ -32,6 +50,19 @@ From this repository, in a direct Ghostty shell:
 ./target/release/lsa --grid --preview-limit=2 img-test/generated/many
 ./target/release/lsa --grid img-test | cat
 ```
+
+Additional commands for the new defaults:
+
+```sh
+./target/release/lsa                         # compact source listing
+./target/release/lsa img-test                # automatic grid at 122×40
+./target/release/lsa img-test/generated/many # compact text: grid would be too tall
+./target/release/lsa --no-images img-test    # compact text override
+./target/release/lsa --diagnose img-test     # explain the selected layout
+```
+
+Text reads across each row, like the grid. Verify column alignment, complete names,
+and ordering. Automatic grids should look like `--grid` for the same directory.
 
 Record the Ghostty version from About or `ghostty --version` if available, OS,
 `--diagnose` output, and whether local, SSH, or behind a multiplexer. If detection
@@ -49,4 +80,4 @@ both outcomes. Pixel dimensions may be estimated; note this when judging aspect.
   indefinite scrollback support. Resize during output is not yet handled.
 
 The example fixture generator refuses to overwrite an existing generated directory.
-No computer-use/GUI automation was used during implementation.
+No Ghostty UI automation was performed.
