@@ -1,0 +1,22 @@
+# Working on lsa
+
+Read [README.md](README.md) for product direction, then [ROADMAP.md](ROADMAP.md) for current status, acceptance criteria, and the next development task.
+
+## Preserve these decisions
+
+- Images, ordinary files, folders, and symlinks form one listing with shared ordering and interaction. A preview is an entry representation; do not split the default experience into image and non-image sections.
+- This is an everyday human-oriented `ls` replacement. Keep ordinary text listings fast and shell behavior sensible; exact GNU/BSD scripting parity is not required.
+- Inline output is the default. Interactive browsing is explicit; automatic paging is opt-in.
+- Kitty and Sixel are both initial graphics targets. Prove both in the first rendering experiment and record actual compatibility rather than assuming parity.
+- Bound preview work, allocations, queues, cache storage, and output. Browser previews follow the viewport. Preview failures never hide files.
+- Filenames and metadata remain terminal text. The fallback is a complete usable text listing.
+
+## Development practice
+
+- The initial state is documentation only. Read the current roadmap and inspect the workspace before assuming any code, dependencies, Git history, tests, or terminal validation exist.
+- Implementation language, libraries, numeric performance targets, and exact CLI details are provisional. Make routine implementation decisions from prototype evidence and record the reasons.
+- Keep inline output and browser output lifetimes distinct, including progressive rendering and image cleanup.
+- Verify graphics in real terminals. Report terminal/version, protocol, mode, and transport conditions; upstream library support is not lsa validation.
+- Use meaningful tests and measurements for the change at hand. Separate application cost from terminal cost and cache-warm from cache-cold results.
+- Update the roadmap's status and next task after implementation work. Keep intended behavior, implemented behavior, and verified behavior distinguishable.
+- Avoid expanding into a general file manager, background service, or plugin system without a concrete need. Prioritize the complete mixed-directory experience and resource efficiency.
