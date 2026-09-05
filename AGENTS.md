@@ -11,13 +11,13 @@ Ghostty is the current target/test terminal. I can do visual verification for yo
 - Images, ordinary files, folders, and symlinks form one listing with shared ordering and interaction. A preview is an entry representation; do not split the default experience into image and non-image sections.
 - This is an everyday human-oriented `ls` replacement. Keep ordinary text listings fast and shell behavior sensible; exact GNU/BSD scripting parity is not required.
 - Inline output is the default. Interactive browsing is explicit; automatic paging is opt-in.
-- Kitty and Sixel are both initial graphics targets. Prove both in the first rendering experiment and record actual compatibility rather than assuming parity.
+- Kitty graphics is the initial target; Sixel can come later if useful. Record actual terminal compatibility rather than inferring it from protocol support.
 - Bound preview work, allocations, queues, cache storage, and output. Browser previews follow the viewport. Preview failures never hide files.
 - Filenames and metadata remain terminal text. The fallback is a complete usable text listing.
 
 ## Development practice
 
-- The initial state is documentation only. Read the current roadmap and inspect the workspace before assuming any code, dependencies, Git history, tests, or terminal validation exist.
+- Read the current roadmap and inspect the workspace before assuming implementation or validation status. Docs are working suggestions, not fixed requirements.
 - Implementation language, libraries, numeric performance targets, and exact CLI details are provisional. Make routine implementation decisions from prototype evidence and record the reasons.
 - Keep inline output and browser output lifetimes distinct, including progressive rendering and image cleanup.
 - Verify graphics in real terminals. Report terminal/version, protocol, mode, and transport conditions; upstream library support is not lsa validation.
