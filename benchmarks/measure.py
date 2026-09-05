@@ -42,7 +42,7 @@ def main():
     result = {"date": date.today().isoformat(), "os": platform.platform(),
               "machine": platform.machine(), "binary_bytes": BIN.stat().st_size,
               "build": "cargo build --release; thin LTO; stripped",
-              "cache": "No thumbnail cache. OS cache warmed, not flushed.",
+              "cache": "Thumbnail cache disabled (default). OS cache warmed, not flushed.",
               "text": {}, "graphics_pty": {}, "default_pty": {}, "metadata_sink": {}}
     env = {**os.environ, "LC_ALL": "C"}
     for label, fixture in [("empty", empty), ("10000_files", text)]:

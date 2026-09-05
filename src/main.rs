@@ -1,3 +1,4 @@
+mod cache;
 mod cli;
 mod columns;
 mod display;
@@ -43,11 +44,23 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
         writeln!(out, "lsa {}", env!("CARGO_PKG_VERSION"))?;
         return Ok(0);
     }
+    if opts.clear_cache {
+        return match cache::clear(opts.cache_dir.as_deref().unwrap()) {
+            Ok(()) => {
+                writeln!(out, "Thumbnail cache cleared.")?;
+                Ok(0)
+            }
+            Err(error) => {
+                let _ = writeln!(io::stderr().lock(), "lsa: cache clear: {error}");
+                Ok(1)
+            }
+        };
+    }
     let term = terminal::Terminal::detect(opts);
     if opts.diagnose {
         writeln!(
             out,
-            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\npreview_attempts={}\nimage_output_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ncache=none\nterminal_validation=see docs/compatibility.md",
+            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\npreview_attempts={}\nimage_output_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ncache={}\nterminal_validation=see docs/compatibility.md",
             term.tty,
             term.name,
             term.version,
@@ -66,12 +79,28 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
             preview::OUTPUT_LIMIT,
             preview::INPUT_LIMIT,
             preview::PIXEL_LIMIT,
-            preview::ALLOC_LIMIT
+            preview::ALLOC_LIMIT,
+            if opts.cache_path().is_some() {
+                "opt-in (not accessed by diagnose)"
+            } else {
+                "off"
+            }
         )?;
+        if let Some(path) = opts.cache_path() {
+            writeln!(
+                out,
+                "cache_directory={}\ncache_namespace={}\ncache_slots={}\ncache_file_bytes_limit={}",
+                display::escape(path.as_os_str()),
+                cache::NAMESPACE,
+                cache::SLOTS,
+                cache::STORAGE_LIMIT
+            )?;
+        }
     }
     let mut failed = false;
     let mut printed = false;
     let mut budget = preview::Budget::new(opts.preview_limit);
+    let mut cache = cache::Cache::new(opts.cache_path());
     for path in &opts.paths {
         let listing = entry::list(path, opts);
         for error in listing.errors {
@@ -105,7 +134,7 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
         }
         match choice.layout {
             layout::Layout::Grid(geometry) => {
-                grid::write(out, &listing.entries, geometry, &mut budget)?
+                grid::write(out, &listing.entries, geometry, &mut budget, &mut cache)?
             }
             layout::Layout::Columns => columns::write(out, &listing.entries, term.cols)?,
             layout::Layout::Long | layout::Layout::Lines => {
@@ -122,6 +151,18 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
             budget.shown,
             budget.failed,
             budget.limited
+        );
+    }
+    if opts.cache_stats {
+        out.flush()?;
+        let stats = &cache.stats;
+        let _ = writeln!(
+            io::stderr().lock(),
+            "lsa: cache: {} hits, {} misses, {} writes, {} errors",
+            stats.hits,
+            stats.misses,
+            stats.writes,
+            stats.errors
         );
     }
     Ok(u8::from(failed))

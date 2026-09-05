@@ -1,4 +1,5 @@
 use crate::{
+    cache::Cache,
     display::wrap,
     entry::Entry,
     kitty,
@@ -66,6 +67,7 @@ pub fn write(
     entries: &[Entry],
     geometry: Geometry,
     budget: &mut Budget,
+    cache: &mut Cache<'_>,
 ) -> io::Result<()> {
     let Geometry {
         columns,
@@ -91,7 +93,7 @@ pub fn write(
             } else if !budget.begin(bytes) {
                 Some("[limit]")
             } else {
-                match preview::load(&entry.path, width, height) {
+                match preview::load(&entry.path, width, height, cache) {
                     Ok(thumb) => {
                         image = Some(thumb);
                         None

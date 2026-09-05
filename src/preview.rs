@@ -1,3 +1,4 @@
+use crate::cache::{Cache, Key};
 use image::{DynamicImage, ImageDecoder, ImageReader, Limits, Rgba, RgbaImage};
 use std::{
     fs::{self, OpenOptions},
@@ -43,13 +44,21 @@ fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
-pub fn load(path: &Path, width: u32, height: u32) -> Result<RgbaImage, Box<dyn std::error::Error>> {
+pub fn load(
+    path: &Path,
+    width: u32,
+    height: u32,
+    cache: &mut Cache<'_>,
+) -> Result<RgbaImage, Box<dyn std::error::Error>> {
+    if width == 0 || height == 0 || width > 320 || height > 240 {
+        return Err(invalid("invalid thumbnail size").into());
+    }
     // Precheck avoids opening known devices; O_NONBLOCK prevents a replacement
     // FIFO (including a symlink target) from hanging open. Verify the open fd too.
     if !fs::metadata(path)?.is_file() {
         return Err(invalid("not a regular file").into());
     }
-    let file = OpenOptions::new()
+    let mut file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NONBLOCK)
         .open(path)?;
@@ -57,12 +66,31 @@ pub fn load(path: &Path, width: u32, height: u32) -> Result<RgbaImage, Box<dyn s
     if !meta.is_file() || meta.len() > INPUT_LIMIT {
         return Err(invalid("not a bounded regular file").into());
     }
+    // Open/validate the source even on hits: unreadable, replaced, oversized, or
+    // special files must not acquire a preview merely because storage is warm.
+    let key = cache.enabled().then(|| Key::new(&meta, width, height));
+    if let Some(key) = &key
+        && let Some(image) = cache.get(key)
+    {
+        if *key != Key::new(&file.metadata()?, width, height) {
+            return Err(invalid("source changed during cache lookup").into());
+        }
+        return Ok(image);
+    }
     let mut bytes = Vec::with_capacity(meta.len() as usize);
-    file.take(INPUT_LIMIT + 1).read_to_end(&mut bytes)?;
+    file.by_ref()
+        .take(INPUT_LIMIT + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > INPUT_LIMIT {
         return Err(invalid("source exceeds input limit").into());
     }
-    decode(&bytes, width, height)
+    let image = decode(&bytes, width, height)?;
+    if let Some(key) = key
+        && key == Key::new(&file.metadata()?, width, height)
+    {
+        cache.put(&key, &image);
+    }
+    Ok(image)
 }
 
 fn decode(bytes: &[u8], width: u32, height: u32) -> Result<RgbaImage, Box<dyn std::error::Error>> {

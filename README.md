@@ -4,8 +4,8 @@ A fast, human-oriented directory listing with inline image thumbnails. An explic
 browser can follow. Kitty graphics first; Sixel is an optional future addition.
 
 **Status:** Rust CLI with compact text and automatic inline Kitty grids, both
-user-verified in Ghostty 1.3.1. Directories-first sorting and configurable long
-metadata are implemented and automated-tested.
+user-verified in Ghostty 1.3.1. Directories-first sorting, configurable long
+metadata, and an opt-in thumbnail cache are implemented and automated-tested.
 See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
 
 ## Direction
@@ -53,14 +53,17 @@ selection uses Ghostty/Kitty environment hints; unknown terminals/multiplexers
 fall back to text. Non-TTY output always stays text, including with an explicit
 override. `--diagnose PATH` reports the chosen layout, reason, candidate count,
 and estimated grid height without decoding images.
-No terminal queries, stdin reads, paging, color, configuration, or cache yet.
+Caching is opt-in via `--cache-dir=PATH`; `--no-cache` disables it and
+`--clear-cache` clears the selected cache. No terminal queries, stdin reads,
+paging, color, or configuration file yet.
 
 Deliberate `ls` differences: bytewise name order; `-a` and `-A` both omit `.`/`..`;
 directory/link/FIFO/socket suffixes; numeric uid/gid and local minute timestamps in
 long output; directory symlink operands remain links. Time/size sorts use names to
 break ties. Reverse applies to the full order unless directories-first is enabled,
 when it reverses within each group. Operands retain argument order.
-Exit codes: 0 success (including broken pipe), 1 listing/output error, 2 bad options.
+Exit codes: 0 success (including broken pipe), 1 listing/output/cache-clear error,
+2 bad options. Ordinary cache I/O failures do not fail a listing.
 
 ## Sorting and metadata
 
@@ -109,8 +112,9 @@ and a neutral checker under transparency. GIF uses the first frame on its logica
 canvas. Symlinks to regular images can preview while retaining their link marker.
 Names wrap at grapheme boundaries; missing previews keep their tiles and labels.
 
-One synchronous decode at a time; no worker queue or disk cache. Per invocation:
-64 preview attempts by default (including failures), hard maximum 256, and 8 MiB
+One synchronous decode at a time; no worker queue. Optional cache hits skip decoding.
+Per invocation: 64 preview attempts by default (including failures), hard maximum
+256, and 8 MiB
 of image commands. Per source: 32 MiB input, 16 million pixels, 16,384 pixels per
 axis, 64 MiB decoded output, and a **best-effort** 64 MiB decoder allocation limit.
 Thumbnails fit within 320×240 pixels. These are starting caps, not performance
@@ -124,16 +128,40 @@ chosen once per invocation; resize during output is not handled. Detailed resize
 theme, and retention trials are not yet recorded. Inline images use anonymous
 placements and are left in terminal history; no global image deletion. Terminal storage may evict old previews.
 
+## Optional thumbnail cache
+
+The experiment is **off by default** and has no implicit storage location. Try it
+inside this repository; run the first command twice to compare misses and hits:
+
+```sh
+./target/release/lsa --cache-dir=benchmarks/local/thumbnails --cache-stats img-test
+./target/release/lsa --cache-dir=benchmarks/local/thumbnails --no-cache img-test
+./target/release/lsa --cache-dir=benchmarks/local/thumbnails --clear-cache
+```
+
+The cache stores thumbnail pixels in 64 replaceable slots, with versioned source
+identity/timestamp/size/geometry keys, checksums, atomic writes, and less than
+20 MiB of file contents including staging. Collisions evict a slot; storage errors
+fall back to decoding. Text output, diagnostics, and exhausted preview budgets
+never open storage. Hits still consume preview and output budgets.
+
+On this Mac, the four user images took **4.60 ms warm versus 71.76 ms uncached**
+through a drained PTY, with identical output and ~2 MiB versus ~31 MiB application
+RSS. These measure application work and PTY transport, not visible terminal rendering.
+See [cache behavior and limits](docs/cache.md) and [measurements](benchmarks/README.md).
+
 ## Check
 
 ```sh
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
-cargo build --release --locked --examples
+cargo build --release --locked --examples --bins
 ./target/release/examples/fixtures  # creates img-test/generated once
 python3 tests/check_pty.py
 python3 tests/check_layout.py
+python3 tests/check_cache.py
 python3 benchmarks/measure.py
+python3 benchmarks/cache.py
 ```
 
 Tests keep scratch files under `target/`; fixtures and measurements are gitignored.
@@ -145,8 +173,8 @@ byte-level display tests. See [decisions](docs/decisions.md) and
 ## Later slices
 
 1. Tune layouts and metadata controls from daily use.
-2. Improve latency from actual directories: thumbnail cache and bounded parallel
-   work only where measurements justify them.
+2. Evaluate the opt-in cache from daily use before choosing a default policy;
+   add bounded parallel work only where measurements justify it.
 3. Add an alternate-screen browser with viewport-driven previews, stable
    selection, stale-job rejection, and session-only image cleanup. Share entries
    and decoding with inline output, not output lifetime assumptions.

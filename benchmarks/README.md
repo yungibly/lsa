@@ -1,5 +1,53 @@
 # Application measurements
 
+## Opt-in thumbnail cache: 2026-09-05 experiment
+
+Same Apple M4 / 16 GiB host, arm64 macOS 26.6.2, Rust 1.98.0 release build.
+[Saved results](cache.json). Graphics use 122×40 cells, 8×17 pixels per cell,
+15 fresh timed processes after three warmups, warmed OS cache, and a drained PTY
+without a renderer. RSS uses a separate `/usr/bin/time -l` process.
+
+| Four user images | Median elapsed | App peak RSS | Cache stats |
+| --- | ---: | ---: | --- |
+| Disabled | 71.76 ms | 31.36 MiB | No cache access |
+| Empty before each run | 71.82 ms | 31.41 MiB | 4 misses, 4 writes |
+| Warm | 4.60 ms | 2.03 MiB | 4 hits, no writes |
+| Metadata invalidated before each run | 72.34 ms | 31.39 MiB | 4 misses, 4 writes |
+
+Warm application/PTY elapsed time improves about **15.6×** in this fixture.
+Disabled, empty, and warm runs emit identical 320,685-byte output, including all
+four image payloads and the generated-folder entry. Four records store 239,696
+bytes. The invalidation fixture copies the original images, omits the generated
+folder, and advances source mtimes before each process; setup is excluded from
+timings. Original user images remain untouched. Stale keys occupied 44 slots /
+2.64 MB by the end of this invalidation run, within the fixed slot cap.
+
+The 40-link synthetic grid references one cheap source. Disabled/empty/warm runs
+take 27.16/17.17/17.43 ms; an initially empty cache produces one miss followed by
+39 hits in the same invocation. Warm uses ~2.09 MiB RSS and one 59,924-byte record,
+while output stays 3,205,136 bytes. The small empty/warm timing difference is noise
+at this resolution, not evidence that empty storage is faster.
+
+| 10,000 names to sink | Median elapsed | App peak RSS |
+| --- | ---: | ---: |
+| Saved pre-cache binary | 7.23 ms | 4.19 MiB |
+| Current, cache disabled | 7.32 ms | 4.22 MiB |
+| Current, cache configured but unused | 7.20 ms | 4.23 MiB |
+
+Text uses 21 fresh processes after three warmups. All variants use the same
+directory; configured text output is checked not to create storage. This fixture
+has a longer absolute path than the earlier text reports, which can affect retained
+entry memory; use the same-session comparison above for the cache change. Binary size is
+1,279,456 bytes, 17,152 more than the metadata build.
+
+Reproduce with `python3 benchmarks/cache.py --before target/lsa-before-cache`
+(omit `--before` without that saved binary). It writes only
+`benchmarks/local/cache.json` and ignored local fixtures/storage. Clear and mtime
+setup occur outside measured intervals; cache creation/insertion remains inside.
+No filesystem-cold, visible-terminal latency, terminal memory, default-cache, or
+large-working-set benefit is claimed. Keep caching opt-in while gathering those
+use cases; see [cache design](../docs/cache.md).
+
 ## Metadata controls: 2026-09-05 update
 
 Same host, 10,000 ordinary files, warmed OS cache, output to sink. Twenty-one fresh
@@ -80,8 +128,8 @@ to roughly 1 ms final polling delay. Synthetic fixture: 40 symlinks to one 320×
 PNG, each decoded again. User fixture: one 2924×1932 JPEG, one 190×200 GIF, two WebP
 files, plus the generated directory entry. User images are not committed.
 
-There is **no thumbnail cache**: every run decodes source images. The OS file cache
-is warmed and was not flushed; these are not filesystem-cold measurements. Terminal
+At this baseline there was **no thumbnail cache**: every run decoded source images.
+The OS file cache was warmed and not flushed; these are not filesystem-cold measurements. Terminal
 CPU/memory, time to visible names/first image, scrollback cost, real-terminal output
 latency, and browser idle cost are unmeasured. No GUI performance comparison.
 

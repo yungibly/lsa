@@ -32,6 +32,10 @@ pub struct Options {
     pub protocol: Protocol,
     pub preview_limit: usize,
     pub diagnose: bool,
+    pub cache_dir: Option<PathBuf>,
+    pub no_cache: bool,
+    pub clear_cache: bool,
+    pub cache_stats: bool,
     pub help: bool,
     pub version: bool,
 }
@@ -54,6 +58,10 @@ Usage: lsa [OPTIONS] [PATH ...]
   --protocol=auto|kitty|none
                          Auto recognizes direct Ghostty/Kitty sessions
   --preview-limit=N      Attempt at most N previews per invocation (0..256; default 64)
+  --cache-dir=PATH       Opt-in thumbnail cache under PATH (also accepts a space)
+  --no-cache             Disable cache reads/writes regardless of option order
+  --clear-cache          Clear this cache and exit; requires --cache-dir, no paths
+  --cache-stats          Report hits, misses, writes, and cache I/O errors to stderr
   --diagnose             Explain layout for each path without decoding images
   --help / --version     Show help / version
   --                     End options, including for paths beginning with -
@@ -63,8 +71,17 @@ one screen and the preview budget automatically use a grid. Non-TTY output
 is always one entry per line. -l, -1, --no-images, and protocol=none
 override --grid. Unknown terminals and multiplexers default to text.
 Preview errors retain entries and do not fail the listing. Exit: 0 success,
-1 listing/output errors, 2 invalid options. Closed pipes exit successfully.
+1 listing/output/cache-clear errors, 2 invalid options. Closed pipes exit successfully.
+Caching is off by default. Text, diagnostics, and exhausted preview budgets never
+open the cache. Cache I/O failures fall back to decoding. Storage uses 64 replaceable
+slots plus one staging file (under 20 MiB of file contents); collisions evict a slot.
 ";
+
+impl Options {
+    pub fn cache_path(&self) -> Option<&std::path::Path> {
+        self.cache_dir.as_deref().filter(|_| !self.no_cache)
+    }
+}
 
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String> {
     let mut opts = Options {
@@ -72,7 +89,8 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
         ..Options::default()
     };
     let mut operands = false;
-    for arg in args {
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
         if operands || arg == "-" || !arg.as_encoded_bytes().starts_with(b"-") {
             opts.paths.push(arg.into());
             continue;
@@ -89,6 +107,22 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--dirs-first" => opts.dirs_first = true,
             "--no-images" => opts.no_images = true,
             "--diagnose" => opts.diagnose = true,
+            "--no-cache" => opts.no_cache = true,
+            "--clear-cache" => opts.clear_cache = true,
+            "--cache-stats" => opts.cache_stats = true,
+            "--cache-dir" => {
+                let path = args
+                    .next()
+                    .filter(|p| !p.is_empty())
+                    .ok_or("--cache-dir requires a nonempty path")?;
+                opts.cache_dir = Some(path.into());
+            }
+            _ if s.starts_with("--cache-dir=") => {
+                if s[12..].is_empty() {
+                    return Err("--cache-dir requires a nonempty path".into());
+                }
+                opts.cache_dir = Some(s[12..].into());
+            }
             _ if s.starts_with("--fields=") => {
                 opts.fields = crate::metadata::parse_fields(&s[9..])?;
                 opts.long = true;
@@ -132,7 +166,12 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             }
         }
     }
-    if opts.paths.is_empty() {
+    if opts.clear_cache
+        && (opts.cache_dir.is_none() || opts.no_cache || opts.diagnose || !opts.paths.is_empty())
+    {
+        return Err("--clear-cache requires --cache-dir and cannot combine with paths, --no-cache, or --diagnose".into());
+    }
+    if opts.paths.is_empty() && !opts.clear_cache {
         opts.paths.push(".".into());
     }
     Ok(opts)
@@ -184,6 +223,29 @@ mod tests {
             "--fields=unknown",
         ] {
             assert!(args(&[a]).is_err(), "{a}");
+        }
+    }
+
+    #[test]
+    fn cache_controls_are_explicit_and_disable_wins() {
+        assert!(args(&[]).unwrap().cache_path().is_none());
+        for flags in [
+            vec!["--cache-dir=local", "--no-cache"],
+            vec!["--no-cache", "--cache-dir", "local"],
+        ] {
+            assert!(args(&flags).unwrap().cache_path().is_none());
+        }
+        let o = args(&["--clear-cache", "--cache-dir=local"]).unwrap();
+        assert!(o.clear_cache && o.paths.is_empty());
+        for flags in [
+            vec!["--cache-dir"],
+            vec!["--cache-dir="],
+            vec!["--clear-cache"],
+            vec!["--clear-cache", "--cache-dir=x", "--no-cache"],
+            vec!["--clear-cache", "--cache-dir=x", "--diagnose"],
+            vec!["--clear-cache", "--cache-dir=x", "some-path"],
+        ] {
+            assert!(args(&flags).is_err(), "{flags:?}");
         }
     }
 }

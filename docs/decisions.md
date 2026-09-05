@@ -8,11 +8,12 @@
 | Kitty only | User narrowed scope. No multi-backend trait or Sixel dependency before a second backend is useful. |
 | Small direct Kitty writer | Inline lifetime needs ordered rows, no alternate screen or event loop. Quiet RGBA chunks, anonymous placements, cursor control, and exact byte accounting are enough for this experiment. |
 | `image` with five format features | One decoder interface; no external image executables or native codec libraries in the tested build. Default features disabled. JPEG orientation and offset GIF first-frame behavior tested. |
-| `libc`, `unicode-width`, `unicode-segmentation`, `base64` | Window size, safe regular-file opens, Unix metadata/time; grapheme-aware text wrapping; protocol encoding. Five direct runtime crates total, including `image`. |
+| `libc`, `unicode-width`, `unicode-segmentation`, `base64`, `crc32fast` | Window size, safe regular-file opens, Unix metadata/time and cache locks; grapheme-aware text wrapping; protocol encoding; cache checksums. Six direct runtime crates total, including `image`. CRC32 was already a locked transitive dependency. |
 | Automatic layout, environment hints | After the explicit grid was user-verified, add conservative defaults: ≥4 candidates, ≥50%, full grid within screen minus two rows and configured preview caps. Text wins on pipes; explicit overrides win on TTYs. No queries, raw mode, or stdin consumption. |
 | Row-wise text columns | Preserve the grid reading order. Measure escaped labels with Unicode display widths, retain only widths, search at most 64 column counts, and omit trailing padding. A very long name can reduce the listing to one column. |
 | Shared grid geometry | Selection and rendering use the same tile size and wrapped-label height. Large directories fail the cheap minimum-height check before candidate classification or label formatting. Diagnose can deliberately calculate full estimates. |
-| Sequential decode, no cache | Keeps concurrency/queues at one/zero and exposes cold-thumbnail work. Source/geometry/allocation/output caps first; measure before adding workers/cache. No hard decode deadline. |
+| Sequential decode, optional cache | Decode concurrency/queues remain one/zero. The opt-in cache skips decoding on hits while preserving source checks and attempt/output budgets. No hard decode deadline. |
+| Fixed cache slots and raw RGBA | The four-image warm case falls from 71.76 to 4.60 ms. 64 replaceable slots bound storage without an index, scans, or writes on hits; collisions may lower hit rate. Versioned full keys and checksums reject stale/corrupt records. One staging file and nonblocking local locks bound concurrent writes; atomic rename publishes complete pixels. Details in [cache design](cache.md). |
 | Directories-first grouping | Sort actual directory entries ahead of others, then apply the selected sort/reverse within groups. Reuse existing entry kinds; no symlink-target or extra metadata lookup. |
 | Configurable long fields | `--fields` selects/reorders a bounded six-field vocabulary and implies long text. Filenames always remain. Numeric IDs keep account lookup out of the pipeline; no xattr/ACL expansion yet. |
 | Content-sized long columns | Two passes retain only six widths and format ASCII fields as needed. This adds ~3.3 ms to the 10,000-entry long case versus fixed widths, with similar RSS; the ordinary text path is unchanged. |
@@ -28,8 +29,8 @@ The [Kitty specification](https://sw.kovidgoyal.net/kitty/graphics-protocol/) de
 direct transmission, 4096-byte base64 chunks, quiet replies, and cursor control.
 Automated tests decode emitted payloads and model the cursor subset; the original
 inline renderer is user-verified in Ghostty 1.3.1. Default selection/columns
-are now user-verified as well. Directories-first and custom metadata controls have
-automated coverage. Anonymous inline images avoid ID reuse across
+are now user-verified as well. Directories-first, custom metadata controls, and
+cached/uncached output equivalence have automated coverage. Anonymous inline images avoid ID reuse across
 invocations. Browser image ownership will need a separate implementation.
 
 [`image::Limits`](https://docs.rs/image/0.25.10/image/struct.Limits.html) distinguishes
@@ -37,7 +38,8 @@ strict dimension checks from best-effort allocation limits. lsa additionally cap
 source bytes, total pixels, decoded output, attempts, thumbnail size, and emitted
 image bytes. In-process codec internals, allocator overhead, filesystem waits,
 entry-list memory, and terminal residency are not covered by a hard memory/time
-guarantee. No shrink-on-load, ICC workflow, animation, or cache claims yet.
+guarantee. No shrink-on-load, ICC workflow, or animation claims. Cache storage has
+its own file-content cap; it does not change decoder limits or terminal residency.
 
 `otool -L target/release/lsa` showed only macOS `libSystem` and `libiconv` runtime
 links. Dependencies and versions are pinned in `Cargo.lock`. Cargo downloads were

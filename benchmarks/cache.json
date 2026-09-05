@@ -1,0 +1,108 @@
+{
+  "date": "2026-09-05",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "binary_bytes": 1279456,
+  "build": "cargo build --release --locked; thin LTO; stripped",
+  "geometry": "122x40 cells, 8x17 pixels per cell",
+  "conditions": "OS cache warmed, not flushed; fresh processes. PTY drained without renderer. Clear/touch setup excluded from timings. RSS measured separately.",
+  "graphics_pty": {
+    "user_images_off": {
+      "median_ms": 71.76,
+      "min_ms": 71.197,
+      "runs": 15,
+      "output_bytes": 320685,
+      "images": 4,
+      "cache_stats": "lsa: cache: 0 hits, 0 misses, 0 writes, 0 errors",
+      "peak_rss_bytes": 32882688,
+      "stored_records": 0,
+      "stored_bytes": 0
+    },
+    "user_images_empty": {
+      "median_ms": 71.823,
+      "min_ms": 71.058,
+      "runs": 15,
+      "output_bytes": 320685,
+      "images": 4,
+      "cache_stats": "lsa: cache: 0 hits, 4 misses, 4 writes, 0 errors",
+      "peak_rss_bytes": 32931840,
+      "stored_records": 4,
+      "stored_bytes": 239696
+    },
+    "user_images_warm": {
+      "median_ms": 4.602,
+      "min_ms": 4.355,
+      "runs": 15,
+      "output_bytes": 320685,
+      "images": 4,
+      "cache_stats": "lsa: cache: 4 hits, 0 misses, 0 writes, 0 errors",
+      "peak_rss_bytes": 2129920,
+      "stored_records": 4,
+      "stored_bytes": 239696
+    },
+    "user_images_invalidated": {
+      "median_ms": 72.335,
+      "min_ms": 71.756,
+      "runs": 15,
+      "output_bytes": 320618,
+      "images": 4,
+      "cache_stats": "lsa: cache: 0 hits, 4 misses, 4 writes, 0 errors",
+      "peak_rss_bytes": 32915456,
+      "stored_records": 44,
+      "stored_bytes": 2636656
+    },
+    "40_shared_source_links_off": {
+      "median_ms": 27.158,
+      "min_ms": 26.242,
+      "runs": 15,
+      "output_bytes": 3205136,
+      "images": 40,
+      "cache_stats": "lsa: cache: 0 hits, 0 misses, 0 writes, 0 errors",
+      "peak_rss_bytes": 2686976,
+      "stored_records": 0,
+      "stored_bytes": 0
+    },
+    "40_shared_source_links_empty": {
+      "median_ms": 17.168,
+      "min_ms": 16.289,
+      "runs": 15,
+      "output_bytes": 3205136,
+      "images": 40,
+      "cache_stats": "lsa: cache: 39 hits, 1 misses, 1 writes, 0 errors",
+      "peak_rss_bytes": 2637824,
+      "stored_records": 1,
+      "stored_bytes": 59924
+    },
+    "40_shared_source_links_warm": {
+      "median_ms": 17.43,
+      "min_ms": 16.609,
+      "runs": 15,
+      "output_bytes": 3205136,
+      "images": 40,
+      "cache_stats": "lsa: cache: 40 hits, 0 misses, 0 writes, 0 errors",
+      "peak_rss_bytes": 2195456,
+      "stored_records": 1,
+      "stored_bytes": 59924
+    }
+  },
+  "text_sink": {
+    "before": {
+      "median_ms": 7.23,
+      "min_ms": 6.699,
+      "runs": 21,
+      "peak_rss_bytes": 4390912
+    },
+    "after_off": {
+      "median_ms": 7.319,
+      "min_ms": 7.045,
+      "runs": 21,
+      "peak_rss_bytes": 4423680
+    },
+    "after_configured": {
+      "median_ms": 7.197,
+      "min_ms": 6.796,
+      "runs": 21,
+      "peak_rss_bytes": 4440064
+    }
+  }
+}

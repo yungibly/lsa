@@ -7,7 +7,9 @@ Updated 2026-09-05. Working sequence; change it as evidence arrives.
 Rust CLI on arm64 macOS 26.6.2, built with Rust/Cargo 1.98.0. Inline Kitty output
 was user-verified in Ghostty 1.3.1 at 122×40 cells, 8×17 pixels per cell. Compact
 columns and automatic grid selection also received a clear user visual pass at
-`364976f`. Directories-first and custom long fields now have automated coverage.
+`364976f`. Directories-first, custom long fields, and an opt-in thumbnail cache
+now have automated coverage. Warm cache output matches uncached PTY bytes; cache
+visual behavior has not yet received a new user pass.
 Four user images and generated fixtures remain gitignored under `img-test/`.
 
 ## 1. Useful inline prototype — complete for the tested Ghostty commands
@@ -28,7 +30,7 @@ Four user images and generated fixtures remain gitignored under `img-test/`.
 Evidence: [compatibility report](docs/compatibility.md), original application
 [baseline](benchmarks/README.md), generated fixtures, and protocol/CLI tests.
 
-## 2. Daily inline use — default layouts user-verified; metadata controls implemented
+## 2. Daily inline use — layouts user-verified; metadata and opt-in cache implemented
 
 - [x] Compact row-wise text columns, Unicode display widths, complete filenames,
   narrow-window fallback, and stable ordering.
@@ -52,10 +54,34 @@ Evidence: [compatibility report](docs/compatibility.md), original application
 and automatic TTY output. [Metadata measurements](benchmarks/metadata.json) compare
 against `364976f`: plain 10,000-name output stays ~6.8 ms; dynamic long alignment
 costs ~24.9 ms versus ~21.6 ms for the previous fixed-width output, at ~5.3 MiB RSS.
-No cache, concurrency, or browser added in this chunk.
-Use daily feedback to decide whether those additions are justified. If caching
-comes next, require versioned keys, bounded storage, atomic writes, graceful
-corruption handling, and disable/clear controls.
+No cache, concurrency, or browser was added in the metadata chunk.
+
+### Opt-in thumbnail cache — implemented and measured
+
+- [x] `--cache-dir=PATH`, `--no-cache`, `--clear-cache`, and `--cache-stats`;
+  no default storage path. Text, diagnose, and exhausted preview budgets never
+  access storage. Preview attempts/output bytes still bound hits.
+- [x] Versioned device/inode/size/mtime/ctime/pixel-geometry keys, exact key checks,
+  RGBA records with checksums, and atomic writes. Validate source access/type/size
+  before lookup and recheck fd metadata before accepting hits or inserting.
+- [x] 64 replaceable slots, one staging file, and a permanent lock. Under 20 MiB
+  of file contents, no directory scans or hit writes. Nonblocking locks bound
+  concurrent storage work; cache failures fall back to decoding.
+- [x] Exercise metadata invalidation, replacement/retargeting, corruption,
+  geometry, read-only storage, concurrent writes, contention, eviction, stale
+  staging, safe clear, and existing preview limits.
+- [x] 30 unit + 8 CLI tests, 16 original PTY + 34 layout + 23 cache scenarios;
+  release build, fmt, and clippy pass. PTY payload equivalence is automated;
+  Ghostty cache checks remain unverified.
+- [x] [Saved cache measurements](benchmarks/cache.json): four user images at
+  122×40 take 71.76 ms uncached, 71.82 ms with empty cache, and 4.60 ms warm
+  (~15.6× faster), with 31.36 → 2.03 MiB application RSS and identical output.
+  Invalidation returns to 72.34 ms. OS cache warm; no terminal renderer measured.
+  Plain 10,000-name output stays ~7.2–7.3 ms in a same-session before/after check.
+
+The experiment remains off by default. [Cache design and limits](docs/cache.md)
+record the direct-mapping collision tradeoff, local locking assumptions, storage
+accounting, and recovery behavior. No worker concurrency or browser was added.
 
 ## 3. Explicit browser — pending
 
@@ -84,9 +110,10 @@ SVG, TIFF, AVIF, HEIC, Sixel, or other protocols only from concrete demand.
 
 ## Next task
 
-Build a bounded thumbnail-cache experiment against the existing cold-decode
-baseline (~71 ms for the four user images). Keep the default text path untouched;
-measure warm hits and invalidation before enabling caching by default. Use
-versioned keys, atomic writes, a storage cap, corruption recovery, and disable/clear
-controls. Keep experiment data inside the repo while developing. Detailed resize,
-theme, SSH/multiplexer behavior and browsing remain separate follow-ups.
+Evaluate cache usefulness beyond the four-image working set: measure hit rate and
+latency on independent sources near/above the 64-slot capacity, plus alternating
+thumbnail geometry, before changing its replacement or default policy. Gather the
+user's Ghostty empty/warm/disabled comparison and daily-use feedback using the
+[compatibility checklist](docs/compatibility.md). Keep caching opt-in and all
+experiment data inside the repo. Detailed resize/theme, SSH/multiplexer behavior,
+worker concurrency, and browsing remain separate follow-ups.

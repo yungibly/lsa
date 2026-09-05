@@ -2,7 +2,8 @@
 
 2026-09-05. **Original inline commands are user-verified in Ghostty 1.3.1.**
 Automatic layouts and compact columns also received a clear user visual pass at
-`364976f`. New directories-first and metadata controls are automated-tested.
+`364976f`. New directories-first, metadata controls, and cache behavior are
+automated-tested; their visual verification remains separate.
 
 | Environment | Protocol / mode / transport | Evidence | Status |
 | --- | --- | --- | --- |
@@ -12,6 +13,7 @@ Automatic layouts and compact columns also received a clear user visual pass at
 | Ghostty 1.3.1 stable, macOS/CoreText/Metal build; 122×40 cells, 8×17 pixels/cell | Kitty inline; user session, transport not separately stated | User reported all original checklist commands worked as expected at `f079a23` | User-verified commands |
 | Ghostty 1.3.1, same reported geometry | Automatic grid and row-wise text columns | User reported all new commands look good; visual testing is a clear pass at `364976f` | User-verified commands |
 | Local PTY, 122×40 / 8×17 and boundary cases | Layouts, directories-first, custom long fields | 34 layout scenarios plus the original 16 protocol scenarios | Automated pass |
+| Local PTY, 80×24 and 122×40 / 8×17 benchmark geometry | Opt-in cached Kitty inline output | 23 cache PTY/CLI scenarios; empty/warm/disabled output matches exactly; concurrency, failures, and budgets checked | Automated pass; no new Ghostty visual pass |
 | Kitty terminal; other terminals; SSH | Kitty inline | No terminal trials | Unverified |
 | tmux / screen / Zellij | Text in auto mode | Environment fallback tested for tmux; no passthrough implementation | Graphics unverified |
 | Any terminal | Interactive browser | Not implemented | — |
@@ -77,6 +79,20 @@ New metadata/grouping examples:
 These have automated text/order checks; no new visual pass is claimed yet.
 Text reads across each row, like the grid. Verify column alignment, complete names,
 and ordering. Automatic grids should look like `--grid` for the same directory.
+
+Cache comparison, still awaiting a user visual check:
+
+```sh
+./target/release/lsa --cache-dir=benchmarks/local/thumbnails --clear-cache
+./target/release/lsa --cache-dir=benchmarks/local/thumbnails --cache-stats img-test
+./target/release/lsa --cache-dir=benchmarks/local/thumbnails --cache-stats img-test
+./target/release/lsa --cache-dir=benchmarks/local/thumbnails --no-cache img-test
+```
+
+Compare images, orientation/checker, filenames, order, and prompt placement. At
+the recorded 122×40 geometry, these select the same automatic grid. Warm runs
+should look identical and report hits; the cache holds pixels only and uses the
+existing anonymous placement/history behavior. A slot collision may cause misses.
 
 Record the Ghostty version from About or `ghostty --version` if available, OS,
 `--diagnose` output, and whether local, SSH, or behind a multiplexer. If detection
