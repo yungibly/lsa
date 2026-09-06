@@ -3,3 +3,4 @@
 /img-test/
 /benchmarks/local/
 __pycache__/
+.env

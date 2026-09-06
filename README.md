@@ -1,8 +1,20 @@
 # lsa
 
+**ls, augmented.**
+
 An everyday `ls` replacement with colors, icons, readable details, and inline image
 thumbnails. Print the directory, get the prompt back, keep the output in scrollback.
 Rust, Unix, one binary. No pager, browser, configuration file, or background process.
+
+Install the latest release from the Homebrew tap:
+
+```sh
+brew install yungibly/tap/lsa
+```
+
+Or download a checksummed binary from [GitHub Releases](https://github.com/yungibly/lsa/releases).
+Packages cover Apple Silicon/Intel macOS 14+ and ARM64/x86-64 Linux.
+See [installation and releases](docs/install.md) for details. To build locally:
 
 ```sh
 export CARGO_HOME="$PWD/.cargo-home"
@@ -133,6 +145,7 @@ python3 tests/check_thumbnails.py
 python3 benchmarks/inline.py
 ./target/release/examples/preview_sheet  # offline artwork QA PNG under target/
 python3 scripts/package.py
+python3 -m unittest discover -s tests -p 'test_release.py' -v
 ```
 
 Keep Cargo storage and test artifacts in this repo. The user handles real-terminal

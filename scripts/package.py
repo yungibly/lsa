@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Build and smoke-test a host release archive. All artifacts stay under target/."""
+"""Build and smoke-test a native release archive. All artifacts stay under target/."""
+import argparse
 import hashlib
 import os
 from pathlib import Path
@@ -13,31 +14,35 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--target", help="Rust target; its binary must run on this machine")
+    args = parser.parse_args()
     env = os.environ.copy()
     env.update(CARGO_HOME=str(ROOT / ".cargo-home"), CARGO_TARGET_DIR=str(ROOT / "target"))
     version = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
     rust = subprocess.check_output(["rustc", "-vV"], text=True, cwd=ROOT, env=env)
     host = next(line.removeprefix("host: ") for line in rust.splitlines() if line.startswith("host: "))
-    subprocess.run(["cargo", "build", "--release", "--locked", "--bin", "lsa", "--target", host],
+    target = args.target or host
+    subprocess.run(["cargo", "build", "--release", "--locked", "--bin", "lsa", "--target", target],
                    cwd=ROOT, env=env, check=True)
-    binary = ROOT / "target" / host / "release/lsa"
+    binary = ROOT / "target" / target / "release/lsa"
     output = ROOT / "target/packages"
     output.mkdir(parents=True, exist_ok=True)
-    name = f"lsa-{version}-{host}"
+    name = f"lsa-{version}-{target}"
     with tempfile.TemporaryDirectory(dir=output, prefix="stage-") as temp:
         stage = Path(temp) / name
         (stage / "bin").mkdir(parents=True)
         shutil.copy2(binary, stage / "bin/lsa")
         (stage / "README.txt").write_text(
-            f"lsa {version} ({host})\n\n"
+            f"lsa {version} ({target})\n\n"
             "Run bin/lsa [PATH ...]. Colored, icon-decorated listings with bounded\n"
             "inline thumbnails. Output stays in scrollback and returns to the shell.\n"
             "Use bin/lsa --help for options and controls (also in HELP.txt).\n\n"
             "To install, copy bin/lsa to a directory on your PATH. No data files,\n"
             "image programs, cache directory, or background service are required.\n"
-            "This development archive targets only the host named above.\n"
+            "This archive targets the operating system and architecture named above.\n"
         )
-        (stage / "BUILD.txt").write_text(rust)
+        (stage / "BUILD.txt").write_text(f"package target: {target}\n{rust}")
         (stage / "HELP.txt").write_bytes(subprocess.check_output([str(binary), "--help"], cwd=ROOT))
         archive = output / f"{name}.tar.gz"
         with tarfile.open(archive, "w:gz") as bundle:

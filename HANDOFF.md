@@ -1,8 +1,22 @@
 # Session handoff
 
-2026-09-06. Recheck Git state. Started clean at `4a5269b`; the user has authorized
-commits. No push, publication, installation or personal-shell changes requested.
+2026-09-06. Recheck Git state. Distribution work started at `8f71819` with the user's
+`.gitignore` addition for `.env`. The user authorized GitHub builds, release and
+Homebrew tap setup, including pushing the needed changes and publication.
 Work/access stays in this repository; the user handles Ghostty visual checks.
+
+## Distribution work in progress
+
+The chosen name is `lsa`, tagline `ls, augmented`. The remote is
+`https://github.com/yungibly/lsa.git`; the user made it public during this session.
+The normal GitHub CLI session has write access. `.env` contains BREWTAP_TOKEN for
+`yungibly/homebrew-tap`; it must stay ignored and its value must never be printed.
+
+New CI/release workflows run native builds/tests for both macOS architectures and
+Linux musl architectures, plus Rust 1.88. The release job renders a checksummed
+binary formula and gates tap publication on Homebrew installation checks. See
+`docs/install.md` for release and recovery instructions. First hosted verification
+and the first tap publication are pending; replace this snapshot after completion.
 
 ## Latest direction
 

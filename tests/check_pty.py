@@ -15,7 +15,7 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-BIN = ROOT / "target/release/lsa"
+BIN = Path(os.environ.get("LSA_TEST_BINARY", ROOT / "target/release/lsa"))
 APC = re.compile(rb"\x1b_G([^;]*);([^\x1b]*)\x1b\\")
 CSI = re.compile(rb"\x1b\[[0-9]*[ABG]")
 
@@ -44,7 +44,8 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
         while True:
             if time.perf_counter() - start > 15:
                 raise TimeoutError("lsa PTY output took more than 15 seconds")
-            if select.select([master], [], [], 0.001)[0]:
+            readable = select.select([master], [], [], 0.001)[0]
+            if readable:
                 try:
                     chunk = os.read(master, 65536)
                 except OSError as error:
@@ -54,12 +55,13 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
                 if not chunk:
                     break
                 data.extend(chunk)
-            if child.poll() is not None and slave is not None:
+            if child.poll() is not None and slave is not None and not readable:
                 try: after = termios.tcgetattr(slave)
                 except termios.error as error:
                     if not tty_input or error.args[0] != errno.ENOTTY: raise
-                # Let the master report EOF/EIO only after every queued byte has
-                # been drained. Do not race a final write against child.poll().
+                # macOS can discard a queued tail when the last slave closes.
+                # Keep our slave open until the exited child's master has no
+                # readable bytes, then close it to obtain EOF/EIO.
                 os.close(slave)
                 slave = None
         code = child.wait(timeout=2)

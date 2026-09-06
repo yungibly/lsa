@@ -3,7 +3,20 @@
 Updated 2026-09-06. Print into scrollback, return to the shell, keep one mixed
 ordering and complete names. No pager or file browser.
 
-## Current change — thumbnail presentation
+## Current change — GitHub builds and Homebrew distribution
+
+The name remains **lsa — ls, augmented**. CI and tagged-release workflows now
+target native Apple Silicon/Intel macOS and ARM64/x86-64 Linux. Every target runs
+Rust tests, headless terminal checks and extracted-package smoke tests. Linux
+packages use musl; a separate job checks the declared Rust 1.88 minimum.
+
+Stable version tags must match Cargo.toml. The release job verifies checksums and
+generates the binary Homebrew formula; installation tests on both macOS
+architectures and x86-64 Linux gate the automatic tap commit. The tap token is an
+Actions secret, never a tracked file. The first live workflow/release verification
+is in progress; final hosted outcomes will be recorded here after execution.
+
+## Previous change — thumbnail presentation
 
 The user passed the inline-only direction and supplied a Ghostty screenshot showing
 oversized image tiles, nearly empty folder tiles and redundant/unhelpful filename
@@ -33,9 +46,10 @@ long-view miniatures still incur source decoding. See
 [compatibility](docs/compatibility.md), [benchmarks](benchmarks/README.md) and
 [handoff](HANDOFF.md). The user handles Ghostty visual verification.
 
-**Next:** check the smaller gallery and long-view miniatures in Ghostty, particularly
+**Next:** finish the first hosted builds, release and Homebrew tap verification.
+Then check the smaller gallery and long-view miniatures in Ghostty, particularly
 folder/error recognizability, filenames wrapping, scrollback and long-row alignment.
-Then verify Linux packages and the declared Rust 1.88 minimum in suitable environments.
+The new CI jobs will establish Linux package and Rust 1.88 verification status.
 Earlier terminal passes do not verify this new placement/presentation.
 
 Keep cache policy opt-in. No recursive trees, Git scans, file operations, services or
