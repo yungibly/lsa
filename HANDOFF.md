@@ -5,18 +5,41 @@
 Homebrew tap setup, including pushing the needed changes and publication.
 Work/access stays in this repository; the user handles Ghostty visual checks.
 
-## Distribution work in progress
+## Distribution verified
 
 The chosen name is `lsa`, tagline `ls, augmented`. The remote is
 `https://github.com/yungibly/lsa.git`; the user made it public during this session.
 The normal GitHub CLI session has write access. `.env` contains BREWTAP_TOKEN for
 `yungibly/homebrew-tap`; it must stay ignored and its value must never be printed.
 
-New CI/release workflows run native builds/tests for both macOS architectures and
-Linux musl architectures, plus Rust 1.88. The release job renders a checksummed
-binary formula and gates tap publication on Homebrew installation checks. See
-`docs/install.md` for release and recovery instructions. First hosted verification
-and the first tap publication are pending; replace this snapshot after completion.
+Release `v0.1.0` tags `ded6e1c`, following setup commit `33bf7ee`. Both commits are
+pushed. BREWTAP_TOKEN is configured as a repository Actions secret. Native CI and
+the full release pipeline passed:
+
+- CI: https://github.com/yungibly/lsa/actions/runs/34011569797
+- Release: https://github.com/yungibly/lsa/actions/runs/34011671355
+- Public binaries: https://github.com/yungibly/lsa/releases/tag/v0.1.0
+- Formula: https://github.com/yungibly/homebrew-tap/blob/main/Formula/lsa.rb
+
+Four architectures passed native builds, strict lint, all Rust and 108 headless
+terminal scenarios, and extracted-package smoke tests. CI uses Rust 1.98.1; Rust
+1.88.0 passed separately on GNU x86-64 Linux. Homebrew install/test passed on
+arm64 macOS 14.8.9, Intel macOS 15.7.9 and x86-64 Ubuntu 24.04.4 before the automatic
+tap commit. ARM64 Linux binaries passed native tests on Ubuntu 24.04.4; Homebrew
+installation there is not yet tested. The published Apple Silicon archive passed
+checksum, extraction, version and mixed-listing checks on this machine as well.
+
+The first Linux lint run exposed libc type differences; metadata keeps portable
+mode casts and infers localtime_r's time type. Concurrent local cache tests also
+exposed a PTY capture tail loss: keep the slave open until buffered master bytes
+are drained after child exit. Ten repeated stress runs (160 concurrent captures)
+passed after the fix. No listing/preview behavior was intentionally changed.
+
+Install with `brew install yungibly/tap/lsa`. Future matching stable version tags
+publish checksummed binaries and update the formula automatically. See
+`docs/install.md` for release/recovery instructions. Local temporary tooling,
+logs, tap README staging, and the downloaded package stay under ignored
+`target/automation/`; no local Homebrew installation or shell changes were made.
 
 ## Latest direction
 
@@ -57,5 +80,6 @@ and paired measurements are recorded in compatibility/benchmarks.
 Use README's test/build commands. Unix socket CLI fixtures require normal sandbox
 escalation. The target remains Ghostty; current art/layout needs a user terminal pass.
 The latest screenshot does not resupply version/geometry/transport. Historical
-context: Ghostty 1.3.1, arm64 macOS 26.6.2, 122×40 cells, 8×17 pixels. Linux and the
-Rust 1.88 minimum remain unverified. No terminal queries, input handling or paging.
+context: Ghostty 1.3.1, arm64 macOS 26.6.2, 122×40 cells, 8×17 pixels. Linux packages
+and Rust 1.88 are now verified by the hosted jobs above. No terminal queries, input
+handling or paging.

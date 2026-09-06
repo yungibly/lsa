@@ -13,8 +13,12 @@ packages use musl; a separate job checks the declared Rust 1.88 minimum.
 Stable version tags must match Cargo.toml. The release job verifies checksums and
 generates the binary Homebrew formula; installation tests on both macOS
 architectures and x86-64 Linux gate the automatic tap commit. The tap token is an
-Actions secret, never a tracked file. The first live workflow/release verification
-is in progress; final hosted outcomes will be recorded here after execution.
+Actions secret, never a tracked file. [v0.1.0](https://github.com/yungibly/lsa/releases/tag/v0.1.0)
+is published and the tap installs it with `brew install yungibly/tap/lsa`.
+The complete [release workflow](https://github.com/yungibly/lsa/actions/runs/34011671355)
+passed, including every native build, Rust 1.88, Homebrew installations on both
+macOS architectures and x86-64 Linux, and the automatic tap update. ARM64 Linux
+has native package tests; a Homebrew installation check there remains future work.
 
 ## Previous change — thumbnail presentation
 
@@ -39,17 +43,18 @@ icons. This change addresses that feedback:
 
 ## Verification and next task
 
-38 unit and 12 CLI tests, 108 PTY scenarios, strict clippy, formatting, release build
-and extracted-package smoke checks pass. Paired measurements show 52.2% fewer
+38 unit tests, 12 macOS / 13 Linux CLI tests, one artwork-example test, three
+release-tooling tests, 108 PTY scenarios, strict clippy, formatting, native release
+builds and extracted-package smoke checks pass. The published Apple Silicon
+archive also passed checksum and executable checks locally. Paired measurements show 52.2% fewer
 graphics bytes for the mixed grid and unchanged plain pipe output/cost; uncached
 long-view miniatures still incur source decoding. See
 [compatibility](docs/compatibility.md), [benchmarks](benchmarks/README.md) and
 [handoff](HANDOFF.md). The user handles Ghostty visual verification.
 
-**Next:** finish the first hosted builds, release and Homebrew tap verification.
-Then check the smaller gallery and long-view miniatures in Ghostty, particularly
+**Next:** check the installed smaller gallery and long-view miniatures in Ghostty, particularly
 folder/error recognizability, filenames wrapping, scrollback and long-row alignment.
-The new CI jobs will establish Linux package and Rust 1.88 verification status.
+Linux package and Rust 1.88 verification is now covered by the passing CI jobs.
 Earlier terminal passes do not verify this new placement/presentation.
 
 Keep cache policy opt-in. No recursive trees, Git scans, file operations, services or
