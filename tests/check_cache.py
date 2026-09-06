@@ -16,7 +16,7 @@ NAMESPACE = "lsa-thumbnails-v1"
 
 
 def run(args, **kwargs):
-    code, data, err, _ = capture(["--cache-stats", *args], **kwargs)
+    code, data, err, _ = capture(["--cache-stats", "--preview-limit=64", *args], **kwargs)
     assert code == 0, err
     match = STATS.search(err)
     assert match, err
@@ -79,13 +79,13 @@ def main():
 
         # Budgets count cached previews too, and remain shared across operands.
         data, stats, err = run([flag, "--grid", "--preview-limit=2", many, many])
-        assert len(images(data)) == 2 and stats == (2, 0, 0, 0) and b"78 limited" in err
+        assert len(images(data)) == 2 and stats == (2, 0, 0, 0) and not err
         cases += 1
         large_args = [flag, "--grid", many]
         run(large_args, pixels=(1280, 1152))
         data, stats, err = run(large_args, pixels=(1280, 1152))
         assert 0 < stats[0] == len(images(data)) < 40 and stats[1:] == (0, 0, 0)
-        assert b"limited" in err and sum(len(m[0]) for m in APC.finditer(data)) <= 8 * 1024 * 1024
+        assert not err and sum(len(m[0]) for m in APC.finditer(data)) <= 8 * 1024 * 1024
         cases += 1
         # Cache corruption cannot alter either pixels or mixed-entry text.
         expected, _, expected_err = run(["--grid", fixture])
@@ -127,12 +127,12 @@ def main():
         link = root / "link.png"
         link.symlink_to(source)
         data, stats, err = run([flag, "--grid", link])
-        assert not images(data) and stats == (0, 0, 0, 0) and b"1 unavailable" in err
+        assert not images(data) and stats == (0, 0, 0, 0) and not err
         source.unlink()
         with source.open("wb") as output:
             output.truncate(32 * 1024 * 1024 + 1)
         data, stats, err = run([flag, "--grid", source])
-        assert not images(data) and stats == (0, 0, 0, 0) and b"1 unavailable" in err
+        assert not images(data) and stats == (0, 0, 0, 0) and not err
         cases += 1
         # A broken cache path falls back without emitting preview failures.
         bad = root / "bad"

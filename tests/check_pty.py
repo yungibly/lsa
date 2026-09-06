@@ -20,18 +20,24 @@ APC = re.compile(rb"\x1b_G([^;]*);([^\x1b]*)\x1b\\")
 CSI = re.compile(rb"\x1b\[[0-9]*[ABG]")
 
 
-def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, prefix=()):
+def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, prefix=(), decorated=False, tty_input=False):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, *pixels))
     before = termios.tcgetattr(slave)
     env = os.environ.copy()
-    for name in ["TMUX", "STY", "ZELLIJ"]:
+    for name in ["TMUX", "STY", "ZELLIJ", "LS_COLORS", "NO_COLOR"]:
         env.pop(name, None)
     env.update(TERM="xterm-ghostty", TERM_PROGRAM="ghostty")
     env.update(environment or {})
     start = time.perf_counter()
-    child = subprocess.Popen([*prefix, str(BIN), *map(str, args)], cwd=ROOT, env=env,
-                             stdin=subprocess.DEVNULL, stdout=slave, stderr=subprocess.PIPE)
+    def foreground():
+        os.setsid()
+        fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+    flags = [] if decorated else ["--color=never", "--icons=never", "-F"]
+    child = subprocess.Popen([*prefix, str(BIN), *flags, *map(str, args)], cwd=ROOT, env=env,
+                             stdin=slave if tty_input else subprocess.DEVNULL,
+                             stdout=slave, stderr=subprocess.PIPE,
+                             preexec_fn=foreground if tty_input else None)
     data = bytearray()
     try:
         while True:
@@ -51,7 +57,13 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
                 break
         code = child.wait(timeout=2)
         err = child.stderr.read()
-        assert before == termios.tcgetattr(slave), "terminal modes changed"
+        try:
+            assert before == termios.tcgetattr(slave), "terminal modes changed"
+        except termios.error as error:
+            # macOS revokes the controlling PTY when its session leader exits.
+            # Non-controlling trials still verify unchanged termios exactly.
+            if not tty_input or error.args[0] != errno.ENOTTY:
+                raise
         return code, bytes(data), err, time.perf_counter() - start
     finally:
         if child.poll() is None:
@@ -132,21 +144,21 @@ def main():
     assert many.is_dir(), "Run target/release/examples/fixtures first"
     runs = 0
     for cols, rows in [(80, 24), (80, 8), (12, 8), (200, 50)]:
-        code, data, err, _ = capture(["--grid", many], cols=cols, rows=rows, pixels=(cols * 8, rows * 16))
+        code, data, err, _ = capture(["--grid", "--preview-limit=64", many], cols=cols, rows=rows, pixels=(cols * 8, rows * 16))
         assert code == 0 and not err, err
         assert len(images(data)) == 40
         for start in [0, rows - 1]:
             assert check_cursor(data, cols, rows, start) == 40
         runs += 1
     code, data, err, _ = capture(["--grid", "--preview-limit=2", many])
-    assert code == 0 and len(images(data)) == 2 and b"38 limited" in err
+    assert code == 0 and len(images(data)) == 2 and not err
     text = CSI.sub(b"", APC.sub(b"", data))
     for i in range(40):
         assert f"image-{i:02}.png@".encode() in text
     runs += 1
     # At 16x48 cells, 40 full tiles exceed the 8 MiB image-output cap.
-    code, data, err, _ = capture(["--grid", many], pixels=(1280, 1152))
-    assert code == 0 and 0 < len(images(data)) < 40 and b"limited" in err
+    code, data, err, _ = capture(["--grid", "--preview-limit=64", many], pixels=(1280, 1152))
+    assert code == 0 and 0 < len(images(data)) < 40 and not err
     assert sum(len(m[0]) for m in APC.finditer(data)) <= 8 * 1024 * 1024
     runs += 1
     for args, env, cols, rows in [
@@ -159,7 +171,7 @@ def main():
         assert code == 0 and b"\x1b" not in data and not err
         runs += 1
     code, data, err, _ = capture(["--grid", ROOT / "img-test/generated"])
-    assert code == 0 and len(images(data)) == 9 and b"2 unavailable" in err, err
+    assert code == 0 and len(images(data)) == 9 and not err, err
     runs += 1
     with tempfile.TemporaryDirectory(dir=ROOT / "target", prefix="pty-inputs-") as temp:
         temp = Path(temp)
@@ -169,7 +181,7 @@ def main():
         os.mkfifo(temp / "fifo.png")
         (temp / "linked-fifo.png").symlink_to("fifo.png")
         code, data, err, _ = capture(["--grid", temp])
-        assert code == 0 and not images(data) and b"2 unavailable" in err, err
+        assert code == 0 and not images(data) and not err, err
         assert b"fifo.png|" in data and b"oversized.png" in data
         runs += 1
     print(f"{runs} PTY checks passed; frames, budgets, fallback, cursor bounds, modes, and special files. Visual rendering unverified.")

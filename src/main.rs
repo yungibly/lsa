@@ -7,11 +7,9 @@ mod grid;
 mod kitty;
 mod layout;
 mod metadata;
-mod pager;
-mod pager_graphics;
-mod pager_previews;
-mod pager_terminal;
 mod preview;
+mod sort;
+mod style;
 mod terminal;
 
 use std::io::{self, BufWriter, Write};
@@ -39,7 +37,7 @@ fn main() -> std::process::ExitCode {
     }
 }
 
-fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
+fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     if opts.help {
         write!(out, "{}", cli::HELP)?;
         return Ok(0);
@@ -47,9 +45,6 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
     if opts.version {
         writeln!(out, "lsa {}", env!("CARGO_PKG_VERSION"))?;
         return Ok(0);
-    }
-    if opts.page {
-        return pager::run(opts, out);
     }
     if opts.clear_cache {
         return match cache::clear(opts.cache_dir.as_deref().unwrap()) {
@@ -64,6 +59,7 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
         };
     }
     let term = terminal::Terminal::detect(opts);
+    let style = style::Style::detect(opts, &term);
     if opts.diagnose {
         writeln!(
             out,
@@ -108,57 +104,89 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
     let mut printed = false;
     let mut budget = preview::Budget::new(opts.preview_limit);
     let mut cache = cache::Cache::new(opts.cache_path());
+    let mut operands = Vec::new();
+    let mut render = |out: &mut W,
+                      entries: &[entry::Entry],
+                      path: &std::ffi::OsStr|
+     -> io::Result<()> {
+        let choice = layout::choose(entries, &term, opts);
+        if opts.diagnose {
+            return writeln!(
+                out,
+                "\npath={}\nentries={}\npreview_candidates={}\nlayout={}\nlayout_reason={}\ncolor={}\nicons={:?}",
+                display::escape(path),
+                entries.len(),
+                entries.iter().filter(|e| e.candidate()).count(),
+                choice.layout.name(),
+                choice.reason,
+                style.color,
+                style.icons
+            );
+        }
+        match choice.layout {
+            layout::Layout::Grid(geometry) => grid::write(
+                out,
+                entries,
+                geometry,
+                &term,
+                &style,
+                &mut budget,
+                &mut cache,
+            ),
+            layout::Layout::Columns => {
+                columns::Plan::new(entries, term.cols, &style).write(out, entries, &style)
+            }
+            layout::Layout::Long | layout::Layout::Lines => {
+                entry::write_text(out, entries, opts, &style)
+            }
+        }
+    };
     for path in &opts.paths {
-        let listing = entry::list(path, opts);
-        for error in listing.errors {
+        let listing = entry::list(path, opts, !opts.diagnose && style.needs_mode());
+        for error in &listing.errors {
             let _ = writeln!(io::stderr().lock(), "lsa: {error}");
             failed = true;
         }
         if !listing.valid {
             continue;
         }
-        let choice = layout::choose(&listing.entries, &term, opts);
-        if opts.diagnose {
-            writeln!(
-                out,
-                "\npath={}\nentries={}\npreview_candidates={}\nlayout={}\nlayout_reason={}\nestimated_grid_rows={}",
-                display::escape(path.as_os_str()),
-                listing.entries.len(),
-                listing.entries.iter().filter(|e| e.candidate()).count(),
-                choice.layout.name(),
-                choice.reason,
-                grid::Geometry::new(&term)
-                    .map(|g| g.output_rows(&listing.entries).to_string())
-                    .unwrap_or_else(|| "unavailable".into())
-            )?;
+        if !listing.directory {
+            operands.extend(listing.entries);
             continue;
         }
-        if opts.paths.len() > 1 && listing.directory {
+        if !operands.is_empty() {
+            render(
+                out,
+                &operands,
+                if operands.len() == 1 {
+                    &operands[0].name
+                } else {
+                    std::ffi::OsStr::new("(file operands)")
+                },
+            )?;
+            operands.clear();
+            printed = true;
+        }
+        if opts.paths.len() > 1 && !opts.diagnose {
             if printed {
                 writeln!(out)?;
             }
-            writeln!(out, "{}:", display::escape(path.as_os_str()))?;
+            style.paint(out, "1;34", &display::escape(path.as_os_str()))?;
+            writeln!(out, ":")?;
         }
-        match choice.layout {
-            layout::Layout::Grid(geometry) => {
-                grid::write(out, &listing.entries, geometry, &mut budget, &mut cache)?
-            }
-            layout::Layout::Columns => columns::write(out, &listing.entries, term.cols)?,
-            layout::Layout::Long | layout::Layout::Lines => {
-                entry::write_text(out, &listing.entries, opts)?
-            }
-        }
+        render(out, &listing.entries, path.as_os_str())?;
         printed = true;
     }
-    if budget.failed > 0 || budget.limited > 0 {
-        out.flush()?;
-        let _ = writeln!(
-            io::stderr().lock(),
-            "lsa: previews: {} shown, {} unavailable, {} limited; all entries listed",
-            budget.shown,
-            budget.failed,
-            budget.limited
-        );
+    if !operands.is_empty() {
+        render(
+            out,
+            &operands,
+            if operands.len() == 1 {
+                &operands[0].name
+            } else {
+                std::ffi::OsStr::new("(file operands)")
+            },
+        )?;
     }
     if opts.cache_stats {
         out.flush()?;

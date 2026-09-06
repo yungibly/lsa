@@ -1,4 +1,4 @@
-use crate::entry::Entry;
+use crate::{entry::Entry, style::Style};
 use std::io::{self, Write};
 use unicode_width::UnicodeWidthStr;
 
@@ -28,24 +28,38 @@ fn plan(widths: &[usize], terminal_cols: usize) -> Vec<usize> {
     vec![widths.iter().copied().max().unwrap_or(0)]
 }
 
-pub fn write(out: &mut impl Write, entries: &[Entry], terminal_cols: usize) -> io::Result<()> {
-    let widths: Vec<_> = entries.iter().map(|e| e.label().width()).collect();
-    let cells = plan(&widths, terminal_cols);
-    for (row, row_widths) in entries.chunks(cells.len()).zip(widths.chunks(cells.len())) {
-        for (i, entry) in row.iter().enumerate() {
-            write!(out, "{}", entry.label())?;
-            if i + 1 < row.len() {
-                write!(
-                    out,
-                    "{:padding$}",
-                    "",
-                    padding = cells[i] - row_widths[i] + 2
-                )?;
-            }
-        }
-        writeln!(out)?;
+pub struct Plan {
+    widths: Vec<usize>,
+    cells: Vec<usize>,
+}
+
+impl Plan {
+    pub fn new(entries: &[Entry], terminal_cols: usize, style: &Style) -> Self {
+        let widths: Vec<_> = entries.iter().map(|e| style.label(e).width()).collect();
+        let cells = plan(&widths, terminal_cols);
+        Self { widths, cells }
     }
-    Ok(())
+
+    pub fn write(&self, out: &mut impl Write, entries: &[Entry], style: &Style) -> io::Result<()> {
+        for (row, row_widths) in entries
+            .chunks(self.cells.len())
+            .zip(self.widths.chunks(self.cells.len()))
+        {
+            for (i, entry) in row.iter().enumerate() {
+                style.write_name(out, entry)?;
+                if i + 1 < row.len() {
+                    write!(
+                        out,
+                        "{:padding$}",
+                        "",
+                        padding = self.cells[i] - row_widths[i] + 2
+                    )?;
+                }
+            }
+            writeln!(out)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -61,10 +75,13 @@ mod tests {
                 name: (*name).into(),
                 kind: Kind::File,
                 metadata: None,
+                executable: false,
             })
             .collect();
         let mut out = Vec::new();
-        write(&mut out, &entries, cols).unwrap();
+        Plan::new(&entries, cols, &Style::default())
+            .write(&mut out, &entries, &Style::default())
+            .unwrap();
         String::from_utf8(out).unwrap()
     }
 

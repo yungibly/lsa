@@ -2,6 +2,7 @@ use crate::{
     cli::Options,
     display::escape,
     entry::{Entry, Kind},
+    style::Style,
 };
 use std::{
     fs,
@@ -13,13 +14,16 @@ use std::{
 pub enum Field {
     Mode,
     Links,
+    User,
+    Group,
     Uid,
     Gid,
     Size,
     Modified,
 }
 
-const DEFAULT_FIELDS: &[Field] = &[
+const DEFAULT_FIELDS: &[Field] = &[Field::Mode, Field::Size, Field::User, Field::Modified];
+const NUMERIC_FIELDS: &[Field] = &[
     Field::Mode,
     Field::Links,
     Field::Uid,
@@ -28,18 +32,116 @@ const DEFAULT_FIELDS: &[Field] = &[
     Field::Modified,
 ];
 
+struct FormatCache {
+    users: std::collections::HashMap<u32, String>,
+    groups: std::collections::HashMap<u32, String>,
+    // Directory entries often share timestamps. Retain 64 exact-second values,
+    // avoiding repeated localtime_r work in both width and output passes.
+    times: [Option<(i64, String)>; 64],
+}
+impl Default for FormatCache {
+    fn default() -> Self {
+        Self {
+            users: Default::default(),
+            groups: Default::default(),
+            times: std::array::from_fn(|_| None),
+        }
+    }
+}
+impl FormatCache {
+    fn timestamp(&mut self, seconds: i64) -> String {
+        let slot = &mut self.times[seconds.rem_euclid(64) as usize];
+        if let Some((key, value)) = slot
+            && *key == seconds
+        {
+            return value.clone();
+        }
+        let value = timestamp(seconds);
+        *slot = Some((seconds, value.clone()));
+        value
+    }
+    fn name(&mut self, id: u32, group: bool) -> String {
+        let names = if group {
+            &mut self.groups
+        } else {
+            &mut self.users
+        };
+        if let Some(name) = names.get(&id) {
+            return name.clone();
+        }
+        if names.len() >= 64 {
+            return id.to_string();
+        }
+        // One bounded buffer, including negative lookups cached per invocation.
+        let mut buffer = vec![0u8; 16 * 1024];
+        let name = unsafe {
+            // Reentrant libc APIs write only into the supplied structs/buffer.
+            // Their returned name pointer is consumed before the buffer is freed.
+            if group {
+                let mut record = std::mem::MaybeUninit::<libc::group>::uninit();
+                let mut result = std::ptr::null_mut();
+                if libc::getgrgid_r(
+                    id,
+                    record.as_mut_ptr(),
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    &mut result,
+                ) == 0
+                    && !result.is_null()
+                {
+                    Some(
+                        std::ffi::CStr::from_ptr((*result).gr_name)
+                            .to_bytes()
+                            .to_vec(),
+                    )
+                } else {
+                    None
+                }
+            } else {
+                let mut record = std::mem::MaybeUninit::<libc::passwd>::uninit();
+                let mut result = std::ptr::null_mut();
+                if libc::getpwuid_r(
+                    id,
+                    record.as_mut_ptr(),
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    &mut result,
+                ) == 0
+                    && !result.is_null()
+                {
+                    Some(
+                        std::ffi::CStr::from_ptr((*result).pw_name)
+                            .to_bytes()
+                            .to_vec(),
+                    )
+                } else {
+                    None
+                }
+            }
+        };
+        use std::os::unix::ffi::OsStrExt;
+        let name = name
+            .map(|bytes| escape(std::ffi::OsStr::from_bytes(&bytes)))
+            .unwrap_or_else(|| id.to_string());
+        names.insert(id, name.clone());
+        name
+    }
+}
+
 impl Field {
-    fn value(self, entry: &Entry, human: bool) -> String {
+    fn value(self, entry: &Entry, human: bool, owners: &mut FormatCache) -> String {
         let Some(m) = &entry.metadata else {
             return "?".into();
         };
         match self {
             Self::Mode => permissions(m.mode()),
             Self::Links => m.nlink().to_string(),
+            Self::User => owners.name(m.uid(), false),
+            Self::Group => owners.name(m.gid(), true),
             Self::Uid => m.uid().to_string(),
             Self::Gid => m.gid().to_string(),
             Self::Size => size(m.len(), human),
-            Self::Modified => timestamp(m.mtime()),
+            Self::Modified => owners.timestamp(m.mtime()),
         }
     }
 }
@@ -49,8 +151,9 @@ pub fn parse_fields(list: &str) -> Result<Vec<Field>, String> {
     for name in list.split(',') {
         let field = match name {
             "mode" => Field::Mode, "links" => Field::Links, "uid" => Field::Uid,
+            "user" => Field::User, "group" => Field::Group,
             "gid" => Field::Gid, "size" => Field::Size, "modified" => Field::Modified,
-            _ => return Err("fields must be a comma-separated list of mode, links, uid, gid, size, or modified; names are always shown".into()),
+            _ => return Err("fields must be a comma-separated list of mode, links, user, group, uid, gid, size, or modified; names are always shown".into()),
         };
         if fields.contains(&field) {
             return Err(format!("duplicate metadata field: {name}"));
@@ -60,36 +163,92 @@ pub fn parse_fields(list: &str) -> Result<Vec<Field>, String> {
     Ok(fields)
 }
 
-pub fn write(out: &mut impl Write, entries: &[Entry], opts: &Options) -> io::Result<()> {
-    let fields = if opts.fields.is_empty() {
-        DEFAULT_FIELDS
-    } else {
+pub fn write(
+    out: &mut impl Write,
+    entries: &[Entry],
+    opts: &Options,
+    style: &Style,
+) -> io::Result<()> {
+    use unicode_width::UnicodeWidthStr;
+    let fields = if !opts.fields.is_empty() {
         &opts.fields
+    } else if opts.numeric {
+        NUMERIC_FIELDS
+    } else {
+        DEFAULT_FIELDS
     };
-    // Field values are ASCII. Two passes retain only six widths, not a second
-    // directory-sized collection of formatted metadata or filenames.
-    let mut widths = [0; 6];
+    let mut owners = FormatCache::default();
+    let mut widths = [0; 8];
+    let heading = |field: Field| match field {
+        Field::Mode => "Permissions",
+        Field::Links => "Links",
+        Field::User => "Owner",
+        Field::Group => "Group",
+        Field::Uid => "UID",
+        Field::Gid => "GID",
+        Field::Size => "Size",
+        Field::Modified => "Modified",
+    };
     for entry in entries {
         for (i, field) in fields.iter().enumerate() {
-            widths[i] = widths[i].max(field.value(entry, opts.human).len());
+            widths[i] = widths[i].max(field.value(entry, opts.human, &mut owners).width());
         }
+    }
+    if opts.header {
+        for (i, field) in fields.iter().enumerate() {
+            widths[i] = widths[i].max(heading(*field).width());
+            let value = format!("{:<width$}", heading(*field), width = widths[i]);
+            style.paint(out, "1;4", &value)?;
+            write!(out, " ")?;
+        }
+        style.paint(out, "1;4", "Name")?;
+        writeln!(out)?;
     }
     for entry in entries {
         for (i, field) in fields.iter().enumerate() {
-            let value = field.value(entry, opts.human);
-            let width = widths[i];
-            if matches!(field, Field::Mode | Field::Modified) {
-                write!(out, "{value:<width$} ")?;
+            let value = field.value(entry, opts.human, &mut owners);
+            let padding = widths[i] - value.width();
+            let right = matches!(field, Field::Links | Field::Uid | Field::Gid | Field::Size);
+            if right {
+                write!(out, "{:padding$}", "")?;
+            }
+            if *field == Field::Mode {
+                for c in value.chars() {
+                    style.paint(
+                        out,
+                        match c {
+                            'r' => "33",
+                            'w' => "31",
+                            'x' | 's' | 't' => "32",
+                            '-' => "2",
+                            _ => "36",
+                        },
+                        &c.to_string(),
+                    )?;
+                }
             } else {
-                write!(out, "{value:>width$} ")?;
+                style.paint(
+                    out,
+                    match field {
+                        Field::Size => "32",
+                        Field::Modified => "2",
+                        Field::User | Field::Group | Field::Uid | Field::Gid => "33",
+                        _ => "2",
+                    },
+                    &value,
+                )?;
             }
+            if !right {
+                write!(out, "{:padding$}", "")?;
+            }
+            write!(out, " ")?;
         }
-        write!(out, "{}", entry.label())?;
+        style.write_name(out, entry)?;
         if entry.kind == Kind::Link {
-            match fs::read_link(&entry.path) {
-                Ok(target) => write!(out, " -> {}", escape(target.as_os_str()))?,
-                Err(_) => write!(out, " -> ?")?,
-            }
+            let target = fs::read_link(&entry.path)
+                .map(|p| escape(p.as_os_str()))
+                .unwrap_or_else(|_| "?".into());
+            style.paint(out, "2", &format!(" -> {target}"))?;
         }
         writeln!(out)?;
     }
@@ -174,6 +333,7 @@ mod tests {
             name: "lost".into(),
             kind: Kind::File,
             metadata: None,
+            executable: false,
         };
         let opts = Options {
             long: true,
@@ -181,7 +341,7 @@ mod tests {
             ..Options::default()
         };
         let mut out = Vec::new();
-        write(&mut out, &[entry], &opts).unwrap();
+        write(&mut out, &[entry], &opts, &Style::default()).unwrap();
         assert_eq!(out, b"? ? lost\n");
     }
     #[test]

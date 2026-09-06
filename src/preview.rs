@@ -15,23 +15,16 @@ pub const OUTPUT_LIMIT: usize = 8 * 1024 * 1024;
 pub struct Budget {
     pub attempts_left: usize,
     pub bytes_left: usize,
-    pub shown: usize,
-    pub failed: usize,
-    pub limited: usize,
 }
 impl Budget {
     pub fn new(attempts: usize) -> Self {
         Self {
             attempts_left: attempts,
             bytes_left: OUTPUT_LIMIT,
-            shown: 0,
-            failed: 0,
-            limited: 0,
         }
     }
     pub fn begin(&mut self, bytes: usize) -> bool {
         if self.attempts_left == 0 || bytes > self.bytes_left {
-            self.limited += 1;
             false
         } else {
             self.attempts_left -= 1;

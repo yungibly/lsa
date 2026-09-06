@@ -1,209 +1,121 @@
 # lsa
 
-A fast, human-oriented directory listing with inline image thumbnails and an
-optional image pager. Kitty graphics first; Sixel is an optional future addition.
-
-**Status:** Rust CLI with compact text and automatic inline Kitty grids, both
-user-verified in Ghostty 1.3.1. Directories-first sorting, configurable long
-metadata, and opt-in cache commands also received a user pass at `7050349`.
-Improved cache replacement has automated tests and working-set measurements.
-The browser experiment was rejected after visual review: it expanded beyond the
-need to scroll large image listings. It has been replaced by `--page`, a pager for
-one listing. Automated checks cover it; its Ghostty visual check is pending.
-See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
-
-## Direction
-
-- One sorted collection of images, files, folders, links, and special files.
-  A preview changes an entry's representation, never its membership or ordering.
-- Inline output returns to the shell and remains useful in history. Paging is
-  explicit; directory browsing is outside the product scope.
-- Names and metadata are terminal text. Unsupported images and preview failures
-  retain a readable entry. Piped output is complete plain text.
-- Make the ordinary text path cheap: no content reads, graphics queries, eager
-  metadata, cache initialization, or background work unless needed.
-- Bound thumbnail input, dimensions, allocations, work, and transmitted bytes.
-  Listing every name is more important than previewing every image.
-- Preserve aspect ratio, orientation, and transparency. No required icon font.
-
-The docs are working design notes, not fixed requirements. Prefer a measured,
-useful slice over speculative interfaces. Exact BSD/GNU `ls` parity, file mutation,
-indexing services, plugins, animation, and broad preview providers are outside the
-initial scope.
-
-## Run
+An everyday `ls` replacement with colors, icons, readable details, and inline image
+thumbnails. Print the directory, get the prompt back, keep the output in scrollback.
+Rust, Unix, one binary. No pager, browser, configuration file, or background process.
 
 ```sh
-# Keep Cargo downloads and build outputs inside this repository.
 export CARGO_HOME="$PWD/.cargo-home"
 cargo build --release --locked
-./target/release/lsa
-./target/release/lsa -lah --dirs-first img-test
-./target/release/lsa --fields=size,modified -h img-test
-./target/release/lsa --grid img-test
-./target/release/lsa --grid --protocol=kitty img-test
-./target/release/lsa --page --dirs-first img-test
-./target/release/lsa --diagnose
+./target/release/lsa                # compact, styled listing
+./target/release/lsa -la            # hidden files and readable details
+./target/release/lsa img-test       # automatic inline thumbnails
+./target/release/lsa --no-images .  # compact text
+./target/release/lsa -1 . | head    # plain names; closed pipes succeed
 ```
 
-Rust 1.88+ declared; built/tested with 1.98.0. Unix only; Linux is not yet tested.
-No install step or external image program is needed. The release binary is about
-1.3 MiB on this Mac. Full option semantics: `lsa --help`.
-
-Supported: `-a`/`-A`, `-l`/`--long`, `-h`, `-1`, `-t`, `-S`, `-r`,
-`--dirs-first`, `--fields=LIST`, multiple operands, `--`,
-`--grid`, `--no-images`, `--protocol=auto|kitty|none`, `--preview-limit=0..256`,
-`--diagnose`. Text flags override grid regardless of option order. Graphics
-selection uses Ghostty/Kitty environment hints; unknown terminals/multiplexers
-fall back to text. Non-TTY output always stays text, including with an explicit
-override. `--diagnose PATH` reports the chosen layout, reason, candidate count,
-and estimated grid height without decoding images.
-Caching is opt-in via `--cache-dir=PATH`; `--no-cache` disables it and
-`--clear-cache` clears the selected cache. Inline output makes no terminal queries,
-reads no stdin, and uses no paging. No configuration file yet.
-
-`--page [DIRECTORY]` explicitly pages one fixed listing on a foreground terminal.
-Space/PgDn advances a page; b/PgUp goes back. Arrows or h/j/k/l move spatially through
-the grid; Enter inspects the full name/path; q quits. Directories and links remain
-entries. There is no directory navigation, refresh, search, or file-manager action.
-Resize, Ctrl-C restoration, and Ctrl-Z/`fg` are supported. Sorting and hidden flags
-apply. Supported Kitty/Ghostty sessions use a mixed grid; `--no-images` keeps text.
-One worker previews the viewport plus a two-entry margin; memory and output per
-viewport are bounded. The old `--browse` flag reports the replacement.
-See [pager controls and limits](docs/pager.md).
-
-Deliberate `ls` differences: bytewise name order; `-a` and `-A` both omit `.`/`..`;
-directory/link/FIFO/socket suffixes; numeric uid/gid and local minute timestamps in
-long output; directory symlink operands remain links. Time/size sorts use names to
-break ties. Reverse applies to the full order unless directories-first is enabled,
-when it reverses within each group. Operands retain argument order.
-Exit codes: 0 success (including broken pipe), 1 listing/output/cache-clear error,
-2 bad options. Ordinary cache I/O failures do not fail a listing.
-
-## Sorting and metadata
-
-`--dirs-first` places actual directories first in every layout, without adding
-metadata reads. `-r`, `-t`, and `-S` operate within each group. Symlinks, including
-links to directories, stay in the non-directory group; grouping does not resolve
-their targets. This remains one ordered listing with no separate image section.
-
-`-l` / `--long` show mode, link count, numeric uid/gid, size, and local modification
-time. `--fields=size,modified` chooses metadata columns and their order, and implies
-long text output. Valid fields: `mode`, `links`, `uid`, `gid`, `size`, `modified`.
-Duplicates, empty lists, and unknown fields are errors. Names always follow the
-chosen columns; symlinks retain their target text. `-h` formats sizes in binary units.
-
-Long columns align to the displayed values rather than fixed minimum widths.
-Missing metadata shows `?` without dropping the entry. Only long output or time/size
-sorting requests per-entry metadata; default text and directories-first remain
-free of those extra reads. Extended attributes/ACLs, account-name lookup, and
-metadata beneath image tiles are not implemented.
-
-## Default layout
-
-Each operand chooses its layout once, after hidden filtering and sorting:
-
-- On a TTY, use aligned text columns, reading across each row. Widths include
-  Unicode and escaped controls. Keep a two-space gap and leave the rightmost cell
-  free; fall back to one column when names are too wide. Names are never shortened.
-- Automatically use a grid only with Kitty enabled, at least four preview
-  candidates, at least half the entries eligible, and the full grid fitting within
-  terminal height minus two rows. Wrapped labels count toward that height. Check
-  candidates against the configured attempt and byte caps before decoding.
-- `--grid` bypasses those heuristics. `--no-images` and `--protocol=none` force
-  compact text; `-1` forces one entry per line; `-l` / `--fields` force long text. Pipes use one
-  entry per line (long metadata remains available with `-l`).
-
-The four user images plus `generated/` choose a grid at 122×40. The 40-image fixture
-chooses text; use `--grid` to preview it. These thresholds are provisional. Candidate
-extensions/types are cheap hints: decode failures never change the chosen layout.
-The preview budget is shared across operands, so later grids may reach the limit.
-Text planning retains only widths, with a search capped at 64 columns.
-
-## Previews and limits
-
-Static PNG/JPEG/GIF/WebP/BMP, JPEG EXIF orientation, aspect-preserving letterboxing,
-and a neutral checker under transparency. GIF uses the first frame on its logical
-canvas. Symlinks to regular images can preview while retaining their link marker.
-Names wrap at grapheme boundaries; missing previews keep their tiles and labels.
-
-Inline output decodes synchronously, one source at a time. The pager moves that
-single decoder to a worker, with one outstanding request/completion, to keep input
-responsive. Optional cache hits skip decoding.
-Inline, per invocation: 64 preview attempts by default (including failures), hard
-maximum 256, and 8 MiB of image commands. The pager applies these caps per viewport
-change, including cleanup reservations; selection-only redraws do not renew them.
-Long paging sessions can therefore exceed those cumulative amounts.
-Per source: 32 MiB input, 16 million pixels,
-16,384 pixels per axis, 64 MiB decoded output, and a **best-effort** 64 MiB decoder allocation limit.
-Thumbnails fit within 320×240 pixels. These are starting caps, not performance
-claims or a hard process-memory/time sandbox. Inline preview work can delay a row; there
-is no timeout for slow filesystems or in-progress decodes. Names are never omitted
-after preview limits; inline output reports unavailable/limited previews to stderr.
-
-Inline grid requires at least 12 columns × 8 rows; the pager grid needs 12×10.
-Cell pixels come from the terminal's
-window size; if missing, 8×16 is estimated and aspect may be imperfect. Geometry is
-chosen once for inline output; the pager recalculates on resize. Detailed inline resize,
-theme, and retention trials are not yet recorded. Inline images use anonymous
-placements and are left in terminal history; no global image deletion. Terminal storage may evict old previews.
-
-## Optional thumbnail cache
-
-The experiment is **off by default** and has no implicit storage location. Try it
-inside this repository; run the first command twice to compare misses and hits:
+To try it as `ls` in the current shell, from this checkout:
 
 ```sh
-./target/release/lsa --cache-dir=benchmarks/local/thumbnails --cache-stats img-test
-./target/release/lsa --cache-dir=benchmarks/local/thumbnails --no-cache img-test
-./target/release/lsa --cache-dir=benchmarks/local/thumbnails --clear-cache
+alias ls="$PWD/target/release/lsa"
 ```
 
-The cache stores thumbnail pixels in 64 slots, with eight candidate slots per key,
-versioned source identity/timestamp/size/geometry keys, checksums, atomic writes,
-and less than 20 MiB of file contents including staging. Full groups randomly
-evict a slot; storage errors fall back to decoding. Text output, diagnostics, and exhausted preview budgets
-never open storage. Hits still consume preview and output budgets.
+The release binary is ready for local use. The new defaults have automated coverage
+on arm64 macOS; their appearance still needs a Ghostty check. Earlier inline image
+output was user-verified in Ghostty 1.3.1. See [compatibility](docs/compatibility.md)
+and [installation](docs/install.md).
 
-On this Mac, the four user images took **4.60 ms warm versus 71.76 ms uncached**
-through a drained PTY, with identical output and ~2 MiB versus ~31 MiB application
-RSS. These measure application work and PTY transport, not visible terminal rendering.
-See [cache behavior and limits](docs/cache.md) and [measurements](benchmarks/README.md).
-The larger-working-set follow-up improved a repeated 32-source listing from
-216 ms to 16 ms by reducing collisions, with the same storage and output limits.
+## Everyday behavior
 
-## Check
+- Terminal output uses compact columns, colors from the terminal palette, and icons.
+  Ghostty gets Nerd Font icons; other terminals get portable Unicode symbols.
+  `--icons=always` selects Nerd Font icons elsewhere; `--no-icons` disables them.
+- `--color=auto|always|never` controls color. Auto respects nonempty `NO_COLOR`.
+  Common `LS_COLORS` file-type and literal `*suffix` rules customize the palette;
+  values are bounded and validated as SGR codes. `TERM=dumb` disables auto styling.
+- `-l` shows permissions, human-readable size, owner and local modification time.
+  `--header` labels the columns. `--bytes` uses exact sizes; `-n` adds numeric uid/gid
+  and link count. `--fields=mode,size,modified` chooses a smaller set of details.
+- Names sort naturally: `photo2` before `photo10`, ignoring ASCII case with raw-byte
+  tie breaks. Non-ASCII names retain byte ordering; this is not locale collation.
+  `-t` / `-S` sort newest/largest first, `-r` reverses, `--dirs-first` groups actual
+  directories, and `-U` keeps filesystem order.
+- `-a` / `-A` include hidden names without `.` or `..`. `-d` lists directory operands
+  themselves. A directory-symlink operand lists its contents, except with `-l` or
+  `-d`; links inside a listing retain link identity. `-F` adds type markers.
+- Multiple operands keep argument order; consecutive file operands share a layout.
+  `--hyperlink` makes names clickable with OSC 8. Use `--` before dash-prefixed paths.
+- Pipes default to complete plain names, one per line, with metadata only when
+  requested. Explicit color/icons/hyperlink flags can decorate redirected text.
+  Previews never go to a pipe. Text stays escaped for safe terminal display,
+  including control characters and invalid UTF-8. No filename is shortened.
+
+Full option reference: `lsa --help`. This is a human-oriented tool; it deliberately
+omits recursive trees, Git queries, file operations, and exact GNU/BSD scripting parity.
+
+## Images that fit the task
+
+Images, files, folders, and links share one ordering. A thumbnail is a representation
+of an entry, and a failed preview never removes its name.
+
+On a direct Ghostty/Kitty terminal, previews are automatic when at least half the
+entries are image candidates, or when a mixed listing fits a single thumbnail row.
+A single image also previews automatically. `--grid` requests previews in a sparse
+mixed directory. `-1`, `-l`, `--no-images`, and `--protocol=none` keep text.
+
+Tall galleries print into scrollback. At most **16 previews are attempted by default**,
+shared across every operand. `--preview-limit=N` adjusts that up to 256. Once the
+attempt or byte budget is spent, the remaining entries print as compact text in the
+same order. Rows without image candidates stay compact. Small terminals, unsupported
+terminals and multiplexers fall back to text; `--protocol=kitty` is an explicit
+protocol override, not a compatibility guarantee. No terminal queries or input reads.
+
+Static PNG/JPEG/GIF/WebP/BMP are supported, including JPEG EXIF orientation, aspect
+ratio preservation, transparency checkerboarding, and GIF's first canvas frame.
+Image symlinks can preview after verifying a bounded regular-file target. SVG/HEIC/
+AVIF receive image icons but currently use text fallbacks.
+
+| Resource | Bound |
+| --- | --- |
+| Preview attempts | 16 default, 256 maximum; failures and cache hits count |
+| Image commands | 8 MiB per invocation, shared across operands |
+| Source | 32 MiB, 16 million pixels, 16,384 pixels per axis |
+| Decoded image / decoder allocation | 64 MiB; decoder allocation bound is best effort |
+| Thumbnail | At most 320×240 pixels |
+| Work in flight | One sequential decoder and thumbnail; no worker or queue |
+| Optional cache | 64 slots, under 20 MiB of file contents; no scans or hit writes |
+
+Text output and the entry vector scale with directory size. Filesystem, account-name
+lookup, decoder and terminal writes have no hard timeout. Styling reads regular-file
+mode bits for executable icons/colors but retains no full metadata per entry. Plain
+name-only output avoids those stats. Long output caches bounded account names and
+exact timestamps. [Measurements](benchmarks/README.md) distinguish application cost
+from terminal rendering and warm from empty thumbnail caches.
+
+Caching stays **off by default**. Enable explicitly with `--cache-dir=PATH`; use
+`--no-cache` to bypass it or `--clear-cache --cache-dir=PATH` to clear known records.
+`--cache-stats` reports counters. Text, diagnostics, and zero budgets never open the
+cache. See [cache design](docs/cache.md). `--diagnose PATH` explains layout and limits
+without decoding or accessing cache storage.
+
+Exit codes: 0 success (including closed pipes), 1 listing/output/cache-clear error,
+2 invalid options. Preview/cache failures are quiet unless cache statistics are requested.
+
+## Development
 
 ```sh
+cargo fmt --check
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked --examples --bins
-./target/release/examples/fixtures  # creates img-test/generated once
+./target/release/examples/fixtures  # creates ignored fixtures once
 python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
-python3 tests/check_pager.py
-python3 tests/check_pager_images.py
-python3 benchmarks/pager.py
-python3 benchmarks/measure.py
-python3 benchmarks/cache.py
-python3 benchmarks/cache_working_set.py
+python3 benchmarks/inline.py
+python3 scripts/package.py
 ```
 
-Tests keep scratch files under `target/`; fixtures and measurements are gitignored.
-The socket integration test needs local Unix-socket creation permission. Invalid
-UTF-8 filesystem names are tested on Linux; APFS rejects them, so macOS uses the
-byte-level display tests. See [decisions](docs/decisions.md) and
-[measurements](benchmarks/README.md) for evidence and remaining limits.
-
-## Later slices
-
-1. Tune layouts and metadata controls from daily use.
-2. Evaluate the opt-in cache from daily use before choosing a default policy;
-   add bounded parallel work only where measurements justify it.
-3. Verify the narrower pager in Ghostty: spatial controls, page scrolling, readable
-   selection, and cleanup. Keep it focused on one listing; do not revive browsing
-   or build a rich TUI without a new product decision.
-4. Package tested macOS/Linux targets; expand formats and terminals from demand.
-
-See [AGENTS.md](AGENTS.md) for development practice.
+Keep Cargo storage and test artifacts in this repo. The user handles real-terminal
+visual verification; PTY tests model bytes and cursor positions, not a renderer.
+See [roadmap](ROADMAP.md), [decisions](docs/decisions.md), and [handoff](HANDOFF.md).

@@ -124,5 +124,5 @@ Eight candidates improve the 32-source repeated case from 56.25% hits / 216.42 m
 to 100% / 15.97 ms in this fixture. A 96-source alternating-size case has little
 benefit: 192 distinct thumbnail keys exceed the 64-record cap. Keep the cache
 opt-in with its current storage bound; larger cache sizes or default locations
-need a concrete daily-use requirement. The next product slice is explicit browsing,
-with a separate output lifetime and later viewport-driven preview work.
+need a concrete daily-use requirement. Current output is always inline; budgets are
+shared across the invocation, including warm hits.

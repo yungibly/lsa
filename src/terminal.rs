@@ -30,10 +30,11 @@ impl Terminal {
             .any(|key| env::var_os(key).is_some())
             || term.as_encoded_bytes().starts_with(b"screen")
             || term.as_encoded_bytes().starts_with(b"tmux");
-        let known = name == "ghostty"
-            || name == "kitty"
-            || term == "xterm-kitty"
-            || term == "xterm-ghostty";
+        let known = term != "dumb"
+            && (name == "ghostty"
+                || name == "kitty"
+                || term == "xterm-kitty"
+                || term == "xterm-ghostty");
         let (kitty, reason) = select(tty, opts, mux, known);
         let mut result = Self {
             tty,

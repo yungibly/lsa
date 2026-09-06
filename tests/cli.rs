@@ -31,6 +31,7 @@ impl Fixture {
     fn run(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_lsa"))
             .current_dir(&self.0)
+            .arg("-F")
             .args(args)
             .env("TERM_PROGRAM", "ghostty")
             .output()
@@ -152,7 +153,10 @@ fn selected_metadata_aligns_and_preserves_names_and_links() {
     f.touch("large", &vec![0; 1536]);
     fs::set_permissions(f.0.join("a"), fs::Permissions::from_mode(0o640)).unwrap();
     fs::set_permissions(f.0.join("large"), fs::Permissions::from_mode(0o600)).unwrap();
-    assert_eq!(f.run(&["--fields=size"]).stdout, b"   1 a\n1536 large\n");
+    assert_eq!(
+        f.run(&["--fields=size", "--bytes"]).stdout,
+        b"   1 a\n1536 large\n"
+    );
     assert_eq!(
         f.run(&["--fields=size,mode", "-h"]).stdout,
         b"   1 -rw-r----- a\n1.5K -rw------- large\n"
@@ -177,7 +181,13 @@ fn operands_and_partial_errors() {
     f.touch("dir/inside", b"");
     symlink("dir", f.0.join("linkdir")).unwrap();
     assert_eq!(f.run(&["--", "-name"]).stdout, b"-name\n");
-    assert_eq!(f.run(&["linkdir"]).stdout, b"linkdir@\n");
+    assert_eq!(f.run(&["linkdir"]).stdout, b"inside\n");
+    assert_eq!(f.run(&["-d", "linkdir"]).stdout, b"linkdir@\n");
+    assert!(
+        String::from_utf8(f.run(&["-l", "linkdir"]).stdout)
+            .unwrap()
+            .contains("linkdir@ -> dir")
+    );
     let out = f.run(&["missing", "dir", "--", "-name"]);
     assert_eq!(out.status.code(), Some(1));
     assert_eq!(out.stdout, b"dir:\ninside\n-name\n");
@@ -232,4 +242,108 @@ fn empty_and_closed_pipe() {
     let out = child.wait_with_output().unwrap();
     assert!(out.status.success());
     assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn defaults_are_plain_and_natural_and_classification_is_explicit() {
+    let f = Fixture::new();
+    for name in ["photo10.png", "photo2.png", "Photo1.png", "run"] {
+        f.touch(name, b"");
+    }
+    fs::set_permissions(f.0.join("run"), fs::Permissions::from_mode(0o755)).unwrap();
+    fs::create_dir(f.0.join("folder")).unwrap();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_lsa"))
+            .current_dir(&f.0)
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    assert_eq!(
+        run(&[]).stdout,
+        b"folder\nPhoto1.png\nphoto2.png\nphoto10.png\nrun\n"
+    );
+    assert_eq!(
+        run(&["-F"]).stdout,
+        b"folder/\nPhoto1.png\nphoto2.png\nphoto10.png\nrun*\n"
+    );
+    let out = run(&["--color=always", "--icons=always"]);
+    assert!(out.status.success());
+    assert!(out.stdout.windows(5).any(|w| w == b"\x1b[32m"));
+}
+
+#[test]
+fn readable_long_defaults_and_numeric_escape_hatch() {
+    let f = Fixture::new();
+    f.touch("a", &vec![0; 1536]);
+    let long = String::from_utf8(f.run(&["-l"]).stdout).unwrap();
+    assert!(long.contains("1.5K"));
+    assert!(
+        String::from_utf8(f.run(&["-ln", "--bytes"]).stdout)
+            .unwrap()
+            .contains("1536")
+    );
+    let header = String::from_utf8(f.run(&["--header"]).stdout).unwrap();
+    assert!(header.starts_with("Permissions"));
+    assert_eq!(header.lines().count(), 2);
+    assert_eq!(
+        f.run(&["--fields=user,group,uid,gid,links,size,mode,modified"])
+            .status
+            .code(),
+        Some(0)
+    );
+}
+
+#[test]
+fn no_sort_retains_enumeration_order_and_does_not_require_stats() {
+    let f = Fixture::new();
+    for i in [20, 1, 13, 4] {
+        f.touch(format!("file{i}"), b"");
+    }
+    let expected: Vec<_> = fs::read_dir(&f.0)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    let out = String::from_utf8(f.run(&["-U"]).stdout).unwrap();
+    assert_eq!(out.lines().collect::<Vec<_>>(), expected);
+    let out = String::from_utf8(f.run(&["-Ur"]).stdout).unwrap();
+    assert_eq!(
+        out.lines().collect::<Vec<_>>(),
+        expected
+            .iter()
+            .rev()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn long_timestamps_preserve_epoch_boundaries_and_repeated_values() {
+    let f = Fixture::new();
+    for (name, time) in [("a", -1_i64), ("b", 0), ("c", 64), ("d", 0)] {
+        f.touch(name, b"");
+        let epoch = std::time::UNIX_EPOCH;
+        let modified = if time < 0 {
+            epoch - std::time::Duration::from_secs(time.unsigned_abs())
+        } else {
+            epoch + std::time::Duration::from_secs(time as u64)
+        };
+        fs::File::options()
+            .write(true)
+            .open(f.0.join(name))
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_lsa"))
+        .current_dir(&f.0)
+        .env("TZ", "UTC0")
+        .arg("--fields=modified")
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        out.stdout,
+        b"1969-12-31 23:59 a\n1970-01-01 00:00 b\n1970-01-01 00:01 c\n1970-01-01 00:00 d\n"
+    );
 }

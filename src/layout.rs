@@ -2,7 +2,6 @@ use crate::{
     cli::{Options, Protocol},
     entry::Entry,
     grid::Geometry,
-    preview::OUTPUT_LIMIT,
     terminal::Terminal,
 };
 
@@ -23,7 +22,6 @@ impl Layout {
         }
     }
 }
-
 pub struct Choice {
     pub layout: Layout,
     pub reason: &'static str,
@@ -56,37 +54,29 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
     if !term.kitty {
         return text(term.reason);
     }
+    if opts.preview_limit == 0 {
+        return text("preview budget disabled");
+    }
     let Some(geometry) = Geometry::new(term) else {
         return text("terminal too small for grid");
     };
+    let candidates = entries.iter().filter(|e| e.candidate()).count();
+    if candidates == 0 {
+        return text("no preview candidates");
+    }
     if opts.grid {
         return Choice {
             layout: Layout::Grid(geometry),
             reason: "grid requested",
         };
     }
-    // Reject obviously tall listings without classifying contents or formatting
-    // names. Candidate checks below use extensions/types only, never open files.
-    let height = term.rows.saturating_sub(2);
-    if geometry.minimum_rows(entries.len()) > height {
-        return text("grid exceeds one screen");
-    }
-    let candidates = entries.iter().filter(|e| e.candidate()).count();
-    if candidates < 4 {
-        return text("fewer than four preview candidates");
-    }
-    if candidates < entries.len().div_ceil(2) {
-        return text("fewer than half the entries are preview candidates");
-    }
-    if candidates > opts.preview_limit || candidates.saturating_mul(geometry.bytes) > OUTPUT_LIMIT {
-        return text("grid exceeds preview budget");
-    }
-    if geometry.output_rows(entries) > height {
-        return text("wrapped grid labels exceed one screen");
-    }
-    Choice {
-        layout: Layout::Grid(geometry),
-        reason: "image-heavy listing fits one screen and preview budget",
+    if candidates >= entries.len().div_ceil(2) || entries.len() <= geometry.columns {
+        Choice {
+            layout: Layout::Grid(geometry),
+            reason: "image-heavy or small mixed listing; bounded inline previews",
+        }
+    } else {
+        text("sparse images in a mixed listing")
     }
 }
 
@@ -94,16 +84,15 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
 mod tests {
     use super::*;
     use crate::{cli, entry::Kind};
-
-    fn terminal(cols: usize, rows: usize) -> Terminal {
+    fn term() -> Terminal {
         Terminal {
             tty: true,
             kitty: true,
             reason: "test",
             name: "ghostty".into(),
-            version: "1.3.1".into(),
-            cols,
-            rows,
+            version: "".into(),
+            cols: 122,
+            rows: 40,
             cell_width: 8,
             cell_height: 17,
             estimated_cell: false,
@@ -118,82 +107,50 @@ mod tests {
                     name: name.into(),
                     kind: Kind::File,
                     metadata: None,
+                    executable: false,
                 }
             })
             .collect()
     }
-    fn opts(args: &[&str]) -> Options {
-        cli::parse(args.iter().map(Into::into)).unwrap()
+    fn choice(images: usize, files: usize, args: &[&str]) -> Choice {
+        choose(
+            &entries(images, files),
+            &term(),
+            &cli::parse(args.iter().map(Into::into)).unwrap(),
+        )
     }
-    fn is_grid(entries: &[Entry], term: &Terminal, args: &[&str]) -> bool {
-        matches!(choose(entries, term, &opts(args)).layout, Layout::Grid(_))
-    }
-
     #[test]
-    fn image_count_and_fraction_boundaries() {
-        let term = terminal(122, 40);
-        assert!(is_grid(&entries(4, 0), &term, &[]));
-        assert!(is_grid(&entries(4, 4), &term, &[]));
-        for (images, files) in [(0, 0), (0, 10), (3, 0), (4, 5), (4, 1000)] {
-            assert!(!is_grid(&entries(images, files), &term, &[]));
+    fn previews_single_images_small_mixed_lists_and_tall_galleries() {
+        for (images, files) in [(1, 0), (1, 4), (3, 0), (4, 4), (1000, 0)] {
+            assert!(matches!(choice(images, files, &[]).layout, Layout::Grid(_)));
         }
-        let mut mixed = entries(4, 0);
-        mixed[0].kind = Kind::Directory;
-        assert!(!is_grid(&mixed, &term, &[]));
-        mixed[0].kind = Kind::Link;
-        assert!(is_grid(&mixed, &term, &[]));
+        for (images, files) in [(0, 0), (0, 1000), (1, 5), (4, 5), (4, 1000)] {
+            assert_eq!(choice(images, files, &[]).layout, Layout::Columns);
+        }
+        assert!(matches!(
+            choice(1, 1000, &["--grid"]).layout,
+            Layout::Grid(_)
+        ));
     }
-
     #[test]
-    fn screen_height_includes_wrapped_labels_and_prompt_room() {
-        let mut files = entries(4, 0);
-        assert!(is_grid(&files, &terminal(80, 16), &[]));
-        assert!(!is_grid(&files, &terminal(80, 15), &[]));
-        files[0].name = "this filename wraps over two lines.png".into();
-        assert!(!is_grid(&files, &terminal(80, 16), &[]));
-        assert!(is_grid(&files, &terminal(80, 17), &[]));
-        assert!(!is_grid(&files, &terminal(11, 40), &["--grid"]));
-        assert!(!is_grid(&files, &terminal(122, 7), &["--grid"]));
-    }
-
-    #[test]
-    fn auto_respects_budgets_but_explicit_grid_remains_available() {
-        let files = entries(4, 0);
-        let term = terminal(122, 40);
-        assert!(!is_grid(&files, &term, &["--preview-limit=3"]));
-        assert!(!is_grid(&files, &term, &["--preview-limit=0"]));
-        assert!(is_grid(&files, &term, &["--grid", "--preview-limit=0"]));
-        let mut big = terminal(122, 1000);
-        big.cell_width = 16;
-        big.cell_height = 48;
-        assert!(!is_grid(&entries(64, 0), &big, &[]));
-        assert!(is_grid(&entries(64, 0), &big, &["--grid"]));
-    }
-
-    #[test]
-    fn text_overrides_and_redirection_win_in_any_order() {
-        let files = entries(4, 0);
-        let mut term = terminal(122, 40);
+    fn explicit_text_and_zero_budget_never_decode() {
         for (flag, layout) in [
             ("-1", Layout::Lines),
             ("-l", Layout::Long),
             ("--no-images", Layout::Columns),
             ("--protocol=none", Layout::Columns),
+            ("--preview-limit=0", Layout::Columns),
         ] {
             for args in [[flag, "--grid"], ["--grid", flag]] {
-                assert_eq!(choose(&files, &term, &opts(&args)).layout, layout);
+                assert_eq!(choice(4, 0, &args).layout, layout);
             }
         }
+        let mut term = term();
+        let opts = cli::parse(["--grid".into(), "--protocol=kitty".into()]).unwrap();
         term.tty = false;
-        assert_eq!(
-            choose(&files, &term, &opts(&["--grid", "--protocol=kitty"])).layout,
-            Layout::Lines
-        );
+        assert_eq!(choose(&entries(4, 0), &term, &opts).layout, Layout::Lines);
         term.tty = true;
         term.kitty = false;
-        assert_eq!(
-            choose(&files, &term, &opts(&["--grid"])).layout,
-            Layout::Columns
-        );
+        assert_eq!(choose(&entries(4, 0), &term, &opts).layout, Layout::Columns);
     }
 }

@@ -49,15 +49,6 @@ impl Kind {
             Self::Unknown => "[?]",
         }
     }
-    fn marker(self) -> &'static str {
-        match self {
-            Self::Directory => "/",
-            Self::Link => "@",
-            Self::Pipe => "|",
-            Self::Socket => "=",
-            _ => "",
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -65,13 +56,11 @@ pub struct Entry {
     pub path: PathBuf,
     pub name: OsString,
     pub kind: Kind,
-    // Keep the large platform stat structure off the ordinary name-only path.
+    // Styling retains only the executable bit, not a stat structure per entry.
     pub metadata: Option<Box<Metadata>>,
+    pub executable: bool,
 }
 impl Entry {
-    pub fn label(&self) -> String {
-        format!("{}{}", escape(&self.name), self.kind.marker())
-    }
     pub fn candidate(&self) -> bool {
         matches!(self.kind, Kind::File | Kind::Link)
             && self
@@ -94,7 +83,7 @@ pub struct Listing {
     pub valid: bool,
 }
 
-pub fn list(path: &Path, opts: &Options) -> Listing {
+pub fn list(path: &Path, opts: &Options, need_mode: bool) -> Listing {
     let mut result = Listing::default();
     let meta = match fs::symlink_metadata(path) {
         Ok(m) => m,
@@ -105,12 +94,20 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
             return result;
         }
     };
-    result.directory = meta.is_dir(); // Directory symlink operands remain links.
-    if !result.directory {
+    // Match everyday ls behavior: a directory-link operand lists its contents,
+    // while -l/-d and links inside a directory retain the link itself.
+    result.directory = meta.is_dir()
+        || (meta.is_symlink()
+            && !opts.long
+            && !opts.directory
+            && fs::metadata(path).is_ok_and(|target| target.is_dir()));
+    if !result.directory || opts.directory {
+        result.directory = false;
         result.entries.push(Entry {
             path: path.into(),
             name: path.as_os_str().into(),
             kind: Kind::from_type(meta.file_type()),
+            executable: meta.is_file() && meta.mode() & 0o111 != 0,
             metadata: Some(Box::new(meta)),
         });
         result.valid = true;
@@ -150,13 +147,19 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
                 Kind::Unknown
             }
         };
-        let metadata = if opts.long || opts.sort != Sort::Name {
+        let mut executable = false;
+        let metadata = if opts.needs_metadata() || (need_mode && kind == Kind::File) {
             match fs::symlink_metadata(&path) {
-                Ok(m) => Some(Box::new(m)),
+                Ok(m) => {
+                    executable = kind == Kind::File && m.mode() & 0o111 != 0;
+                    opts.needs_metadata().then(|| Box::new(m))
+                }
                 Err(e) => {
-                    result
-                        .errors
-                        .push(format!("{}: {e}", escape(path.as_os_str())));
+                    if opts.needs_metadata() {
+                        result
+                            .errors
+                            .push(format!("{}: {e}", escape(path.as_os_str())));
+                    }
                     None
                 }
             }
@@ -168,11 +171,21 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
             name,
             kind,
             metadata,
+            executable,
         });
+    }
+    if opts.sort == Sort::None {
+        if opts.reverse {
+            result.entries.reverse();
+        }
+        if opts.dirs_first {
+            result.entries.sort_by_key(|e| e.kind != Kind::Directory);
+        }
+        return result;
     }
     result.entries.sort_unstable_by(|a, b| {
         let primary = match opts.sort {
-            Sort::Name => std::cmp::Ordering::Equal,
+            Sort::Name | Sort::None => std::cmp::Ordering::Equal,
             Sort::Size => b
                 .metadata
                 .as_ref()
@@ -184,8 +197,8 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
                 .map(|m| (m.mtime(), m.mtime_nsec()))
                 .cmp(&a.metadata.as_ref().map(|m| (m.mtime(), m.mtime_nsec()))),
         };
-        let within_group =
-            primary.then_with(|| a.name.as_encoded_bytes().cmp(b.name.as_encoded_bytes()));
+        let within_group = primary
+            .then_with(|| crate::sort::name(a.name.as_encoded_bytes(), b.name.as_encoded_bytes()));
         let within_group = if opts.reverse {
             within_group.reverse()
         } else {
@@ -201,12 +214,18 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
     result
 }
 
-pub fn write_text(out: &mut impl Write, entries: &[Entry], opts: &Options) -> io::Result<()> {
+pub fn write_text(
+    out: &mut impl Write,
+    entries: &[Entry],
+    opts: &Options,
+    style: &crate::style::Style,
+) -> io::Result<()> {
     if opts.long {
-        return crate::metadata::write(out, entries, opts);
+        return crate::metadata::write(out, entries, opts, style);
     }
     for e in entries {
-        writeln!(out, "{}", e.label())?;
+        style.write_name(out, e)?;
+        writeln!(out)?;
     }
     Ok(())
 }
