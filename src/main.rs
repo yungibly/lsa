@@ -1,8 +1,10 @@
+mod artwork;
 mod cache;
 mod cli;
 mod columns;
 mod display;
 mod entry;
+mod filetype;
 mod grid;
 mod kitty;
 mod layout;
@@ -63,7 +65,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     if opts.diagnose {
         writeln!(
             out,
-            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\npreview_attempts={}\nimage_output_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ncache={}\nterminal_validation=see docs/compatibility.md",
+            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\npreview_attempts={}\nimage_output_limit={}\nimage_placement_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ncache={}\nterminal_validation=see docs/compatibility.md",
             term.tty,
             term.name,
             term.version,
@@ -80,6 +82,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
             term.reason,
             opts.preview_limit,
             preview::OUTPUT_LIMIT,
+            preview::PLACEMENT_LIMIT,
             preview::INPUT_LIMIT,
             preview::PIXEL_LIMIT,
             preview::ALLOC_LIMIT,
@@ -136,9 +139,18 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
             layout::Layout::Columns => {
                 columns::Plan::new(entries, term.cols, &style).write(out, entries, &style)
             }
-            layout::Layout::Long | layout::Layout::Lines => {
-                entry::write_text(out, entries, opts, &style)
-            }
+            layout::Layout::Long => metadata::write(
+                out,
+                entries,
+                opts,
+                &style,
+                Some(metadata::Previews {
+                    term: &term,
+                    budget: &mut budget,
+                    cache: &mut cache,
+                }),
+            ),
+            layout::Layout::Lines => entry::write_text(out, entries, &style),
         }
     };
     for path in &opts.paths {

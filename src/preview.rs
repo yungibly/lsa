@@ -11,20 +11,30 @@ pub const INPUT_LIMIT: u64 = 32 * 1024 * 1024;
 pub const PIXEL_LIMIT: u64 = 16_000_000;
 pub const ALLOC_LIMIT: u64 = 64 * 1024 * 1024;
 pub const OUTPUT_LIMIT: usize = 8 * 1024 * 1024;
+pub const PLACEMENT_LIMIT: usize = 256;
 
 pub struct Budget {
     pub attempts_left: usize,
     pub bytes_left: usize,
+    pub placements_left: usize,
 }
 impl Budget {
     pub fn new(attempts: usize) -> Self {
         Self {
             attempts_left: attempts,
             bytes_left: OUTPUT_LIMIT,
+            placements_left: PLACEMENT_LIMIT,
         }
     }
+    pub fn can_draw(&self, bytes: usize) -> bool {
+        self.placements_left > 0 && bytes <= self.bytes_left
+    }
+    pub fn placed(&mut self, bytes: usize) {
+        self.bytes_left -= bytes;
+        self.placements_left -= 1;
+    }
     pub fn begin(&mut self, bytes: usize) -> bool {
-        if self.attempts_left == 0 || bytes > self.bytes_left {
+        if self.attempts_left == 0 || !self.can_draw(bytes) {
             false
         } else {
             self.attempts_left -= 1;

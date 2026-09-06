@@ -56,7 +56,7 @@ def measure(binary, flags, terminal=False):
         assert child.returncode == 0 and not err, (child.returncode, err)
         return {"elapsed_ms": elapsed * 1000, "cpu_ms": (usage.ru_utime + usage.ru_stime) * 1000,
                 "rss_bytes": usage.ru_maxrss * (1 if platform.system() == "Darwin" else 1024),
-                "output_bytes": len(data), "images": len(protocol.images(data)),
+                "output_bytes": len(data), "images": len(protocol.images(data)), "image_bytes": sum(len(m[0]) for m in protocol.APC.finditer(data)),
                 "sha256": hashlib.sha256(data).hexdigest()}
     finally:
         if child.returncode is None: child.kill(); child.wait()
@@ -68,7 +68,7 @@ def measure(binary, flags, terminal=False):
 def summarize(samples):
     return {"runs": len(samples), **{f"median_{key}": round(statistics.median(s[key] for s in samples), 3)
             for key in ["elapsed_ms", "cpu_ms", "rss_bytes"]},
-            **{key: samples[-1][key] for key in ["output_bytes", "images", "sha256"]}}
+            **{key: samples[-1][key] for key in ["output_bytes", "image_bytes", "images", "sha256"]}}
 
 
 def main():
@@ -96,14 +96,15 @@ def main():
     cases = [("text_10000_pipe", False, text), ("text_10000_tty", True, text),
              ("long_10000_pipe", False, text), ("user_images_off", True, ROOT / "img-test"),
              ("user_images_empty", True, ROOT / "img-test"), ("user_images_warm", True, ROOT / "img-test"),
-             ("gallery_default", True, ROOT / "img-test/generated/many")]
+             ("gallery_default", True, ROOT / "img-test/generated/many"),
+             ("long_images_off", True, ROOT / "img-test"), ("long_images_empty", True, ROOT / "img-test"), ("long_images_warm", True, ROOT / "img-test")]
     for case, terminal, path in cases:
         samples = {label: [] for label in variants}
         for i in range(args.runs + 2):
             for label, binary in variants.items():
                 flags = []
-                if case == "long_10000_pipe": flags = ["-l"]
-                if case.startswith("user_images"):
+                if case == "long_10000_pipe" or case.startswith("long_images"): flags = ["-l"]
+                if case.startswith(("user_images", "long_images")):
                     cache = local / f"cache-{label}"
                     if not case.endswith("off"):
                         flag = f"--cache-dir={cache}"
@@ -119,8 +120,9 @@ def main():
         plain = report["cases"]["text_10000_pipe"]
         assert plain["before"]["sha256"] == plain["after"]["sha256"]
     for label in variants:
-        images = [report["cases"][f"user_images_{mode}"][label] for mode in ["off", "empty", "warm"]]
-        assert len({record["sha256"] for record in images}) == 1
+        for family in ["user_images", "long_images"]:
+            images = [report["cases"][f"{family}_{mode}"][label] for mode in ["off", "empty", "warm"]]
+            assert len({record["sha256"] for record in images}) == 1
     destination = ROOT / "benchmarks/local/inline.json"
     destination.write_text(json.dumps(report, indent=2) + "\n")
     print(destination)

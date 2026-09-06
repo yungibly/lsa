@@ -78,7 +78,7 @@ impl Terminal {
 fn select(tty: bool, opts: &Options, mux: bool, known: bool) -> (bool, &'static str) {
     if !tty {
         (false, "stdout is not a terminal")
-    } else if opts.no_images || opts.one || opts.long || opts.protocol == Protocol::None {
+    } else if opts.no_images || opts.one || opts.protocol == Protocol::None {
         (false, "text requested")
     } else if opts.protocol == Protocol::Kitty {
         (true, "explicit Kitty override")

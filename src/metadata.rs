@@ -1,8 +1,13 @@
 use crate::{
+    artwork,
+    cache::Cache,
     cli::Options,
     display::escape,
     entry::{Entry, Kind},
+    kitty,
+    preview::{self, Budget},
     style::Style,
+    terminal::Terminal,
 };
 use std::{
     fs,
@@ -163,11 +168,18 @@ pub fn parse_fields(list: &str) -> Result<Vec<Field>, String> {
     Ok(fields)
 }
 
+pub struct Previews<'a, 'cache> {
+    pub term: &'a Terminal,
+    pub budget: &'a mut Budget,
+    pub cache: &'a mut Cache<'cache>,
+}
+
 pub fn write(
     out: &mut impl Write,
     entries: &[Entry],
     opts: &Options,
     style: &Style,
+    mut previews: Option<Previews<'_, '_>>,
 ) -> io::Result<()> {
     use unicode_width::UnicodeWidthStr;
     let fields = if !opts.fields.is_empty() {
@@ -204,7 +216,50 @@ pub fn write(
         style.paint(out, "1;4", "Name")?;
         writeln!(out)?;
     }
+    let metadata_width = widths[..fields.len()].iter().sum::<usize>() + fields.len();
+    // One-row miniatures add no height. Each occupies the name's icon gutter,
+    // and narrow terminals retain the ordinary complete text listing.
+    let mini = previews
+        .as_ref()
+        .filter(|p| {
+            p.term.kitty
+                && p.term.rows >= 3
+                && p.term.cols >= metadata_width + 4 + 12
+                && p.budget.attempts_left > 0
+                && entries.iter().any(Entry::candidate)
+        })
+        .map(|p| {
+            let w = f64::from(p.term.cell_width) * 3.0;
+            let h = f64::from(p.term.cell_height);
+            let scale = (96.0 / w).min(64.0 / h).min(1.0);
+            (
+                (w * scale).round().max(1.0) as u32,
+                (h * scale).round().max(1.0) as u32,
+            )
+        });
     for entry in entries {
+        let image = if let Some((w, h)) = mini
+            && entry.candidate()
+        {
+            let p = previews.as_mut().unwrap();
+            let bytes = kitty::byte_len(w, h, 3, 1);
+            if p.budget.begin(bytes) {
+                Some(
+                    preview::load(&entry.path, w, h, p.cache).unwrap_or_else(|_| {
+                        artwork::render(artwork::Icon::Error, w, h, style.color)
+                    }),
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if image.is_some() {
+            // Scroll before placement, then write this entry into the reserved
+            // line. Do not print spaces over the image cells after placing it.
+            out.write_all(b"\r\n\x1b[1A\r")?;
+        }
         for (i, field) in fields.iter().enumerate() {
             let value = field.value(entry, opts.human, &mut owners);
             let padding = widths[i] - value.width();
@@ -243,7 +298,31 @@ pub fn write(
             }
             write!(out, " ")?;
         }
-        style.write_name(out, entry)?;
+        if mini.is_some() {
+            if let Some(image) = image {
+                kitty::write(out, &image, 3, 1)?;
+                previews.as_mut().unwrap().budget.placed(kitty::byte_len(
+                    image.width(),
+                    image.height(),
+                    3,
+                    1,
+                ));
+                write!(out, "\x1b[{}G", metadata_width + 5)?;
+            } else if style.icons != crate::style::Icons::None {
+                style.write_label(out, entry, style.icon(entry))?;
+                write!(
+                    out,
+                    "{:padding$}",
+                    "",
+                    padding = 4 - style.icon(entry).width()
+                )?;
+            } else {
+                write!(out, "    ")?;
+            }
+            style.write_label(out, entry, &style.name(entry))?;
+        } else {
+            style.write_name(out, entry)?;
+        }
         if entry.kind == Kind::Link {
             let target = fs::read_link(&entry.path)
                 .map(|p| escape(p.as_os_str()))
@@ -341,7 +420,7 @@ mod tests {
             ..Options::default()
         };
         let mut out = Vec::new();
-        write(&mut out, &[entry], &opts, &Style::default()).unwrap();
+        write(&mut out, &[entry], &opts, &Style::default(), None).unwrap();
         assert_eq!(out, b"? ? lost\n");
     }
     #[test]

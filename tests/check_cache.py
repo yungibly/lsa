@@ -47,7 +47,7 @@ def main():
             process = subprocess.run([str(BIN), flag, *args, str(many)], capture_output=True)
             assert process.returncode == 0 and not process.stderr and not cache.exists()
             cases += 1
-        for args in [["-1"], ["--no-images"], ["--protocol=none"], ["--fields=size"],
+        for args in [["-1"], ["--no-images"], ["--protocol=none"], ["--fields=size", "--no-images"],
                      ["--diagnose"], ["--preview-limit=0"], ["--no-cache"]]:
             _, stats, _ = run([flag, "--grid", *args, many])
             assert stats == (0, 0, 0, 0) and not cache.exists()
@@ -79,11 +79,11 @@ def main():
 
         # Budgets count cached previews too, and remain shared across operands.
         data, stats, err = run([flag, "--grid", "--preview-limit=2", many, many])
-        assert len(images(data)) == 2 and stats == (2, 0, 0, 0) and not err
+        assert len(images(data)) == 3 and stats == (2, 0, 0, 0) and not err
         cases += 1
         large_args = [flag, "--grid", many]
-        run(large_args, pixels=(1280, 1152))
-        data, stats, err = run(large_args, pixels=(1280, 1152))
+        run(large_args, pixels=(2560, 1920))
+        data, stats, err = run(large_args, pixels=(2560, 1920))
         assert 0 < stats[0] == len(images(data)) < 40 and stats[1:] == (0, 0, 0)
         assert not err and sum(len(m[0]) for m in APC.finditer(data)) <= 8 * 1024 * 1024
         cases += 1
@@ -127,12 +127,12 @@ def main():
         link = root / "link.png"
         link.symlink_to(source)
         data, stats, err = run([flag, "--grid", link])
-        assert not images(data) and stats == (0, 0, 0, 0) and not err
+        assert len(images(data)) == 1 and stats == (0, 0, 0, 0) and not err
         source.unlink()
         with source.open("wb") as output:
             output.truncate(32 * 1024 * 1024 + 1)
         data, stats, err = run([flag, "--grid", source])
-        assert not images(data) and stats == (0, 0, 0, 0) and not err
+        assert len(images(data)) == 1 and stats == (0, 0, 0, 0) and not err
         cases += 1
         # A broken cache path falls back without emitting preview failures.
         bad = root / "bad"

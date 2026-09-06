@@ -38,17 +38,6 @@ impl Kind {
             Self::Unknown
         }
     }
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::File => "[file]",
-            Self::Directory => "[dir]",
-            Self::Link => "[link]",
-            Self::Pipe => "[pipe]",
-            Self::Socket => "[socket]",
-            Self::Device => "[device]",
-            Self::Unknown => "[?]",
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -63,15 +52,28 @@ pub struct Entry {
 impl Entry {
     pub fn candidate(&self) -> bool {
         matches!(self.kind, Kind::File | Kind::Link)
-            && self
-                .path
-                .extension()
-                .and_then(|x| x.to_str())
-                .is_some_and(|x| {
-                    ["jpg", "jpeg", "png", "gif", "webp", "bmp"]
-                        .iter()
-                        .any(|ext| x.eq_ignore_ascii_case(ext))
-                })
+            && crate::filetype::classify(&self.path).preview
+    }
+    pub fn artwork(&self) -> crate::artwork::Icon {
+        use crate::{
+            artwork::Icon,
+            filetype::{self, Category},
+        };
+        match self.kind {
+            Kind::Directory => Icon::Folder,
+            Kind::Link => Icon::Link,
+            Kind::Pipe | Kind::Socket | Kind::Device => Icon::Special,
+            Kind::Unknown => Icon::Error,
+            Kind::File => match filetype::classify(&self.path).category {
+                Category::Image => Icon::Image,
+                Category::Video => Icon::Video,
+                Category::Audio => Icon::Audio,
+                Category::Archive => Icon::Archive,
+                Category::Code => Icon::Code,
+                Category::Config => Icon::Config,
+                _ => Icon::File,
+            },
+        }
     }
 }
 
@@ -217,12 +219,8 @@ pub fn list(path: &Path, opts: &Options, need_mode: bool) -> Listing {
 pub fn write_text(
     out: &mut impl Write,
     entries: &[Entry],
-    opts: &Options,
     style: &crate::style::Style,
 ) -> io::Result<()> {
-    if opts.long {
-        return crate::metadata::write(out, entries, opts, style);
-    }
     for e in entries {
         style.write_name(out, e)?;
         writeln!(out)?;

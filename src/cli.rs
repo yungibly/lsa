@@ -79,7 +79,7 @@ Usage: lsa [OPTIONS] [PATH ...]
 
 Everyday options:
   -a, -A, --all          Include hidden entries (without . and ..)
-  -l, --long            Permissions, readable size, owner, local modification time
+  -l, --long            Readable details; tiny image previews on graphics terminals
   -h                    Human-readable sizes (the default); --bytes uses bytes
   -n                    Long listing with numeric uid/gid and link count
   -1, --oneline         One entry per line; no images
@@ -104,7 +104,7 @@ Appearance:
   --hyperlink           Make names clickable using OSC 8 links
 
 Images:
-  --grid                Request thumbnails even in a sparse mixed directory
+  --grid                Compact thumbnails and folder/file artwork for every tile
   --no-images           Text only; never open image contents
   --protocol=auto|kitty|none
                          Auto recognizes direct Ghostty/Kitty sessions
@@ -120,10 +120,11 @@ Images:
 Output always stays in terminal scrollback and returns to the shell. Image-heavy
 listings (at least half image candidates), small mixed listings, and individual
 images preview automatically. Work is sequential and capped at 8 MiB of image
-commands; remaining names print as compact text. No pager or input handling.
--l and -1 stay text. Pipes default to plain names, one per line; --grid never sends
-images to pipes. Unknown terminals and multiplexers use text. Preview failures are
-quiet and never hide names. Filenames are complete, with terminal controls escaped.
+commands / 256 placements, including artwork; remaining names print as compact text.
+No pager or input handling. -l uses one-row thumbnails; -1 and --no-images keep text.
+Pipes default to plain names, one per line; --grid never sends images to pipes.
+Unknown terminals and multiplexers use text. Preview failures are quiet and never
+hide names. Filenames are complete, with terminal controls escaped.
 
 Exit: 0 success (including closed pipes), 1 listing/output/cache-clear error,
 2 invalid options. See README.md for details and resource limits.

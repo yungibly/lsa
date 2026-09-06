@@ -20,9 +20,10 @@ To try it as `ls` in the current shell, from this checkout:
 alias ls="$PWD/target/release/lsa"
 ```
 
-The release binary is ready for local use. The new defaults have automated coverage
-on arm64 macOS; their appearance still needs a Ghostty check. Earlier inline image
-output was user-verified in Ghostty 1.3.1. See [compatibility](docs/compatibility.md)
+The release binary is ready for local use. The user passed the inline-only direction
+and supplied Ghostty feedback. The smaller tiles, built-in artwork and long-view
+miniatures have automated coverage and await a fresh terminal check. Earlier inline
+image output was user-verified in Ghostty 1.3.1. See [compatibility](docs/compatibility.md)
 and [installation](docs/install.md).
 
 ## Everyday behavior
@@ -34,7 +35,8 @@ and [installation](docs/install.md).
   Common `LS_COLORS` file-type and literal `*suffix` rules customize the palette;
   values are bounded and validated as SGR codes. `TERM=dumb` disables auto styling.
 - `-l` shows permissions, human-readable size, owner and local modification time.
-  `--header` labels the columns. `--bytes` uses exact sizes; `-n` adds numeric uid/gid
+  On graphics terminals, images get one-row miniatures beside their names without
+  making entries taller. `--no-images` keeps ordinary icons. `--header` labels the columns. `--bytes` uses exact sizes; `-n` adds numeric uid/gid
   and link count. `--fields=mode,size,modified` chooses a smaller set of details.
 - Names sort naturally: `photo2` before `photo10`, ignoring ASCII case with raw-byte
   tie breaks. Non-ASCII names retain byte ordering; this is not locale collation.
@@ -61,27 +63,42 @@ of an entry, and a failed preview never removes its name.
 On a direct Ghostty/Kitty terminal, previews are automatic when at least half the
 entries are image candidates, or when a mixed listing fits a single thumbnail row.
 A single image also previews automatically. `--grid` requests previews in a sparse
-mixed directory. `-1`, `-l`, `--no-images`, and `--protocol=none` keep text.
+mixed directory, including ones containing only folders or ordinary files.
+`-1`, `--no-images`, and `--protocol=none` keep text.
+
+Grid frames are **14 columns × 3 rows** at most; labels keep their wider columns,
+wrap completely, and have no duplicate font icon. Every tile has a thumbnail or
+built-in folder, file, media, link or error drawing. GIFs share the image category
+with PNG/JPEG; unsupported image formats get image artwork, and unknown extensions
+get a generic file icon/color. Artwork is generated from code and needs no font.
+
+Long view uses **3-column × 1-row** miniatures in a fixed gutter beside filenames.
+Ordinary entries retain their icons, and failures get error artwork. When the
+terminal is too narrow/short, output is redirected, or images are disabled, long
+view stays text. Long filenames can still wrap normally. Small thumbnails have
+smaller output payloads, but still require decoding the source image.
 
 Tall galleries print into scrollback. At most **16 previews are attempted by default**,
 shared across every operand. `--preview-limit=N` adjusts that up to 256. Once the
-attempt or byte budget is spent, the remaining entries print as compact text in the
-same order. Rows without image candidates stay compact. Small terminals, unsupported
+attempt, byte or placement budget is spent, the remaining entries print as compact
+text in the same order. A partially previewed grid row uses artwork for its remaining
+tiles; the next row becomes compact text. In long view, remaining entries keep the
+same aligned name gutter. Small terminals, unsupported
 terminals and multiplexers fall back to text; `--protocol=kitty` is an explicit
 protocol override, not a compatibility guarantee. No terminal queries or input reads.
 
 Static PNG/JPEG/GIF/WebP/BMP are supported, including JPEG EXIF orientation, aspect
 ratio preservation, transparency checkerboarding, and GIF's first canvas frame.
 Image symlinks can preview after verifying a bounded regular-file target. SVG/HEIC/
-AVIF receive image icons but currently use text fallbacks.
+AVIF receive image icons/artwork but currently have no content decoder.
 
 | Resource | Bound |
 | --- | --- |
 | Preview attempts | 16 default, 256 maximum; failures and cache hits count |
-| Image commands | 8 MiB per invocation, shared across operands |
+| Image commands | 8 MiB and 256 placements per invocation, including built-in artwork |
 | Source | 32 MiB, 16 million pixels, 16,384 pixels per axis |
 | Decoded image / decoder allocation | 64 MiB; decoder allocation bound is best effort |
-| Thumbnail | At most 320×240 pixels |
+| Thumbnail | Grid at most 320×240 pixels; long view at most 96×64 pixels |
 | Work in flight | One sequential decoder and thumbnail; no worker or queue |
 | Optional cache | 64 slots, under 20 MiB of file contents; no scans or hit writes |
 
@@ -112,7 +129,9 @@ cargo build --release --locked --examples --bins
 python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
+python3 tests/check_thumbnails.py
 python3 benchmarks/inline.py
+./target/release/examples/preview_sheet  # offline artwork QA PNG under target/
 python3 scripts/package.py
 ```
 

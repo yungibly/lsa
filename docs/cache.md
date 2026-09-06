@@ -20,13 +20,14 @@ the subsequent replacement-policy change has automated coverage. Linux is unveri
   count two errors. Disabled/unused caches report zeros. This flag is for measuring
   the experiment; normal successful listings remain quiet.
 - `--diagnose` reports the configured directory, namespace, slots, and byte cap
-  without opening storage. Text layouts, pipes, entries without preview candidates,
+  without opening storage. Text-only layouts, pipes, entries without preview candidates,
   and exhausted attempt/byte budgets do not initialize or access the cache.
 
 The cache object is invocation-local and shared across operands. Storage opens
 lazily on the first eligible, budgeted preview with a readable bounded source.
-Initialization failure is remembered for the invocation. Ordinary cache failures
-fall back to decoding; decoding failures keep the original entry and placeholder.
+Long-view miniatures use their own pixel geometry in the same cache keys. Built-in
+artwork never opens the cache. Initialization failure is remembered for the invocation. Ordinary cache failures
+fall back to decoding; decoding failures keep the original entry and show error artwork.
 
 ## Identity and records
 

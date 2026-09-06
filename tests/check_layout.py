@@ -48,15 +48,15 @@ def main():
         geometry = dict(cols=122, rows=40, pixels=(976, 680))
         for tty_input in [False, True]:
             auto = run([mixed], tty_input=tty_input, **geometry)
-            assert len(images(auto)) == 4
+            assert len(images(auto)) == 8
             assert auto == run(["--grid", mixed], **geometry)
             cases += 1
         for environment in [{}, {"NO_COLOR": "1"}]:
             decorated = run([mixed], decorated=True, environment=environment, **geometry)
-            assert len(images(decorated)) == 4 and "\uf0c1".encode() in decorated
+            assert len(images(decorated)) == 8 and "\uf0c1".encode() not in decorated
             # All fixture names are ASCII; each emitted Nerd icon is one cell.
             modeled = SGR.sub(b"", decorated).decode().replace("\uf0c1", "@").replace("\uf15b", "f").encode()
-            assert check_cursor(modeled, 122, 40, 39) == 4
+            assert check_cursor(modeled, 122, 40, 39) == 8
             if environment: assert not SGR.search(decorated)
             cases += 1
         (mixed / ".extra").touch()
@@ -67,7 +67,7 @@ def main():
             for args in [["--grid", flag], [flag, "--grid"]]:
                 assert run([*args, mixed], **geometry) == expected
                 cases += 1
-        assert len(images(run(["--preview-limit=3", mixed], **geometry))) == 3
+        assert len(images(run(["--preview-limit=3", mixed], **geometry))) == 5
         cases += 1
         diagnostic = run(["--diagnose", mixed], decorated=True, **geometry)
         assert b"layout=grid" in diagnostic and b"preview_candidates=4" in diagnostic
@@ -87,13 +87,13 @@ def main():
         for path in [one, one / "picture.png"]:
             for rows in [8, 15, 16, 40]:
                 data = run([path], rows=rows)
-                assert len(images(data)) == 1
-                assert check_cursor(data, 80, rows, rows - 1) == 1
+                assert len(images(data)) == (2 if path == one else 1)
+                assert check_cursor(data, 80, rows, rows - 1) == len(images(data))
                 cases += 1
         # Many file operands share the same row, rather than a grid per argument.
         data = run([mixed / f"image-{i}.png" for i in range(4)], **geometry)
         assert len(images(data)) == 4
-        assert b"\x1b[25G" in data and b"\x1b[73G" in data
+        assert b"\x1b[30G" in data and b"\x1b[78G" in data
         cases += 1
         diagnostic = run(["--diagnose", *[mixed / f"image-{i}.png" for i in range(4)]], **geometry)
         assert b"entries=4" in diagnostic and diagnostic.count(b"layout=grid") == 1
@@ -106,8 +106,8 @@ def main():
         data = run(["--grid", one], cols=12, rows=8)
         decoded = plain(data).decode()
         assert "👩‍💻" in decoded and "e\u0301" in decoded
-        assert len(images(data)) == 4
-        assert len(re.findall(rb"\x1b_Ga=T", data)) == 4
+        assert len(images(data)) == 5
+        assert len(re.findall(rb"\x1b_Ga=T", data)) == 5
         cases += 1
 
         styled = root / "styled"
@@ -174,7 +174,7 @@ def main():
     many = ROOT / "img-test/generated/many"
     for tty_input in [False, True]:
         data = run([many], cols=122, rows=40, tty_input=tty_input)
-        assert len(images(data)) == 16
+        assert len(images(data)) == 20
         labels = plain(data)
         for i in range(40): assert labels.count(f"image-{i:02}.png@".encode()) == 1
         # The budget's tail stays compact instead of producing 24 empty tiles.

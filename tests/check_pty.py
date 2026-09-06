@@ -39,6 +39,7 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
                              stdout=slave, stderr=subprocess.PIPE,
                              preexec_fn=foreground if tty_input else None)
     data = bytearray()
+    after = None
     try:
         while True:
             if time.perf_counter() - start > 15:
@@ -53,12 +54,19 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
                 if not chunk:
                     break
                 data.extend(chunk)
-            elif child.poll() is not None:
-                break
+            if child.poll() is not None and slave is not None:
+                try: after = termios.tcgetattr(slave)
+                except termios.error as error:
+                    if not tty_input or error.args[0] != errno.ENOTTY: raise
+                # Let the master report EOF/EIO only after every queued byte has
+                # been drained. Do not race a final write against child.poll().
+                os.close(slave)
+                slave = None
         code = child.wait(timeout=2)
         err = child.stderr.read()
         try:
-            assert before == termios.tcgetattr(slave), "terminal modes changed"
+            if slave is not None: after = termios.tcgetattr(slave)
+            if after is not None: assert before == after, "terminal modes changed"
         except termios.error as error:
             # macOS revokes the controlling PTY when its session leader exits.
             # Non-controlling trials still verify unchanged termios exactly.
@@ -71,10 +79,10 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
             child.wait()
         child.stderr.close()
         os.close(master)
-        os.close(slave)
+        if slave is not None: os.close(slave)
 
 
-def images(data):
+def images(data, *, pixels=False):
     decoded = []
     pending = bytearray()
     first = None
@@ -92,7 +100,7 @@ def images(data):
         pending.extend(base64.b64decode(match[2], validate=True))
         if control[b"m"] == b"0":
             assert len(pending) == int(first[b"s"]) * int(first[b"v"]) * 4
-            decoded.append(first)
+            decoded.append((first, bytes(pending)) if pixels else first)
             first = None
             pending.clear()
     assert first is None
@@ -151,27 +159,27 @@ def main():
             assert check_cursor(data, cols, rows, start) == 40
         runs += 1
     code, data, err, _ = capture(["--grid", "--preview-limit=2", many])
-    assert code == 0 and len(images(data)) == 2 and not err
+    assert code == 0 and len(images(data)) == 3 and not err
     text = CSI.sub(b"", APC.sub(b"", data))
     for i in range(40):
         assert f"image-{i:02}.png@".encode() in text
     runs += 1
-    # At 16x48 cells, 40 full tiles exceed the 8 MiB image-output cap.
-    code, data, err, _ = capture(["--grid", "--preview-limit=64", many], pixels=(1280, 1152))
+    # At 32x80 cells, 40 full tiles exceed the 8 MiB image-output cap.
+    code, data, err, _ = capture(["--grid", "--preview-limit=64", many], pixels=(2560, 1920))
     assert code == 0 and 0 < len(images(data)) < 40 and not err
     assert sum(len(m[0]) for m in APC.finditer(data)) <= 8 * 1024 * 1024
     runs += 1
     for args, env, cols, rows in [
-        (["--no-images"], {}, 80, 24), (["-1"], {}, 80, 24), (["-l"], {}, 80, 24),
+        (["--no-images"], {}, 80, 24), (["-1"], {}, 80, 24), (["-l", "--no-images"], {}, 80, 24),
         (["--protocol=none"], {}, 80, 24), ([], {"TMUX": "test"}, 80, 24),
         ([], {"TERM": "dumb", "TERM_PROGRAM": "unknown"}, 80, 24),
-        ([], {}, 11, 24), ([], {}, 80, 7),
+        ([], {}, 11, 24), ([], {}, 80, 5),
     ]:
         code, data, err, _ = capture(["--grid", *args, many], environment=env, cols=cols, rows=rows)
         assert code == 0 and b"\x1b" not in data and not err
         runs += 1
     code, data, err, _ = capture(["--grid", ROOT / "img-test/generated"])
-    assert code == 0 and len(images(data)) == 9 and not err, err
+    assert code == 0 and len(images(data)) == 15 and not err, err
     runs += 1
     with tempfile.TemporaryDirectory(dir=ROOT / "target", prefix="pty-inputs-") as temp:
         temp = Path(temp)
@@ -181,7 +189,7 @@ def main():
         os.mkfifo(temp / "fifo.png")
         (temp / "linked-fifo.png").symlink_to("fifo.png")
         code, data, err, _ = capture(["--grid", temp])
-        assert code == 0 and not images(data) and not err, err
+        assert code == 0 and len(images(data)) == 3 and not err, err
         assert b"fifo.png|" in data and b"oversized.png" in data
         runs += 1
     print(f"{runs} PTY checks passed; frames, budgets, fallback, cursor bounds, modes, and special files. Visual rendering unverified.")

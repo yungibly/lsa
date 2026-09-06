@@ -1,47 +1,42 @@
 # Roadmap
 
-Updated 2026-09-05. The product reset supersedes the pager direction.
+Updated 2026-09-06. Print into scrollback, return to the shell, keep one mixed
+ordering and complete names. No pager or file browser.
 
-## Current product
+## Current change — thumbnail presentation
 
-A familiar `ls` replacement: compact, colored, icon-decorated terminal text with
-readable details and automatic inline image previews. Always print and exit;
-leave scrollback and input to the terminal/shell. Keep one mixed ordering, complete
-names, graceful fallback, and bounded preview work.
+The user passed the inline-only direction and supplied a Ghostty screenshot showing
+oversized image tiles, nearly empty folder tiles and redundant/unhelpful filename
+icons. This change addresses that feedback:
 
-## Implemented
+- Grid image frames shrink from 22×5 to at most 14×3 cells at the reported geometry.
+  Wider label columns remain; names center beneath frames and wrap completely.
+- Every grid entry gets pixels: source thumbnail or built-in folder/file/media/link/
+  error artwork. Grid labels no longer repeat font icons. Unknown types get a generic
+  file icon/color; case-insensitive image classification is shared with the decoder.
+- Long view uses one-row, 3-cell-wide miniatures in an aligned name gutter. Ordinary
+  entries retain icons, failures get error artwork, and exhausted budgets retain the
+  same alignment. Narrow/short terminals, pipes, -1 and --no-images use text.
+- Built-in drawings are code-native and font-independent. All graphics count against
+  8 MiB and 256 placements across operands; source attempts still default to 16.
+  Artwork never uses decoder/cache work. All names survive every fallback.
+- Tests cover visible artwork, tiny preview pixels, actual cursor/row replay, mixed
+  alignment, GIF/unknown types, budget sharing and cache geometry. Offline light/dark
+  artwork inspection supplements byte tests; it is not a real-terminal pass.
 
-- Removed the pager, selection/inspection UI, input handling, terminal lifecycle,
-  worker/viewport scheduling, pager tests and its active documentation.
-- Added automatic palette colors, bounded safe LS_COLORS rules, Nerd icons in
-  Ghostty and portable symbols elsewhere, overrides, and opt-in OSC 8 hyperlinks.
-- Added natural filename sorting, unsorted mode, familiar -d/-F/-n controls,
-  readable sizes/owners by default, optional headings and selected metadata.
-- Made directory symlink operands familiar to ls users; grouped consecutive file
-  operands so globs share a layout and long columns align.
-- Preview single images, small mixed lists and image-heavy directories automatically.
-  Tall galleries print inline; 16 default attempts and 8 MiB image commands across
-  operands, then complete compact text. Failures are quiet; no hidden entries.
-- Retained the bounded decoder, anonymous inline Kitty framing, and opt-in fixed-slot
-  cache. No new dependencies, workers, implicit storage or config system.
-- Kept the plain text fast path free of decoration stats; styled listings retain
-  only executable bits. Added bounded account-name and exact timestamp caches.
-- Rewrote product/installation/decision/handoff docs and added paired application
-  measurements for the new defaults. Historical reports are labeled separately.
+## Verification and next task
 
-## Verified and next task
+38 unit and 12 CLI tests, 108 PTY scenarios, strict clippy, formatting, release build
+and extracted-package smoke checks pass. Paired measurements show 52.2% fewer
+graphics bytes for the mixed grid and unchanged plain pipe output/cost; uncached
+long-view miniatures still incur source decoding. See
+[compatibility](docs/compatibility.md), [benchmarks](benchmarks/README.md) and
+[handoff](HANDOFF.md). The user handles Ghostty visual verification.
 
-The Rust/CLI, protocol, foreground-TTY, inline layout/style and cache suites pass on
-arm64 macOS. Formatting, strict clippy, release build and local package smoke checks
-pass. See [compatibility](docs/compatibility.md) for exact scope and
-[measurements](benchmarks/README.md) for performance conditions.
+**Next:** check the smaller gallery and long-view miniatures in Ghostty, particularly
+folder/error recognizability, filenames wrapping, scrollback and long-row alignment.
+Then verify Linux packages and the declared Rust 1.88 minimum in suitable environments.
+Earlier terminal passes do not verify this new placement/presentation.
 
-**Next:** use the new defaults in Ghostty and act on concrete feedback about icon
-alignment, readability, thumbnail density, scrollback placement and ordinary alias
-usage. The user handles visual checks. Earlier inline passes do not verify this
-new presentation. Then verify Linux builds/packages and the declared Rust 1.88 minimum
-in suitable environments. No public release is implied by the host archive.
-
-Keep cache policy opt-in until daily use justifies a change. Add formats or decoder
-concurrency only for demonstrated needs. No browsing, file operations, Git scans,
-recursive trees, services or plugin system are planned.
+Keep cache policy opt-in. No recursive trees, Git scans, file operations, services or
+plugin system are planned. Add formats/concurrency only from demonstrated needs.

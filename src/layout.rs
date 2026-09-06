@@ -61,14 +61,14 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
         return text("terminal too small for grid");
     };
     let candidates = entries.iter().filter(|e| e.candidate()).count();
-    if candidates == 0 {
-        return text("no preview candidates");
-    }
     if opts.grid {
         return Choice {
             layout: Layout::Grid(geometry),
             reason: "grid requested",
         };
+    }
+    if candidates == 0 {
+        return text("no preview candidates");
     }
     if candidates >= entries.len().div_ceil(2) || entries.len() <= geometry.columns {
         Choice {

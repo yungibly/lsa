@@ -2,6 +2,7 @@ use crate::{
     cli::{Options, When},
     display::escape,
     entry::{Entry, Kind},
+    filetype::{self, Category},
     terminal::Terminal,
 };
 use std::{
@@ -82,47 +83,6 @@ impl Style {
         self.color || self.icons != Icons::None || self.classify
     }
 
-    fn category(entry: &Entry) -> &'static str {
-        let extension = entry
-            .path
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-        let is = |extensions: &[&str]| extensions.iter().any(|s| extension.eq_ignore_ascii_case(s));
-        if is(&[
-            "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "avif", "heic", "tif", "tiff", "ico",
-        ]) {
-            "image"
-        } else if is(&["mp4", "mov", "mkv", "webm", "avi", "m4v"]) {
-            "video"
-        } else if is(&["mp3", "wav", "flac", "ogg", "m4a", "aac", "aiff"]) {
-            "audio"
-        } else if is(&[
-            "zip", "gz", "xz", "bz2", "zst", "tar", "7z", "rar", "dmg", "iso",
-        ]) {
-            "archive"
-        } else if is(&[
-            "rs", "py", "js", "ts", "tsx", "jsx", "go", "c", "h", "cpp", "hpp", "swift", "rb",
-            "java", "sh", "bash", "zsh", "html", "css", "sql",
-        ]) {
-            "code"
-        } else if is(&["json", "toml", "yaml", "yml", "xml", "ini", "conf", "lock"])
-            || entry.name == ".gitignore"
-            || entry.name == "Makefile"
-            || entry.name == "Dockerfile"
-        {
-            "config"
-        } else if is(&[
-            "md", "txt", "pdf", "doc", "docx", "rtf", "csv", "xlsx", "log",
-        ]) || entry.name == "LICENSE"
-            || entry.name == "README"
-        {
-            "document"
-        } else {
-            "file"
-        }
-    }
-
     pub fn icon(&self, entry: &Entry) -> &'static str {
         let nerd = self.icons == Icons::Nerd;
         match entry.kind {
@@ -162,28 +122,31 @@ impl Style {
                 }
             }
             Kind::Unknown => "?",
-            Kind::File if entry.executable => {
+            Kind::File
+                if entry.executable
+                    && filetype::classify(&entry.path).category == Category::File =>
+            {
                 if nerd {
                     "\u{f489}"
                 } else {
                     "*"
                 }
             }
-            Kind::File => match (Self::category(entry), nerd) {
-                ("image", true) => "\u{f1c5}",
-                ("image", false) => "▧",
-                ("video", true) => "\u{f1c8}",
-                ("video", false) => "▷",
-                ("audio", true) => "\u{f001}",
-                ("audio", false) => "♪",
-                ("archive", true) => "\u{f1c6}",
-                ("archive", false) => "▣",
-                ("code", true) => "\u{f121}",
-                ("code", false) => "λ",
-                ("config", true) => "\u{e615}",
-                ("config", false) => "≡",
-                ("document", true) => "\u{f15c}",
-                ("document", false) => "≡",
+            Kind::File => match (filetype::classify(&entry.path).category, nerd) {
+                (Category::Image, true) => "\u{f1c5}",
+                (Category::Image, false) => "▧",
+                (Category::Video, true) => "\u{f1c8}",
+                (Category::Video, false) => "▷",
+                (Category::Audio, true) => "\u{f001}",
+                (Category::Audio, false) => "♪",
+                (Category::Archive, true) => "\u{f1c6}",
+                (Category::Archive, false) => "▣",
+                (Category::Code, true) => "\u{f121}",
+                (Category::Code, false) => "λ",
+                (Category::Config, true) => "\u{e615}",
+                (Category::Config, false) => "≡",
+                (Category::Document, true) => "\u{f15c}",
+                (Category::Document, false) => "≡",
                 (_, true) => "\u{f15b}",
                 (_, false) => "·",
             },
@@ -191,17 +154,20 @@ impl Style {
     }
 
     pub fn label(&self, entry: &Entry) -> String {
-        if self.icons == Icons::None && !self.classify {
-            return escape(&entry.name);
+        let name = self.name(entry);
+        if self.icons == Icons::None {
+            name
+        } else {
+            format!("{} {name}", self.icon(entry))
         }
-        let mut label = String::new();
-        if self.icons != Icons::None {
-            label.push_str(self.icon(entry));
-            label.push(' ');
-        }
-        label.push_str(&escape(&entry.name));
+    }
+
+    /// Names below a thumbnail retain classification and links, without a
+    /// redundant font glyph. Long-view thumbnails use the same text path.
+    pub fn name(&self, entry: &Entry) -> String {
+        let mut name = escape(&entry.name);
         if self.classify {
-            label.push_str(match entry.kind {
+            name.push_str(match entry.kind {
                 Kind::Directory => "/",
                 Kind::Link => "@",
                 Kind::Pipe => "|",
@@ -210,7 +176,7 @@ impl Style {
                 _ => "",
             });
         }
-        label
+        name
     }
 
     fn code<'a>(&'a self, entry: &Entry) -> &'a str {
@@ -221,7 +187,12 @@ impl Style {
             Kind::Socket => ("so", "35"),
             Kind::Device => ("bd", "33"),
             Kind::Unknown => ("fi", "31"),
-            Kind::File if entry.executable => ("ex", "32"),
+            Kind::File
+                if entry.executable
+                    && filetype::classify(&entry.path).category == Category::File =>
+            {
+                ("ex", "32")
+            }
             Kind::File => {
                 if let Some(name) = entry.name.to_str() {
                     for (suffix, color) in self.suffixes.iter().rev() {
@@ -232,12 +203,12 @@ impl Style {
                 }
                 (
                     "fi",
-                    match Self::category(entry) {
-                        "image" | "video" | "audio" => "35",
-                        "archive" => "31",
-                        "code" => "36",
-                        "config" => "33",
-                        _ => "",
+                    match filetype::classify(&entry.path).category {
+                        Category::Image | Category::Video | Category::Audio => "35",
+                        Category::Archive => "31",
+                        Category::Code => "36",
+                        Category::Config => "33",
+                        _ => "37",
                     },
                 )
             }
