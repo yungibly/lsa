@@ -34,7 +34,8 @@ struct Signals {
 
 impl Signals {
     fn install() -> io::Result<Self> {
-        // This CLI has one thread. Block managed signals during work, then
+        // Install before the optional preview worker starts. Block managed signals
+        // in this thread during work (the worker inherits that mask), then
         // atomically unblock them in pselect: no check-then-sleep wakeup race,
         // polling timer, self-pipe, or work inside the handlers.
         unsafe {
@@ -44,8 +45,9 @@ impl Signals {
                 libc::sigaddset(&mut set, signal);
             }
             let mut mask = MaybeUninit::<libc::sigset_t>::uninit();
-            if libc::sigprocmask(libc::SIG_BLOCK, &set, mask.as_mut_ptr()) != 0 {
-                return Err(io::Error::last_os_error());
+            let error = libc::pthread_sigmask(libc::SIG_BLOCK, &set, mask.as_mut_ptr());
+            if error != 0 {
+                return Err(io::Error::from_raw_os_error(error));
             }
             let mask = mask.assume_init();
             let mut guard = Self {
@@ -77,7 +79,7 @@ impl Drop for Signals {
             for (signal, action) in &self.actions {
                 libc::sigaction(*signal, action, std::ptr::null_mut());
             }
-            libc::sigprocmask(libc::SIG_SETMASK, &self.mask, std::ptr::null_mut());
+            libc::pthread_sigmask(libc::SIG_SETMASK, &self.mask, std::ptr::null_mut());
         }
     }
 }
@@ -85,6 +87,7 @@ impl Drop for Signals {
 pub enum Event {
     Input(usize),
     Redraw,
+    Preview,
     Suspend,
     Exit(u8),
     Timeout,
@@ -92,6 +95,7 @@ pub enum Event {
 
 pub struct Session<'a, W: Write> {
     pub out: &'a mut W,
+    pub graphics: crate::browser_graphics::Screen,
     original: libc::termios,
     input: File,
     active: bool,
@@ -149,6 +153,7 @@ impl<'a, W: Write> Session<'a, W> {
         }
         let mut session = Self {
             out,
+            graphics: crate::browser_graphics::Screen::default(),
             original: unsafe { original.assume_init() },
             input,
             active: false,
@@ -177,15 +182,16 @@ impl<'a, W: Write> Session<'a, W> {
             return Ok(());
         }
         // Restore termios even if output/flush fails; retry in Drop on error.
+        let cleanup = self.graphics.clear(self.out);
         let output = self
             .out
             .write_all(b"\x1b[0m\x1b[?2004l\x1b[?25h\x1b[?1049l")
             .and_then(|()| self.out.flush());
         let attributes = set_attributes(&self.original);
-        if output.is_ok() && attributes.is_ok() {
+        if cleanup.is_ok() && output.is_ok() && attributes.is_ok() {
             self.active = false;
         }
-        output.and(attributes)
+        cleanup.and(output).and(attributes)
     }
 
     pub fn suspend(&mut self) -> io::Result<()> {
@@ -199,7 +205,12 @@ impl<'a, W: Write> Session<'a, W> {
         self.activate()
     }
 
-    pub fn wait(&self, buffer: &mut [u8], timeout: Option<Duration>) -> io::Result<Event> {
+    pub fn wait(
+        &self,
+        buffer: &mut [u8],
+        timeout: Option<Duration>,
+        preview_fd: Option<libc::c_int>,
+    ) -> io::Result<Event> {
         loop {
             let pending = PENDING.swap(0, Ordering::Relaxed);
             for (i, signal) in SIGNALS.iter().enumerate().take(5).skip(1) {
@@ -221,12 +232,15 @@ impl<'a, W: Write> Session<'a, W> {
                 let mut fds = MaybeUninit::<libc::fd_set>::zeroed().assume_init();
                 libc::FD_ZERO(&mut fds);
                 libc::FD_SET(fd, &mut fds);
+                if let Some(preview) = preview_fd {
+                    libc::FD_SET(preview, &mut fds);
+                }
                 let deadline = timeout.map(|t| libc::timespec {
                     tv_sec: t.as_secs() as libc::time_t,
                     tv_nsec: t.subsec_nanos().into(),
                 });
                 let result = libc::pselect(
-                    fd + 1,
+                    fd.max(preview_fd.unwrap_or(fd)) + 1,
                     &mut fds,
                     std::ptr::null_mut(),
                     std::ptr::null_mut(),
@@ -246,6 +260,11 @@ impl<'a, W: Write> Session<'a, W> {
                 }
                 if result == 0 {
                     return Ok(Event::Timeout);
+                }
+                // Input wins over completions when both are ready, so viewport
+                // changes can invalidate results before they are displayed.
+                if !libc::FD_ISSET(fd, &fds) {
+                    return Ok(Event::Preview);
                 }
                 let n = libc::read(fd, buffer.as_mut_ptr().cast(), buffer.len());
                 if n < 0 {
@@ -282,20 +301,4 @@ fn set_attributes(attributes: &libc::termios) -> io::Result<()> {
             return Err(error);
         }
     }
-}
-
-pub fn size() -> (usize, usize) {
-    let mut size = MaybeUninit::<libc::winsize>::zeroed();
-    // SAFETY: ioctl writes into valid storage, read only on success.
-    if unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, size.as_mut_ptr()) } == 0 {
-        let size = unsafe { size.assume_init() };
-        if size.ws_col > 0 && size.ws_row > 0 {
-            // Bound each redraw even when the terminal reports extreme geometry.
-            return (
-                usize::from(size.ws_col).min(512),
-                usize::from(size.ws_row).min(256),
-            );
-        }
-    }
-    (80, 24)
 }

@@ -55,7 +55,7 @@ Usage: lsa [OPTIONS] [PATH ...]
   -r                     Reverse the selected order
   --dirs-first           Directories first; -r reverses within each group
   --grid                 Mixed-entry thumbnail grid on a graphics terminal
-  --browse               Text browser for one directory; requires stdin/stdout TTY
+  --browse               Browser for one directory; requires stdin/stdout TTY
   --no-images            Compact text only; never open image contents
   --protocol=auto|kitty|none
                          Auto recognizes direct Ghostty/Kitty sessions
@@ -82,8 +82,12 @@ Browser: arrows or j/k move; PgUp/PgDn page; Home/End or g/G jump;
 Enter/right/l enters a directory; left/h/Backspace returns or goes to the parent;
 Space shows the full name/path (scroll with arrows/pages, Esc closes); r refreshes;
 q or Ctrl-D quits; Ctrl-C exits with 130; Ctrl-Z suspends with terminal restored.
-Sorting and hidden flags apply. Browser currently shows names only, without images
-or cache access. It cannot combine with -l, --fields, -1, --grid, --diagnose,
+Sorting and hidden flags apply. Kitty/Ghostty sessions preview the mixed viewport;
+--no-images/--protocol=none keep the text browser. One decoder, up to 32 visible
+images plus two prefetched thumbnails, and the same per-session attempt/byte caps.
+Images are deleted by session image number on navigation/resize/exit; inline images
+remain separate. Optional cache settings apply. Browser cannot combine with
+-l, --fields, -1, --grid, --diagnose,
 --clear-cache, or multiple paths. Redirected --browse fails without reading stdin.
 ";
 

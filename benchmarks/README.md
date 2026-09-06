@@ -1,5 +1,52 @@
 # Application measurements
 
+## Browser previews: 2026-09-05
+
+[Saved results](browser.json), same macOS arm64 host and Rust 1.98.0 release build.
+Browser geometry is 122×40 at 8×17 pixels/cell (176×85 thumbnail canvases). The normal
+fixture is the unchanged four user images plus `generated/`. Nine fresh measured
+processes follow two warmups for each case; OS cache is warm, not flushed. Thumbnail
+storage is off, empty before each process, or primed separately as shown.
+
+| Four-image browser | Names ready | First preview | All previews | Child CPU | Peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cache off | 3.33 ms | 4.94 ms | 78.86 ms | 68.68 ms | 31.39 MiB |
+| Cache empty | 2.82 ms | 4.63 ms | 78.54 ms | 68.82 ms | 31.41 MiB |
+| Cache warm | 2.68 ms | 4.15 ms | 12.31 ms | 2.49 ms | 2.31 MiB |
+
+Times are medians measured at a drained controlling PTY, **without a renderer**.
+Names readiness means the first complete text frame has arrived; previews mean
+complete Kitty transmission bytes, not visible images. The first candidate is a
+small GIF; its early result does not represent the expensive JPEG's decode time.
+All four images fit this viewport. Image payload equivalence between empty/warm
+storage is tested separately, with completed cache counts of 4 misses versus 4 hits
+in these full-view samples. Randomized image-number lengths make command byte
+counts vary slightly (~324.8 KB). A text-browser control reports 4.28 ms names,
+2.79 ms child CPU, and 1.86 MiB RSS; do not infer a text regression from the ordering
+of these small samples and differing harnesses.
+
+A separate input fixture links the unchanged 2924×1932 user JPEG and adds a plain
+marker. Input is sent 10 ms after names appear, before any preview completes.
+Selection (`G`) arrives in a median **0.035 ms**, and a direct quit emits restoration
+bytes in **0.034 ms**. Child CPU reaches about 12–13 ms in these trials, consistent
+with active decoding before process exit. Tests with a deliberately blocked loader
+independently prove that stale results are discarded and worker drop does not join.
+The timing trial is a responsiveness sample, not a hard decode/transport deadline.
+
+Clock starts before PTY setup and process creation. Incremental command parsing
+avoids repeatedly scanning the full image stream; read timestamps still include
+Python drain/scheduling overhead. The quit endpoint is observed cleanup/alternate-
+screen exit bytes; process exit and restored termios are checked separately. Child
+user+system CPU and peak RSS come from `wait4`, include the worker, and exclude the
+Python reader. Wall time also includes PTY transport/wakeups and is not comparable
+to terminal rendering cost. No cold-filesystem, terminal-memory, or GUI comparison.
+
+Reproduce with `python3 benchmarks/browser.py`. It writes only
+`benchmarks/local/browser.json` and its own ignored cache/fixture. The committed
+report remains unchanged and records the measured release SHA-256 and 1,364,656-byte
+binary. Browser tests also verify no redraws after work settles; the text control
+idle trial consumed ~2.6 ms child CPU including startup/quit during a 1-second wait.
+
 ## Cache working sets: 2026-09-05 follow-up
 
 [Saved comparison](cache-working-set.json), same M4 / 16 GiB host and Rust 1.98.0.

@@ -1,6 +1,8 @@
-//! A text-only, explicit browser. Entries are shared with inline output; screen
+//! An explicit browser. Entries are shared with inline output; screen
 //! ownership, input, and restoration belong exclusively to this session.
 use crate::{
+    browser_graphics::{Geometry, IMAGE_ROWS},
+    browser_previews::{Previews, View},
     browser_terminal::{self, Event, Session},
     cli::Options,
     display,
@@ -170,6 +172,8 @@ struct Browser<'a> {
     history: VecDeque<Visit>,
     detail: Option<Detail>,
     message: String,
+    revision: u64,
+    has_candidates: bool,
 }
 
 fn read_directory(path: &Path, opts: &Options) -> io::Result<entry::Listing> {
@@ -207,6 +211,8 @@ impl<'a> Browser<'a> {
             history: VecDeque::new(),
             detail: None,
             message: String::new(),
+            revision: 0,
+            has_candidates: false,
         };
         browser.install(listing, None);
         Ok(browser)
@@ -221,12 +227,14 @@ impl<'a> Browser<'a> {
     }
 
     fn install(&mut self, listing: entry::Listing, position: Option<&Position>) {
+        self.revision += 1;
         self.message = if let Some(error) = listing.errors.first() {
             format!("{} listing error(s): {error}", listing.errors.len())
         } else {
             String::new()
         };
         self.entries = listing.entries;
+        self.has_candidates = self.entries.iter().any(Entry::candidate);
         self.selected = position
             .map_or(0, |p| {
                 self.entries
@@ -270,6 +278,27 @@ impl<'a> Browser<'a> {
         self.path = path;
         self.install(listing, None);
         Ok(())
+    }
+
+    fn fit_view(&mut self, geometry: Option<Geometry>, rows: usize) {
+        if let Some(g) = geometry {
+            let selected_row = self.selected / g.columns;
+            let mut top_row = (self.top / g.columns).min(
+                self.entries
+                    .len()
+                    .div_ceil(g.columns)
+                    .saturating_sub(g.lines),
+            );
+            if selected_row < top_row {
+                top_row = selected_row;
+            }
+            if selected_row >= top_row + g.lines {
+                top_row = selected_row + 1 - g.lines;
+            }
+            self.top = top_row * g.columns;
+        } else {
+            self.keep_visible(rows.saturating_sub(3).max(1));
+        }
     }
 
     fn parent(&mut self) -> io::Result<()> {
@@ -346,15 +375,32 @@ impl<'a> Browser<'a> {
         Ok(())
     }
 
-    fn render(&mut self, out: &mut impl Write, cols: usize, rows: usize) -> io::Result<()> {
-        out.write_all(b"\x1b[0m\x1b[2J\x1b[H")?;
+    fn render(
+        &mut self,
+        out: &mut impl Write,
+        cols: usize,
+        rows: usize,
+        geometry: Option<Geometry>,
+        previews: &Previews,
+        available: usize,
+    ) -> io::Result<()> {
+        if geometry.is_some() {
+            // ED(2) clears graphics too. Erase only text, leaving owned placements
+            // intact until the viewport manager moves/deletes them explicitly.
+            out.write_all(b"\x1b[0m\x1b[H")?;
+            for row in 1..=rows {
+                write!(out, "\x1b[{row};1H\x1b[2K")?;
+            }
+        } else {
+            out.write_all(b"\x1b[0m\x1b[2J\x1b[H")?;
+        }
         let width = cols.saturating_sub(1);
         if cols < 12 || rows < 5 {
             line(out, 1, "Resize to at least 12x5; q quits", width, false)?;
             return out.flush();
         }
         let height = rows - 3;
-        self.keep_visible(height);
+        self.fit_view(geometry, rows);
         let header = format!("lsa  {}", display::escape(self.path.as_os_str()));
         line(out, 1, &header, width, false)?;
         if let Some(detail) = &mut self.detail {
@@ -381,10 +427,27 @@ impl<'a> Browser<'a> {
             if self.entries.is_empty() {
                 line(out, 2, "(empty directory)", width, false)?;
             }
-            for (i, entry) in self.entries.iter().enumerate().skip(self.top).take(height) {
+            for (i, entry) in self
+                .entries
+                .iter()
+                .enumerate()
+                .skip(self.top)
+                .take(geometry.map_or(height, Geometry::capacity))
+            {
                 let selected = i == self.selected;
                 let text = format!("{}{}", if selected { "> " } else { "  " }, entry.label());
-                line(out, i - self.top + 2, &text, width, selected)?;
+                if let Some(g) = geometry {
+                    let (row, col) = g.position(i - self.top);
+                    let placeholder = if entry.candidate() {
+                        previews.placeholder(i, available)
+                    } else {
+                        entry.kind.label()
+                    };
+                    cell(out, row + 2, col, placeholder, g.tile - 2, false)?;
+                    cell(out, row + IMAGE_ROWS, col, &text, g.tile - 2, selected)?;
+                } else {
+                    line(out, i - self.top + 2, &text, width, selected)?;
+                }
             }
             let status = if self.message.is_empty() {
                 format!(
@@ -433,7 +496,18 @@ fn line(
     width: usize,
     selected: bool,
 ) -> io::Result<()> {
-    write!(out, "\x1b[{row};1H")?;
+    cell(out, row, 1, text, width, selected)
+}
+
+fn cell(
+    out: &mut impl Write,
+    row: usize,
+    col: usize,
+    text: &str,
+    width: usize,
+    selected: bool,
+) -> io::Result<()> {
+    write!(out, "\x1b[{row};{col}H")?;
     if selected {
         out.write_all(b"\x1b[7m")?;
     }
@@ -472,30 +546,76 @@ fn detail_lines(text: &str, width: usize) -> Vec<String> {
     result
 }
 
+fn terminal_geometry(opts: &Options) -> ((usize, usize), Option<Geometry>) {
+    let term = crate::terminal::Terminal::detect(opts);
+    (
+        (term.cols.min(512), term.rows.min(256)),
+        Geometry::new(&term),
+    )
+}
+
 pub fn run(opts: &Options, out: &mut impl Write) -> io::Result<u8> {
     browser_terminal::validate()?;
     let mut browser = Browser::new(opts)?;
     let mut session = Session::enter(out)?;
+    let mut previews = Previews::new(opts.preview_limit, opts.cache_path().map(Path::to_path_buf));
     let mut input = Input::default();
     let mut buffer = [0; 256];
-    let mut size = browser_terminal::size();
+    let (mut size, mut base_geometry) = terminal_geometry(opts);
     let mut dirty = true;
     let code = 'events: loop {
+        let geometry = base_geometry.filter(|_| browser.detail.is_none() && browser.has_candidates);
+        browser.fit_view(geometry, size.1);
         if dirty {
-            browser.render(session.out, size.0, size.1)?;
-            dirty = false;
+            let view = geometry.map(|geometry| View {
+                revision: browser.revision,
+                geometry,
+                range: browser.top..(browser.top + geometry.capacity()).min(browser.entries.len()),
+            });
+            previews.sync(
+                view,
+                browser.entries.len(),
+                &mut session.graphics,
+                session.out,
+            )?;
+            browser.render(
+                session.out,
+                size.0,
+                size.1,
+                geometry,
+                &previews,
+                session.graphics.remaining(),
+            )?;
+            dirty = previews.paint(&mut session.graphics, session.out)?;
+            session.out.write_all(b"\x1b[0m")?;
+            session.out.flush()?;
+            dirty |= previews.schedule(
+                &browser.entries,
+                browser.selected,
+                session.graphics.remaining(),
+            );
+        }
+        if dirty {
+            continue;
         }
         let mut keys = Vec::new();
-        match session.wait(&mut buffer, input.timeout())? {
+        match session.wait(&mut buffer, input.timeout(), previews.fd())? {
             Event::Exit(code) => break code,
             Event::Suspend => {
+                previews.invalidate(&mut session.graphics, session.out)?;
                 session.suspend()?;
-                size = browser_terminal::size();
+                (size, base_geometry) = terminal_geometry(opts);
+                input = Input::default();
                 dirty = true;
                 continue;
             }
             Event::Redraw => {
-                size = browser_terminal::size();
+                (size, base_geometry) = terminal_geometry(opts);
+                dirty = true;
+                continue;
+            }
+            Event::Preview => {
+                previews.complete();
                 dirty = true;
                 continue;
             }
@@ -511,15 +631,18 @@ pub fn run(opts: &Options, out: &mut impl Write) -> io::Result<u8> {
                 Key::Quit => break 'events 0,
                 Key::Interrupt => break 'events 130,
                 Key::Suspend => {
+                    previews.invalidate(&mut session.graphics, session.out)?;
                     session.suspend()?;
-                    size = browser_terminal::size();
+                    (size, base_geometry) = terminal_geometry(opts);
+                    input = Input::default();
                 }
                 _ => {
-                    if let Err(error) = browser.key(
-                        key,
-                        size.0.saturating_sub(1).max(1),
-                        size.1.saturating_sub(3).max(1),
-                    ) {
+                    let page = if browser.detail.is_some() {
+                        size.1.saturating_sub(3).max(1)
+                    } else {
+                        geometry.map_or(size.1.saturating_sub(3).max(1), Geometry::capacity)
+                    };
+                    if let Err(error) = browser.key(key, size.0.saturating_sub(1).max(1), page) {
                         browser.message = format!("Cannot navigate/refresh: {error}");
                     }
                 }
@@ -527,7 +650,19 @@ pub fn run(opts: &Options, out: &mut impl Write) -> io::Result<u8> {
             dirty = true;
         }
     };
+    let stats = previews.stats;
+    drop(previews); // Stop scheduling before restoring the terminal; never join a decode.
     session.restore()?;
+    if opts.cache_stats {
+        let _ = writeln!(
+            io::stderr().lock(),
+            "lsa: cache: {} hits, {} misses, {} writes, {} errors",
+            stats.hits,
+            stats.misses,
+            stats.writes,
+            stats.errors
+        );
+    }
     Ok(code)
 }
 
@@ -591,6 +726,8 @@ mod tests {
             history: VecDeque::new(),
             detail: None,
             message: String::new(),
+            revision: 0,
+            has_candidates: false,
         };
         browser.install(make(&["a", "b", "c", "d", "e"]), None);
         browser.key(Key::End, 80, 2).unwrap();

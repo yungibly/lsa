@@ -63,7 +63,7 @@ impl Key {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Stats {
     pub hits: usize,
     pub misses: usize,

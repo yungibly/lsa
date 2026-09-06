@@ -19,19 +19,21 @@ import tempfile
 import termios
 import time
 
-from check_pty import ROOT, BIN, capture
+from check_pty import ROOT, BIN, APC, capture
 
 CSI = re.compile(rb"\x1b\[([?0-9;]*)([A-Za-z])")
 ENTER = b"\x1b[?1049h"
 LEAVE = b"\x1b[0m\x1b[?2004l\x1b[?25h\x1b[?1049l"
 FRAME = b"\x1b[0m\x1b[2J\x1b[H"
+GRID_FRAME = b"\x1b[0m\x1b[H"
 
 
 class Browser:
-    def __init__(self, path, *options, cols=100, rows=12, environment=None):
+    def __init__(self, path, *options, cols=100, rows=12, environment=None, graphics=False, pixels=(0, 0)):
         self.master, self.slave = pty.openpty()
         self.cols, self.rows = cols, rows
-        self.resize(cols, rows, notify=False)
+        self.graphics = graphics
+        self.resize(cols, rows, notify=False, pixels=pixels)
         self.before = termios.tcgetattr(self.slave)
         self.before_flags = fcntl.fcntl(self.slave, fcntl.F_GETFL)
         self.data = bytearray()
@@ -41,10 +43,12 @@ class Browser:
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
         env = os.environ.copy()
+        for name in ["TMUX", "STY", "ZELLIJ"]:
+            env.pop(name, None)
         env.update(TERM="xterm-ghostty", TERM_PROGRAM="ghostty")
         env.update(environment or {})
         self.child = subprocess.Popen(
-            [str(BIN), "--browse", *map(str, options), str(path)], cwd=ROOT,
+            [str(BIN), "--browse", *([] if graphics else ["--no-images"]), *map(str, options), str(path)], cwd=ROOT,
             stdin=self.slave, stdout=self.slave, stderr=subprocess.PIPE,
             env=env, preexec_fn=foreground,
         )
@@ -80,8 +84,9 @@ class Browser:
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             result.extend(self.read())
-            if FRAME in result and result.endswith(b"\x1b[0m"):
-                assert b"\x1b_G" not in result, "text browser emitted image commands"
+            if (FRAME in result or GRID_FRAME in result) and result.endswith(b"\x1b[0m"):
+                if not self.graphics:
+                    assert b"\x1b_G" not in result, "text browser emitted image commands"
                 return bytes(result)
             if self.child.poll() is not None:
                 raise AssertionError((self.child.returncode, self.child.stderr.read(), result))
@@ -91,14 +96,15 @@ class Browser:
         os.write(self.master, keys)
         return self.frame()
 
-    def resize(self, cols, rows, *, notify=True):
+    def resize(self, cols, rows, *, notify=True, pixels=(0, 0)):
         self.cols, self.rows = cols, rows
-        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, *pixels))
         if notify:
             os.kill(self.child.pid, signal.SIGWINCH)
 
     def screen(self, data):
         """Model the emitted subset using ASCII fixtures; reject offscreen writes."""
+        data = APC.sub(b"", data)
         rows, cols = min(self.rows, 256), min(self.cols, 512)
         screen = [[" "] * cols for _ in range(rows)]
         row = col = 0
@@ -113,6 +119,8 @@ class Browser:
                     assert 0 <= row < rows and 0 <= col < cols
                 elif (parameters, op) == (b"2", b"J"):
                     screen = [[" "] * cols for _ in range(rows)]
+                elif (parameters, op) == (b"2", b"K"):
+                    screen[row] = [" "] * cols
                 else:
                     assert ((op == b"m" and parameters in [b"0", b"7"])
                             or (op in [b"h", b"l"] and parameters in [b"?1049", b"?25", b"?2004"])), match[0]
@@ -129,16 +137,21 @@ class Browser:
     def selected(self, data):
         return next((line[2:] for line in self.screen(data) if line.startswith("> ")), None)
 
-    def finish(self, code=0, keys=b"q"):
+    def finish(self, code=0, keys=b"q", cache_stats=False):
         if keys:
             os.write(self.master, keys)
         self.wait_exit()
         self.read()
         assert self.child.returncode == code, (self.child.returncode, self.child.stderr.read())
-        assert not self.child.stderr.read()
+        error = self.child.stderr.read()
+        if cache_stats:
+            assert re.fullmatch(rb"lsa: cache: \d+ hits, \d+ misses, \d+ writes, \d+ errors\n", error), error
+        else:
+            assert not error, error
         assert bytes(self.data).endswith(LEAVE), bytes(self.data)[-200:]
         assert termios.tcgetattr(self.master) == self.before, "terminal modes not restored"
         assert self.data.count(ENTER) == self.data.count(b"\x1b[?1049l")
+        return error
 
     def wait_exit(self):
         # Drain the PTY while waiting, including restoration output. This also

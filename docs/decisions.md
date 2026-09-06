@@ -23,6 +23,10 @@
 | Explicit text browser first | Share the sorted mixed listing while establishing keyboard/resize behavior and terminal restoration separately from image lifetime. One directory, names-only, no automatic browser entry or file mutations. Existing metadata/inline layout operations remain separate explicit invocations. |
 | Small browser terminal guard and `pselect` | Existing libc suffices for this text slice, without an event runtime or new dependency. Block managed signals during work and atomically unblock while waiting; restore on quit/errors/signals and before suspend. One Escape timeout, no idle refresh loop. PTY coverage precedes Ghostty validation. |
 | Clipped overview plus full-name inspection | Keep stable one-entry rows for selection and scrolling. Space opens a lossless wrapped/scrollable name/path view. Bound redraw geometry to 512×256 and route history to 64 lightweight bookmarks; retain no old directory lists. |
+| One browser decoder worker | Existing four-source uncached decode cost (~72 ms inline) justifies moving work off input handling. The new browser shows names in ~3 ms while the four previews take ~79 ms at a drained PTY. One outstanding request/completion and one worker preserve the sequential decoder's resource bounds; more parallel decodes are not justified. |
+| Viewport plus two entries | Selected source first, then visible candidates and one entry on each side. Retain at most 34 records, place at most 32 images, and reject stale viewport/revision/geometry results. Cache defaults stay unchanged; session-wide attempt/command caps remain explicit. |
+| Numbered browser images, separate writer | Randomized Kitty image numbers create new images without overwriting pre-existing image IDs. One placement per number can move; targeted data deletion and reserved cleanup bytes bound residency/output. Text-row erasure preserves placements. No global deletion or anonymous inline ownership reuse. |
+| No worker join on quit | In-process decoders/filesystem calls lack safe cancellation. Drop queued work, discard stale pixels, restore the terminal, and let process exit end a remaining worker. A blocked-loader test and JPEG input trial verify responsiveness; directory reads/output can still block the main thread. |
 
 Reviewed [ratatui-image's widget model](https://docs.rs/ratatui-image/latest/ratatui_image/):
 it remains a browser candidate; introducing its rendering lifecycle is unnecessary
@@ -36,7 +40,8 @@ inline renderer is user-verified in Ghostty 1.3.1. Default selection/columns
 are now user-verified as well. The user passed metadata/grouping and cache commands
 at `7050349`; subsequent replacement changes have automated output equivalence
 and compatibility coverage. Anonymous inline images avoid ID reuse across
-invocations. Browser image ownership will need a separate implementation.
+invocations. The browser now has a separate numbered-image writer and ownership
+guard; its graphics behavior is automated-tested and awaits a Ghostty visual pass.
 
 [`image::Limits`](https://docs.rs/image/0.25.10/image/struct.Limits.html) distinguishes
 strict dimension checks from best-effort allocation limits. lsa additionally caps

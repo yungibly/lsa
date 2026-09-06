@@ -1,4 +1,6 @@
 mod browser;
+mod browser_graphics;
+mod browser_previews;
 mod browser_terminal;
 mod cache;
 mod cli;

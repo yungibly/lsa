@@ -12,8 +12,9 @@ at `7050349`, in the previously reported Ghostty context. Cache replacement now
 uses eight candidates per key after independent-source/geometry measurements;
 that storage change has automated output-equivalence and compatibility coverage.
 Four user images and generated fixtures remain gitignored under `img-test/`.
-The explicit `--browse` text slice is now implemented, with a separate terminal
-lifetime and PTY interaction coverage. Its Ghostty visual pass is pending.
+The user passed the `--browse` text slice at `1ea10e5`, in the previously reported
+Ghostty context. Viewport-driven browser previews now have automated coverage and
+application/PTY measurements; their Ghostty visual check is pending.
 
 ## 1. Useful inline prototype — complete for the tested Ghostty commands
 
@@ -107,7 +108,7 @@ make individual latency/hit rates vary; eight candidates are not fastest in ever
 overloaded case. [Cache design](docs/cache.md) records limits and tradeoffs. No
 worker concurrency or browser was added in the cache chunks.
 
-## 3. Explicit browser — text slice implemented; Ghostty check pending
+## 3. Explicit browser — text user-verified; images implemented, visual check pending
 
 - [x] `--browse` for one directory, alternate screen, mixed-entry selection,
   arrows/j/k, paging, first/last, directory navigation, and explicit refresh.
@@ -120,20 +121,39 @@ worker concurrency or browser was added in the cache chunks.
   restoration, Ctrl-C and exit signals, Ctrl-Z/continue, and foreground TTY checks.
   Reject pipes before consuming input; inline output never enters this lifecycle.
 - [x] Blocking `pselect` while idle, bounded input/escape buffers and redraw geometry,
-  no background refresh, graphics, cache access, or new dependencies.
+  no background refresh or new dependencies. The initial text slice did no image
+  or cache work; it remains available through `--no-images`.
 - [x] Unit and controlling-PTY checks cover interaction, restoration, screen bounds,
   full names, safe input, failures, and idle CPU. See [browser design](docs/browser.md).
   36 unit + 8 CLI tests, 25 browser + 16 protocol + 34 layout + 23 cache scenarios,
   fmt, clippy, and release build pass. One idle trial emitted no bytes over one
   second and used 1.87 ms child CPU including startup/quit; no renderer measured.
-- [ ] User checks the [Ghostty browser commands](docs/compatibility.md#browser-checklist).
-- [ ] Add viewport-driven preview jobs plus a small margin, bounded work/bytes/
-  terminal residency, stale-completion rejection, and session-only image cleanup.
+- [x] User reported all supplied text-browser commands worked well at `1ea10e5`.
+  Version/geometry/transport were not separately resupplied.
+- [x] Mixed Kitty grid for browser directories with preview candidates, with names
+  first, complete-name inspection, and the same sort/filter/navigation behavior.
+  Unknown/multiplexed terminals and explicit text flags retain the text browser.
+- [x] One lazy decoder worker; one outstanding request/completion; selected source
+  first, visible entries next, then one entry on each side. Retain at most 34
+  records and place at most 32 images. No parallel decodes or new dependency.
+- [x] Viewport/revision/geometry generations discard stale work; overlapping images
+  move without re-upload. Session-wide attempt and 8 MiB command budgets include
+  cache hits/prefetch/stale attempts and reserve image cleanup bytes.
+- [x] Randomized Kitty image numbers, one placement each, individually freed on
+  release/exit/suspend. Raw mode/signal ownership remains separate from inline
+  output. Exit never joins an in-progress decode; the worker ends with the process.
+- [x] 39 unit + 8 CLI tests; 25 text-browser + 21 image-browser scenarios and all
+  existing 16 protocol + 34 layout + 23 cache scenarios; fmt/clippy/release pass.
+  Controlled slow-worker tests prove stale pixels are discarded and quit does not
+  join. [Browser measurements](benchmarks/browser.json) record first-name/preview
+  readiness, input response, child CPU/RSS, and opt-in cold/warm cache behavior.
+- [ ] User verifies [browser images and cleanup in Ghostty](docs/compatibility.md#browser-image-checklist).
 - [ ] Search and any explicit open/copy actions remain later work from daily use.
 
-The browser currently shows names only; inline metadata/layout flags cannot combine
-with it. Directory reads remain synchronous and can delay input/signals. Automated
-PTY checks do not verify visible Ghostty rendering or restoration of its scrollback.
+Inline metadata/layout flags cannot combine with browsing. Directory reads and
+terminal writes remain synchronous and can delay input/signals. Decodes cannot be
+interrupted in progress; stale work may delay newer previews, but not selection.
+Automatic tests do not prove visible Ghostty graphics, resize, or inline retention.
 
 ## 4. Package and expand — pending
 
@@ -154,10 +174,10 @@ SVG, TIFF, AVIF, HEIC, Sixel, or other protocols only from concrete demand.
 
 ## Next task
 
-Obtain the user's Ghostty visual pass for the text browser: mixed selection,
-navigation/return, full-name scrolling, resize, q/Ctrl-C, and Ctrl-Z/`fg`. Fix any
-reported issues. Then add viewport-driven image jobs and session-only cleanup,
-sharing entries/decoding but keeping browser and inline output lifetimes distinct.
-Preserve responsive names/selection and bounded work; measure before adding decode
-concurrency. Cache default/storage expansion, search, and more terminal transports
-remain driven by concrete daily-use feedback.
+Obtain the user's Ghostty pass for progressive browser images, scrolling/navigation,
+resize, detail view, quit/signals/suspend, cache reuse, and retention of prior inline
+images. Fix any reported issues before claiming visual compatibility. Then tune
+browser interaction and per-session limits from daily use; consider search if it
+solves a concrete need. Keep the single decoder and opt-in cache policy unless
+measurements or actual usage justify changing them. Other terminals/platforms and
+packaging remain unverified follow-up work.

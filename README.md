@@ -1,13 +1,14 @@
 # lsa
 
 A fast, human-oriented directory listing with inline image thumbnails and an
-explicit text browser. Kitty graphics first; Sixel is an optional future addition.
+explicit browser. Kitty graphics first; Sixel is an optional future addition.
 
 **Status:** Rust CLI with compact text and automatic inline Kitty grids, both
 user-verified in Ghostty 1.3.1. Directories-first sorting, configurable long
 metadata, and opt-in cache commands also received a user pass at `7050349`.
 Improved cache replacement has automated tests and working-set measurements.
-The new `--browse` text slice is implemented; Ghostty visual verification is pending.
+The `--browse` text slice received a user pass at `1ea10e5`. Viewport-driven browser
+previews now have automated coverage; their Ghostty visual check is pending.
 See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
 
 ## Direction
@@ -60,11 +61,15 @@ Caching is opt-in via `--cache-dir=PATH`; `--no-cache` disables it and
 `--clear-cache` clears the selected cache. Inline output makes no terminal queries,
 reads no stdin, and uses no paging. No configuration file yet.
 
-`--browse [DIRECTORY]` explicitly enters a text browser on a foreground terminal.
+`--browse [DIRECTORY]` explicitly enters a browser on a foreground terminal.
 Arrows or j/k move; PgUp/PgDn scroll; Enter enters directories; h/Left returns;
 Space shows the full name/path; r refreshes; q quits. Resize, Ctrl-C restoration,
-and Ctrl-Z/`fg` are supported. Sorting and hidden flags apply. The first slice
-has no images or search and rejects inline layout flags and multiple operands.
+and Ctrl-Z/`fg` are supported. Sorting and hidden flags apply. On supported
+Kitty/Ghostty sessions, directories with preview candidates use a mixed grid.
+Names appear first; one worker decodes the viewport plus a two-entry margin.
+`--no-images` keeps the text browser. Image ownership/cleanup is session-scoped;
+optional cache settings apply. Search is not implemented. Browser mode rejects
+inline layout flags and multiple operands.
 See [browser controls and limits](docs/browser.md).
 
 Deliberate `ls` differences: bytewise name order; `-a` and `-A` both omit `.`/`..`;
@@ -122,18 +127,21 @@ and a neutral checker under transparency. GIF uses the first frame on its logica
 canvas. Symlinks to regular images can preview while retaining their link marker.
 Names wrap at grapheme boundaries; missing previews keep their tiles and labels.
 
-One synchronous decode at a time; no worker queue. Optional cache hits skip decoding.
+Inline output decodes synchronously, one source at a time. The browser moves that
+single decoder to a worker, with one outstanding request/completion, to keep input
+responsive. Optional cache hits skip decoding.
 Per invocation: 64 preview attempts by default (including failures), hard maximum
 256, and 8 MiB of image commands. Per source: 32 MiB input, 16 million pixels,
 16,384 pixels per axis, 64 MiB decoded output, and a **best-effort** 64 MiB decoder allocation limit.
 Thumbnails fit within 320×240 pixels. These are starting caps, not performance
-claims or a hard process-memory/time sandbox. Preview work can delay a row; there
+claims or a hard process-memory/time sandbox. Inline preview work can delay a row; there
 is no timeout for slow filesystems or in-progress decodes. Names are never omitted
 after preview limits; stderr reports unavailable/limited previews.
 
-Grid requires at least 12 columns × 8 rows. Cell pixels come from the terminal's
+Inline grid requires at least 12 columns × 8 rows; the browser grid needs 12×10.
+Cell pixels come from the terminal's
 window size; if missing, 8×16 is estimated and aspect may be imperfect. Geometry is
-chosen once per invocation; resize during output is not handled. Detailed resize,
+chosen once for inline output; the browser recalculates on resize. Detailed inline resize,
 theme, and retention trials are not yet recorded. Inline images use anonymous
 placements and are left in terminal history; no global image deletion. Terminal storage may evict old previews.
 
@@ -172,6 +180,8 @@ python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
 python3 tests/check_browser.py
+python3 tests/check_browser_images.py
+python3 benchmarks/browser.py
 python3 benchmarks/measure.py
 python3 benchmarks/cache.py
 python3 benchmarks/cache_working_set.py
@@ -188,9 +198,8 @@ byte-level display tests. See [decisions](docs/decisions.md) and
 1. Tune layouts and metadata controls from daily use.
 2. Evaluate the opt-in cache from daily use before choosing a default policy;
    add bounded parallel work only where measurements justify it.
-3. Verify the text browser in Ghostty, then add viewport-driven previews, stale-job
-   rejection, and session-only image cleanup. Share entries and decoding with
-   inline output, keeping output lifetimes separate.
+3. Verify browser images, resize, and cleanup in Ghostty. Tune interaction and
+   session budgets from daily use; add search or broader formats when useful.
 4. Package tested macOS/Linux targets; expand formats and terminals from demand.
 
 See [AGENTS.md](AGENTS.md) for development practice.

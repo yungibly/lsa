@@ -1,99 +1,112 @@
 # Fresh-session handoff
 
-2026-09-05; this chunk implements the explicit text browser described in the prior
-handoff. Starting Git state was clean at `d60d99c`. Read README → ROADMAP, then
-check Git rather than assuming this snapshot is current.
+2026-09-05; this chunk adds viewport-driven browser images after the user passed
+the text browser. Starting Git state was clean at `1ea10e5`. Read README → ROADMAP,
+then check current Git rather than assuming this snapshot is current.
 
-## Working agreement and user verification
+## Working agreement and verification
 
-- Work/access files only inside this repo; keep Cargo storage and experiments here.
-- Routine implementation and concise local commits are authorized; no per-chunk
-  confirmation. Docs are working suggestions, not rigid requirements.
-- The user handles Ghostty visual checks; do not automate terminal applications.
-  Preserve the four original ignored images under `img-test/`.
-- Inline commands/layouts have prior user passes in Ghostty 1.3.1, 122×40 / 8×17,
-  arm64 macOS 26.6.2. The user passed the metadata/grouping and cache command set
-  at `7050349`. That report did not resupply transport/theme/resize conditions.
-- **The new browser has no Ghostty visual pass yet.** PTY checks establish bytes,
-  interaction, and terminal attributes, not visible screen/scrollback behavior.
-- Keep one ordered mixed listing, cheap text, complete filename access, Kitty
-  first, inline default, explicit browsing, and distinct image/output lifetimes.
+- Work/access files only within this repo, including Cargo storage and experiments.
+  Routine implementation and concise local commits are authorized.
+- The user handles Ghostty visual checks. Do not automate terminal applications.
+  Preserve the four original ignored images and existing working-set fixtures.
+- The latest user report was “All works well. Please proceed.” after the text
+  browser commands/checklist at `1ea10e5`. Record that command-set pass; exact
+  version/geometry/transport were not separately resupplied. Earlier context was
+  Ghostty 1.3.1, 122×40 / 8×17, arm64 macOS 26.6.2. Prior inline/layout/cache passes
+  remain recorded in [compatibility](docs/compatibility.md).
+- **New browser graphics have no user visual pass yet.** Protocol/PTY checks are
+  separate from actual Ghostty rendering, resize, cleanup, and inline retention.
+- Preserve one sorted mixed listing, complete filename access, cheap ordinary
+  output, Kitty first, explicit browsing, bounded work/storage/output, and separate
+  browser/inline lifetimes. No file mutations, external launches, or clipboard work.
 
 ## This chunk
 
-- Added `--browse [DIRECTORY]`, a text-only alternate-screen browser. It reuses
-  existing entries/sorting/hidden filtering and suffixes. One directory operand;
-  `-l`, `--fields`, `-1`, `--grid`, `--diagnose`, `--clear-cache`, and multiple
-  operands are rejected when combined with browsing.
-- Arrows/j/k move; PgUp/PgDn page; g/G and Home/End jump; Enter/right/l enters a
-  directory; h/Left/Backspace returns along the route, then to physical parents.
-  Explicitly entered directory links resolve, but keep their listing identity.
-- Selection survives resize, refresh (`r`), and return by raw filename, falling
-  back to the nearest index if removed. Navigation history is at most 64 small
-  bookmarks; old entry lists are not retained. Failed navigation/refresh keeps
-  the previous view usable with an error status.
-- One entry per overview row; long labels show `>`. Space/Tab opens the complete
-  escaped name, kind, and path with grapheme wrapping and vertical scrolling.
-  Escape closes the detail view. Enter on a regular file also shows details.
-- Browser-only terminal guard owns raw mode, alternate screen, cursor, paste mode,
-  and temporary signal handlers. q/Ctrl-D exits 0; Ctrl-C exits 130;
-  SIGTERM/HUP/QUIT exit 128 + signal. Ctrl-Z restores before stopping and `fg`
-  re-enters/redraws with selection intact. Error exits and unwinding also restore.
-- Require stdin/stdout on the same foreground terminal. Reject pipes before input
-  consumption or mode changes. Open an independent nonblocking controlling-TTY
-  input descriptor so the shell's shared descriptor flags remain unaffected.
-- Block idle in `pselect`, atomically unblocking managed signals while waiting.
-  No periodic polling or refresh; a lone Escape has a 100 ms timeout. Input batches
-  are at most 256 bytes; escape state stores at most 32 bytes; bracketed paste is
-  ignored. Redraw only visible rows, capped at 512×256, leaving the last column free.
-- No image decoding, preview jobs, cache access, image deletion, search, external
-  open/copy actions, new dependencies, or file mutations. Directory reads are
-  synchronous and can delay input/signals. Inline rendering behavior is unchanged.
-
-Details: [browser controls/design](docs/browser.md), [decisions](docs/decisions.md),
-[Ghostty checklist](docs/compatibility.md#browser-checklist).
+- `--browse` uses a mixed grid when Kitty is enabled, a directory has candidates,
+  and the terminal fits 12×10. Names/placeholders render before any worker request.
+  Default/explicit protocol detection is shared with inline output. `--no-images`,
+  `--protocol=none`, unknown/multiplexed terminals, and text-only directories retain
+  the text browser. Grid navigation still follows entry order with arrows/j/k;
+  pages use viewport capacity, and h/Left and Enter/Right keep directory actions.
+- Reuse inline geometry's aspect-preserving 320×240-or-smaller thumbnail dimensions:
+  five image rows, one clipped label row, gap. Resize recalculates geometry. Full
+  escaped name/path inspection remains on Space, with images released during it.
+- One lazy decoder thread, one outstanding request/completion, and a bounded mailbox
+  with a nonblocking Unix-stream wakeup. Selected candidate first, then viewport,
+  then one entry on each side. Retain at most 34 records, place at most 32 images.
+- Generation changes on viewport/directory/refresh/geometry invalidate old jobs.
+  Worker checks before/after load; main loop checks again before retaining pixels.
+  Overlapping ready records survive scrolling; their placements move without
+  retransmission. Preview source/image/cache loading is off the input thread.
+- No join on quit. An in-progress decode may finish while cleanup runs, but no more
+  jobs are dispatched; process exit ends any remaining worker. No child process or
+  daemon. In-flight filesystem/codec calls are not cancellable and may delay newer
+  previews. Directory enumeration and terminal writes can still delay main input.
+- Browser-specific Kitty writer uses randomized nonzero image numbers (`I`), one
+  placement (`p=1`) each, quiet replies, targeted `d=N` deletion, and no global
+  deletion. Session guard owns cleanup on exit/errors/suspend. Text-row erase (EL)
+  preserves placements; full-screen erase happens after browser images are released.
+  Inline anonymous images/rows are unchanged. Protocol choices were checked against
+  the official Kitty specification; no terminal UI automation was used.
+- The same **whole-session** preview caps apply: 64 dispatched attempts by default,
+  maximum 256, and 8 MiB of image commands. Hits, failures, stale work, and prefetch
+  count as attempts. Upload/move bytes count; deletion bytes are reserved at upload.
+  Limits do not reset on navigation, refresh, resize, detail view, or suspend.
+  `[limit]` retains all names. Revisit this policy only from actual browsing feedback.
+- Cache remains opt-in with the same file format, keying, storage bound, and source
+  checks. A worker owns its cache. `--cache-stats` reports completed worker counters
+  after restoration, so an abandoned in-flight operation may not be included.
+  Text/zero-attempt paths never start a worker or open storage. No new dependency.
+- Managed signals are blocked before thread creation using `pthread_sigmask`; the
+  worker inherits that mask. Main `pselect` waits for input/completions/signals and
+  gives input priority. Worker uses a condition variable; neither polls when idle.
 
 ## Evidence
 
-- 36 unit + 8 CLI tests; fmt, clippy, release binaries/examples build pass.
-- 25 new browser controlling-PTY/CLI scenarios pass, including comparison to normal
-  listing order, all sorting flags, links/parent navigation, refresh after changes,
-  full name/path content, fragmented keys/paste, safe Unicode/control names,
-  empty/failing paths, resize down to 1×1 and up to 1000×1000 (render capped),
-  termination signals, Ctrl-C, Ctrl-Z/continue, pipes, and unconsumed redirected input.
-- Idle empty-directory trial: no bytes during a 1-second idle window; 1.105 seconds
-  including quit observation, 1.87 ms child user+system CPU including startup/quit.
-  This is an application/PTY trial, not terminal rendering or an RSS benchmark.
-- Existing 16 protocol PTY + 34 layout + 23 cache scenarios pass. No new cache or
-  inline performance claims; the cache working-set benchmarks were not rerun.
-- Release binary: 1,330,128 bytes. Rust/Cargo 1.98.0 on the existing macOS host;
-  Linux and declared MSRV 1.88 remain unverified.
-- Harness details: drain output while polling process exit; inspect terminal modes
-  via the PTY master after a controlling session exits (macOS revokes the slave).
-  On suspend, mask macOS's transient PENDIN retype bit for comparison; all other
-  attributes/control bytes must match. Check that shared input/output descriptors
-  do not acquire O_NONBLOCK. Initial test-harness failures were fixed, not waived.
+- 39 unit + 8 CLI tests; fmt, clippy, release binaries/examples build pass.
+- 25 text-browser scenarios still pass (`--no-images`), plus 21 new image-browser
+  scenarios: mixed labels/failures, viewport-only placement, selected-first work,
+  overlap movement, pixel/label association, scroll/navigation/refresh, resize from
+  tiny to 1000×1000, caps, zero/no-image paths, cache equality, scoped cleanup on
+  quit/signals/suspend, and zero redraws once settled.
+- Controlled loader tests verify one outstanding request, stale pixels rejected,
+  overlapping retention, and prompt worker drop even with a blocked decode.
+- Existing 16 inline protocol + 34 layout + 23 cache scenarios pass. Cache replacement
+  and ordinary inline output algorithms are unchanged.
+- [Saved measurements](benchmarks/browser.json), methods in [benchmarks/README.md](benchmarks/README.md):
+  nine fresh trials after two warmups, OS cache warm, 122×40 / 8×17, drained PTY.
+  Four user images: names 3.33 ms, first preview 4.94 ms, all previews 78.86 ms
+  uncached; warm cache all previews 12.31 ms. CPU 68.68 → 2.49 ms; RSS 31.39 →
+  2.31 MiB. These are application/transport measurements, without a renderer.
+- Input trial links the unchanged 2924×1932 JPEG plus a marker. At 10 ms after names,
+  before any preview completes, G selection arrives in median 0.035 ms; direct quit
+  emits restoration bytes in 0.034 ms. CPU reaches ~12–13 ms, showing active decode.
+  Exit/termios checked separately; no hard latency guarantee.
+- Measured binary hash matches the final release, 1,364,656 bytes. Rust/Cargo 1.98.0;
+  Linux, MSRV 1.88, other terminals/transports remain unverified. Random image-number
+  widths change command lengths slightly; cached pixel payloads match exactly.
 
 ## Resume here
 
-Get the user's Ghostty browser pass before treating visible interaction/restoration
-as verified. Provide the checklist, including mixed selection, navigation/return,
-Space/full-name scrolling, resize, q/Ctrl-C, Ctrl-Z/`fg`, and prior inline-image
-retention after entering/quitting the browser. Fix any reported issues.
+Get the user's [browser image/cleanup pass](docs/compatibility.md#browser-image-checklist).
+Check progressive images and mixed selection, paging/navigation, no stale pictures,
+resize/text fallback, Space inspection, q/Ctrl-C/Ctrl-Z/fg, optional warm cache,
+and prior inline-image retention after entering/quitting the browser. Fix reported
+issues before claiming Ghostty image-browser compatibility.
 
-Then add viewport-driven image jobs, a small prefetch margin, stale-result rejection,
-and bounded session-owned image cleanup. Share entries/decoding but do not reuse
-inline image ownership or lifetime assumptions. Keep names responsive and measure
-before adding concurrency. Cache default/storage expansion and search remain driven
-by concrete use; do not resume cache tuning without new evidence.
+Then tune interaction and session budgets from daily use, and consider search for
+a concrete need. Do not add parallel decoders, a default cache path, more storage,
+or broad format/terminal support without evidence. Packaging/platform checks remain
+later roadmap items. Detailed design/limits: [docs/browser.md](docs/browser.md).
 
-Code: `src/browser.rs` (state, input parsing, rendering), `src/browser_terminal.rs`
-(terminal/signal lifetime), `src/cli.rs`, and the early browser branch in
-`src/main.rs`. Existing inline code is separate. Tests: `tests/check_browser.py`.
+Code: `src/browser.rs` (mixed grid/state/input), `src/browser_previews.rs` (worker,
+viewport generation/retention), `src/browser_graphics.rs` (owned Kitty placements
+and byte budget), `src/browser_terminal.rs` (signal/event/cleanup lifetime).
+`src/preview.rs` and the inline writer are unchanged; `src/cache.rs` only makes its
+Stats snapshot copyable. Tests: `tests/check_browser_images.py` and existing suites.
 
 ## Local checks
-
-Keep Cargo storage local:
 
 ```sh
 export CARGO_HOME="$PWD/.cargo-home"
@@ -102,20 +115,22 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked --examples --bins
 python3 tests/check_browser.py
+python3 tests/check_browser_images.py
 python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
+python3 benchmarks/browser.py
 ```
 
-The existing socket fixture needs local Unix-socket permission; use normal sandbox
-escalation on that failure. The final browser/protocol/layout/cache suites ran in
-the sandbox. Focused PTY/process diagnostics during harness debugging also used
-normal escalation. No computer use or files outside this repository were used
-for implementation; the executable naturally accesses its controlling terminal.
+The full Rust suite needs local Unix-socket permission for the existing fixture;
+use normal sandbox escalation. PTY suites and the browser benchmark ran in the
+sandbox. The harness drains while polling exit; on macOS it reads terminal modes
+from the master after controlling-session exit, and excludes transient PENDIN
+retype state during suspend comparison.
 
-Cache measurements remain in [benchmarks/cache-working-set.json](benchmarks/cache-working-set.json)
-and [benchmarks/README.md](benchmarks/README.md). Stable independent-source copies
-remain ignored in `benchmarks/local/working-set/` (~119.5 MiB); do not recreate or
-alter them between cache-policy comparisons. Prior ignored comparison binaries
-and the four original test images are preserved. Generated fixtures already exist;
-the generator refuses to overwrite them.
+Browser benchmark writes ignored `benchmarks/local/browser.json` and its own
+cache/JPEG-link fixture. It never overwrites the committed report. Avoid concurrent
+heavy work when comparing small timings. Cache working-set sources/binaries remain
+unchanged under `benchmarks/local/working-set/` and `target/`; do not recreate those
+source identities for policy comparisons. The four original images and generated
+fixtures are untouched. No new cache-policy benchmark was needed in this chunk.
