@@ -351,7 +351,9 @@ fn size(n: u64, human: bool) -> String {
 }
 
 fn timestamp(seconds: i64) -> String {
-    let time = seconds as libc::time_t;
+    // Infer the C time type from localtime_r; musl deprecates the named alias
+    // while transitioning 32-bit platforms to time64.
+    let time = seconds as _;
     let mut tm = std::mem::MaybeUninit::<libc::tm>::uninit();
     // SAFETY: both pointers are valid, and tm is read only after success.
     if unsafe { libc::localtime_r(&time, tm.as_mut_ptr()) }.is_null() {
@@ -368,6 +370,8 @@ fn timestamp(seconds: i64) -> String {
     )
 }
 
+// mode_t constants are u16 on macOS and u32 on Linux; retain portable casts.
+#[allow(clippy::unnecessary_cast)]
 fn permissions(mode: u32) -> String {
     let mut out = String::from(match mode & libc::S_IFMT as u32 {
         x if x == libc::S_IFDIR as u32 => "d",
@@ -424,6 +428,7 @@ mod tests {
         assert_eq!(out, b"? ? lost\n");
     }
     #[test]
+    #[allow(clippy::unnecessary_cast)] // mode_t differs between macOS and Linux.
     fn unix_modes_and_sizes() {
         assert_eq!(permissions(libc::S_IFDIR as u32 | 0o1777), "drwxrwxrwt");
         assert_eq!(permissions(libc::S_IFREG as u32 | 0o4644), "-rwSr--r--");
