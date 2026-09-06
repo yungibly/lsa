@@ -1,8 +1,8 @@
 //! One decoder, one outstanding request/result, and viewport-sized retention.
 use crate::{
-    browser_graphics::{Geometry, Screen},
     cache::{Cache, Stats},
     entry::Entry,
+    pager_graphics::{Geometry, Screen},
     preview,
 };
 use image::RgbaImage;
@@ -159,7 +159,6 @@ fn work(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct View {
-    pub revision: u64,
     pub geometry: Geometry,
     pub range: Range<usize>,
 }
@@ -182,7 +181,8 @@ pub struct Previews {
     generation: u64,
     busy: bool,
     disabled: bool,
-    pub attempts_left: usize,
+    attempt_limit: usize,
+    attempts_left: usize,
     pub stats: Stats,
     pub stale: usize,
 }
@@ -197,6 +197,7 @@ impl Previews {
             generation: 0,
             busy: false,
             disabled: false,
+            attempt_limit: attempts,
             attempts_left: attempts,
             stats: Stats::default(),
             stale: 0,
@@ -217,6 +218,9 @@ impl Previews {
         if self.view == view {
             return Ok(());
         }
+        // A user-driven viewport change opens a new bounded batch. Selection
+        // and completion redraws of the same viewport cannot renew its budget.
+        screen.begin_view();
         self.generation += 1;
         if let Some(worker) = &self.worker {
             worker
@@ -228,7 +232,7 @@ impl Previews {
             .view
             .as_ref()
             .zip(view.as_ref())
-            .is_some_and(|(a, b)| a.revision == b.revision && a.geometry == b.geometry);
+            .is_some_and(|(a, b)| a.geometry == b.geometry);
         let wanted = view
             .as_ref()
             .map(|v| margin(&v.range, entries))
@@ -241,8 +245,10 @@ impl Previews {
                 screen.remove(out, number)?;
             }
         }
-        self.records
-            .retain(|r| compatible && wanted.contains(&r.index));
+        self.records.retain(|r| {
+            compatible && wanted.contains(&r.index) && !matches!(r.pixels, Pixels::Limited)
+        });
+        self.attempts_left = self.attempt_limit.saturating_sub(self.records.len());
         self.view = view;
         Ok(())
     }
@@ -278,6 +284,7 @@ impl Previews {
         let Some(view) = &self.view else {
             return Ok(false);
         };
+        let could_upload = screen.remaining() >= view.geometry.upload_bound();
         let mut changed = false;
         for record in &mut self.records {
             if !view.range.contains(&record.index) {
@@ -302,7 +309,9 @@ impl Previews {
                 }
             }
         }
-        Ok(changed)
+        // The last successful upload can exhaust the budget. Render the remaining
+        // placeholders once more so they say [limit] instead of staying [loading].
+        Ok(changed || (could_upload && screen.remaining() < view.geometry.upload_bound()))
     }
 
     pub fn schedule(&mut self, entries: &[Entry], selected: usize, available: usize) -> bool {
@@ -418,13 +427,7 @@ mod tests {
             width: 176,
             height: 80,
         };
-        let view = |range| {
-            Some(View {
-                revision: 1,
-                geometry,
-                range,
-            })
-        };
+        let view = |range| Some(View { geometry, range });
         let mut screen = Screen::default();
         let mut out = Vec::new();
         previews
@@ -456,11 +459,11 @@ mod tests {
         assert_eq!(previews.records.len(), 1);
         previews.paint(&mut screen, &mut out).unwrap();
         assert!(previews.records[0].number.is_some());
-        let before = screen.remaining();
         previews
             .sync(view(25..34), entries.len(), &mut screen, &mut out)
             .unwrap();
         assert_eq!(previews.records.len(), 1); // Overlap keeps pixels and image number.
+        let before = screen.remaining();
         previews.paint(&mut screen, &mut out).unwrap();
         assert!(screen.remaining() < before); // Only a bounded move command.
         previews

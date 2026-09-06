@@ -1,7 +1,3 @@
-mod browser;
-mod browser_graphics;
-mod browser_previews;
-mod browser_terminal;
 mod cache;
 mod cli;
 mod columns;
@@ -11,6 +7,10 @@ mod grid;
 mod kitty;
 mod layout;
 mod metadata;
+mod pager;
+mod pager_graphics;
+mod pager_previews;
+mod pager_terminal;
 mod preview;
 mod terminal;
 
@@ -48,8 +48,8 @@ fn run(opts: &cli::Options, out: &mut impl Write) -> io::Result<u8> {
         writeln!(out, "lsa {}", env!("CARGO_PKG_VERSION"))?;
         return Ok(0);
     }
-    if opts.browse {
-        return browser::run(opts, out);
+    if opts.page {
+        return pager::run(opts, out);
     }
     if opts.clear_cache {
         return match cache::clear(opts.cache_dir.as_deref().unwrap()) {

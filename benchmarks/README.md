@@ -2,6 +2,9 @@
 
 ## Browser previews: 2026-09-05
 
+Historical results for `59f5cec`, before the user replaced the browser with a
+one-listing pager. These numbers are preserved, not attributed to the new binary.
+
 [Saved results](browser.json), same macOS arm64 host and Rust 1.98.0 release build.
 Browser geometry is 122×40 at 8×17 pixels/cell (176×85 thumbnail canvases). The normal
 fixture is the unchanged four user images plus `generated/`. Nine fresh measured
@@ -41,9 +44,10 @@ user+system CPU and peak RSS come from `wait4`, include the worker, and exclude 
 Python reader. Wall time also includes PTY transport/wakeups and is not comparable
 to terminal rendering cost. No cold-filesystem, terminal-memory, or GUI comparison.
 
-Reproduce with `python3 benchmarks/browser.py`. It writes only
-`benchmarks/local/browser.json` and its own ignored cache/fixture. The committed
-report remains unchanged and records the measured release SHA-256 and 1,364,656-byte
+The current harness is `python3 benchmarks/pager.py`, adapted to `--page`. It
+writes only `benchmarks/local/pager.json` and its own ignored cache/fixture. Use
+the earlier commit to reproduce browser behavior. The historical committed report
+remains unchanged and records the measured release SHA-256 and 1,364,656-byte
 binary. Browser tests also verify no redraws after work settles; the text control
 idle trial consumed ~2.6 ms child CPU including startup/quit during a 1-second wait.
 

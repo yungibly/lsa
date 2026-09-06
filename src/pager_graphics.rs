@@ -1,4 +1,4 @@
-//! Kitty ownership for the browser, separate from anonymous inline placements.
+//! Kitty ownership for the pager, separate from anonymous inline placements.
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::RgbaImage;
 use std::{
@@ -99,6 +99,17 @@ impl Default for Screen {
 }
 
 impl Screen {
+    pub fn begin_view(&mut self) {
+        // Keep cleanup reserved for all resident images, including overlap.
+        // Replenish only when the viewport changes, never on a repaint.
+        let cleanup: usize = self
+            .placements
+            .iter()
+            .map(|p| deletion(p.number).len())
+            .sum();
+        self.remaining = crate::preview::OUTPUT_LIMIT.saturating_sub(cleanup);
+    }
+
     pub fn remaining(&self) -> usize {
         self.remaining
     }

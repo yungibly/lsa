@@ -6,8 +6,10 @@ Automatic layouts and compact columns also received a clear user visual pass at
 expected at `7050349`, including metadata/grouping and empty/warm/disabled cache
 comparisons. Later storage-policy changes are covered separately by automation.
 The user also reported that the supplied text-browser commands all worked well at
-`1ea10e5`; version/geometry/transport were not separately resupplied. The new browser
-graphics belong to a subsequent implementation and still need a visual pass.
+`1ea10e5`; version/geometry/transport were not separately resupplied. The subsequent
+browser image review was negative: the user reported poor appearance and arrow
+navigation, and rejected its broader scope. The user chose a simple image pager;
+`--page` needs its own visual review. Earlier passes are historical evidence.
 
 | Environment | Protocol / mode / transport | Evidence | Status |
 | --- | --- | --- | --- |
@@ -23,7 +25,9 @@ graphics belong to a subsequent implementation and still need a visual pass.
 | tmux / screen / Zellij | Text in auto mode | Environment fallback tested for tmux; no passthrough implementation | Graphics unverified |
 | Local controlling PTY, injected Ghostty environment | Text alternate-screen browser; keyboard input, resize and signals | 25 browser interaction/restoration scenarios; no renderer | Automated pass |
 | User's previously reported Ghostty 1.3.1 context | Text alternate-screen browser | User reported all supplied commands worked well at `1ea10e5`, after the navigation/resize/restoration checklist | User-verified command set; context not separately resupplied |
-| Local controlling PTY, synthetic independent sources | Kitty browser grid; progressive jobs, movement, cache, resize, quit/signals/suspend | 21 image scenarios plus scheduler/ownership unit tests; byte/pixel/placement model | Automated pass; Ghostty graphics check pending |
+| Local controlling PTY, synthetic independent sources | Kitty browser grid; progressive jobs, movement, cache, resize, quit/signals/suspend | 21 image scenarios plus scheduler/ownership unit tests; byte/pixel/placement model | Historical automated pass at `59f5cec`; visual design rejected |
+| User's Ghostty screenshot; version/geometry/transport not resupplied | Kitty browser grid; command title used `--browse --preview-limit=256 img-test/generated/many`, visible path was its parent | User rejected presentation, left/right entering/leaving, and browser scope | Negative visual/product review; no graphics compatibility pass |
+| Local controlling PTY, synthetic sources | Text and Kitty `--page`; spatial keys, immutable listing membership, viewport budgets, cleanup | 25 text and 23 image scenarios, including 100 independent previews and per-viewport output limits | Automated pass; no renderer; pager visual review pending |
 | Any terminal | Sixel | Deferred, not implemented | — |
 
 PTY tests check quiet/chunked RGBA framing, decoded lengths, total image bytes,
@@ -122,66 +126,35 @@ both outcomes. Pixel dimensions may be estimated; note this when judging aspect.
 The example fixture generator refuses to overwrite an existing generated directory.
 No Ghostty UI automation was performed.
 
-## Browser checklist
+## Pager checklist
 
-The user passed this text-browser checklist at `1ea10e5`. To exercise that same
-text mode with the current image-enabled binary, add `--no-images`:
-
-```sh
-./target/release/lsa --browse --no-images --dirs-first img-test
-./target/release/lsa --browse --no-images -a img-test/generated
-./target/release/lsa --browse --no-images img-test/generated/many
-```
-
-- Use arrows or j/k, PgUp/PgDn, and g/G. Selection should stay visible in one
-  mixed listing. Enter a directory, then h/Left to return to its selected entry.
-- Press Space on a long name. Inspect the complete name/path with arrows/pages;
-  Esc closes it. Filenames remain selectable terminal text.
-- Resize narrow/wide and short/tall while browsing. Selection should survive;
-  below 12×5, a resize message replaces the view until it fits again.
-- Quit with q, then repeat and use Ctrl-C. The original shell screen, cursor, and
-  normal typed input should return. After Ctrl-C, `echo $?` should show 130.
-- Run again, press Ctrl-Z, type `fg`, and verify the browser redraws with the same
-  selection. Quit and confirm normal shell input/echo.
-- For inline lifetime separation, run `./target/release/lsa img-test`, then enter
-  and quit the browser. Note whether the prior inline images and shell history
-  remain intact. The text browser emits no image deletion commands.
-
-Report Ghostty version, geometry, and local/SSH/multiplexer context along with any
-visible clipping, flicker, or restoration problems. PTY escape/termios checks do
-not establish visible cursor, alternate-screen, resize, or scrollback behavior.
-
-## Browser image checklist
-
-This new slice has automated protocol/interaction coverage, without a renderer.
-Use a direct Ghostty session and the current release build:
+The previous text-browser command set passed at `1ea10e5`. Image-browser work at
+`59f5cec` had automated checks but received negative visual/product feedback. That
+browser is removed. These commands exercise the narrower replacement:
 
 ```sh
-./target/release/lsa --browse --dirs-first img-test
-./target/release/lsa --browse img-test/generated
-./target/release/lsa --browse --preview-limit=256 img-test/generated/many
-./target/release/lsa --browse --preview-limit=2 img-test/generated/many
-./target/release/lsa --browse --cache-dir=benchmarks/local/thumbnails --cache-stats img-test
-./target/release/lsa --browse --cache-dir=benchmarks/local/thumbnails --cache-stats img-test
+./target/release/lsa --page img-test/generated/many
+./target/release/lsa --page --dirs-first img-test/generated
+./target/release/lsa --page --no-images img-test/generated
 ```
 
-- Names should appear first, with previews filling the same sorted mixed tiles.
-  Check aspect/orientation/transparency, readable placeholders, and label selection.
-- Move with j/k or arrows and page through the 40-image fixture. Leaving images
-  should disappear; overlapping images should move without duplicating or smearing.
-  There should be no late image from a directory or viewport you already left.
-- Enter `generated/`, return with h, and open/close Space inspection. Full names
-  remain available, and text inspection should have no image overlay.
-- Resize wide/narrow and short/tall, including below 12×10 (text fallback), then
-  restore the window. Selection should remain stable and images should fit their
-  new cells. Geometry changes consume session attempts/output; restart if limited.
-- Check q, Ctrl-C, and Ctrl-Z/`fg`. Browser pictures should be cleaned up before
-  the shell appears; resume should rebuild them. Warm cache images should match.
-- Before one browser run, emit `./target/release/lsa img-test` inline. After quitting,
-  verify those prior inline images/history remain intact. There are no global image
-  deletion commands, but actual Ghostty retention still needs this check.
+- Space/PgDn pages forward, b/PgUp back; g/G jumps first/last. Left/right should
+  move across grid columns and up/down between rows. Selection and labels should
+  remain clear; images should stay associated with the correct filenames.
+- Enter shows a full name/path, including for folders and links. Esc/Backspace
+  returns to the same listing. Directory navigation is intentionally removed.
+- Resize narrow/wide and short/tall, including text fallback below 12×10, then
+  restore the window. Check clipping, flicker, and displaced or stale images.
+- Quit with q, repeat with Ctrl-C, then try Ctrl-Z/`fg`. Confirm restored shell
+  screen, cursor, input/echo, and preview cleanup. Ctrl-C should return 130.
+- Emit `./target/release/lsa img-test` inline before one pager run. Check that the
+  prior inline images/history survive quitting. Targeted deletion is tested, but
+  visible Ghostty retention is not established by the protocol model.
 
-Record version, geometry/pixels, OS, transport and any visible artifacts. The
-previous text pass does not establish these new graphics behaviors. The initial
-caps remain 64 attempts (up to 256) and 8 MiB of image commands per whole browser
-session, including navigation/refresh/resize; `[limit]` is expected after exhaustion.
+Optional: repeat with `--cache-dir=benchmarks/local/thumbnails --cache-stats`, or
+`--preview-limit=2`. Warm pixels should match; a low limit should affect only the
+current viewport's allowance. Paging to another viewport renews the allowance.
+
+Report terminal version, cell/pixel geometry, OS, and local/SSH/multiplexer context
+with any issue. The screenshot was a real visual review, but did not establish all
+cleanup/resize/transport conditions. No terminal UI automation was performed.

@@ -13,8 +13,10 @@ uses eight candidates per key after independent-source/geometry measurements;
 that storage change has automated output-equivalence and compatibility coverage.
 Four user images and generated fixtures remain gitignored under `img-test/`.
 The user passed the `--browse` text slice at `1ea10e5`, in the previously reported
-Ghostty context. Viewport-driven browser previews now have automated coverage and
-application/PTY measurements; their Ghostty visual check is pending.
+Ghostty context. The subsequent image-browser review was negative: poor spatial
+controls and visual design, and scope beyond an `ls` replacement. The user chose
+to replace browsing with a simple image pager. `--page` is implemented; its visual
+check remains pending. Historical browser measurements are retained separately.
 
 ## 1. Useful inline prototype — complete for the tested Ghostty commands
 
@@ -108,52 +110,40 @@ make individual latency/hit rates vary; eight candidates are not fastest in ever
 overloaded case. [Cache design](docs/cache.md) records limits and tradeoffs. No
 worker concurrency or browser was added in the cache chunks.
 
-## 3. Explicit browser — text user-verified; images implemented, visual check pending
+## 3. Explicit image pager — replaces the browser experiment
 
-- [x] `--browse` for one directory, alternate screen, mixed-entry selection,
-  arrows/j/k, paging, first/last, directory navigation, and explicit refresh.
-  Share existing entries, hidden filtering, sorting, and suffixes.
-- [x] Preserve raw-name selection on refresh/return and index fallback on removal.
-  Resolve directory links only on navigation; retain up to 64 return bookmarks.
-- [x] Full escaped name/path inspection with grapheme wrapping and scrolling;
-  selection survives resize, including temporarily unusable terminal dimensions.
-- [x] Separate browser terminal guard: raw input, cursor and alternate-screen
-  restoration, Ctrl-C and exit signals, Ctrl-Z/continue, and foreground TTY checks.
-  Reject pipes before consuming input; inline output never enters this lifecycle.
-- [x] Blocking `pselect` while idle, bounded input/escape buffers and redraw geometry,
-  no background refresh or new dependencies. The initial text slice did no image
-  or cache work; it remains available through `--no-images`.
-- [x] Unit and controlling-PTY checks cover interaction, restoration, screen bounds,
-  full names, safe input, failures, and idle CPU. See [browser design](docs/browser.md).
-  36 unit + 8 CLI tests, 25 browser + 16 protocol + 34 layout + 23 cache scenarios,
-  fmt, clippy, and release build pass. One idle trial emitted no bytes over one
-  second and used 1.87 ms child CPU including startup/quit; no renderer measured.
-- [x] User reported all supplied text-browser commands worked well at `1ea10e5`.
-  Version/geometry/transport were not separately resupplied.
-- [x] Mixed Kitty grid for browser directories with preview candidates, with names
-  first, complete-name inspection, and the same sort/filter/navigation behavior.
-  Unknown/multiplexed terminals and explicit text flags retain the text browser.
-- [x] One lazy decoder worker; one outstanding request/completion; selected source
-  first, visible entries next, then one entry on each side. Retain at most 34
-  records and place at most 32 images. No parallel decodes or new dependency.
-- [x] Viewport/revision/geometry generations discard stale work; overlapping images
-  move without re-upload. Session-wide attempt and 8 MiB command budgets include
-  cache hits/prefetch/stale attempts and reserve image cleanup bytes.
-- [x] Randomized Kitty image numbers, one placement each, individually freed on
-  release/exit/suspend. Raw mode/signal ownership remains separate from inline
-  output. Exit never joins an in-progress decode; the worker ends with the process.
-- [x] 39 unit + 8 CLI tests; 25 text-browser + 21 image-browser scenarios and all
-  existing 16 protocol + 34 layout + 23 cache scenarios; fmt/clippy/release pass.
-  Controlled slow-worker tests prove stale pixels are discarded and quit does not
-  join. [Browser measurements](benchmarks/browser.json) record first-name/preview
-  readiness, input response, child CPU/RSS, and opt-in cold/warm cache behavior.
-- [ ] User verifies [browser images and cleanup in Ghostty](docs/compatibility.md#browser-image-checklist).
-- [ ] Search and any explicit open/copy actions remain later work from daily use.
+The browser's text slice at `1ea10e5` received a user pass; image work at `59f5cec`
+had automated coverage and application measurements. The user's visual review
+rejected its presentation and directory-navigation scope. Neither the old graphics
+nor the replacement pager has a positive visual pass.
 
-Inline metadata/layout flags cannot combine with browsing. Directory reads and
-terminal writes remain synchronous and can delay input/signals. Decodes cannot be
-interrupted in progress; stale work may delay newer previews, but not selection.
-Automatic tests do not prove visible Ghostty graphics, resize, or inline retention.
+- [x] Replace `--browse` with `--page [DIRECTORY]`; the old option gives a migration
+  error. Read one sorted, hidden-filtered mixed listing once. Remove directory
+  navigation, symlink traversal actions, history, refresh, and revision state.
+- [x] Spatial arrows/hjkl: left/right stay within a row; up/down move one grid row.
+  Space/PgDn and b/PgUp page; Home/End or g/G jump. Enter inspects any entry's full
+  escaped name/path; Esc/Backspace closes inspection; q quits.
+- [x] Consistent tile-width filename selection, centered text placeholders, a
+  selected-name status line, and shorter pager controls. Keep names terminal text.
+- [x] Retain viewport previews, one lazy decoder, one outstanding job/completion,
+  stale-work rejection, at most 32 placements and 34 records, and opt-in cache.
+- [x] Renew attempt/output budgets only when the viewport changes. Count retained
+  records against the new attempt allowance and reserve resident-image cleanup.
+  A long listing can preview beyond the former whole-session 64-attempt/8-MiB caps;
+  each viewport remains bounded. Selection-only redraws cannot reset the caps.
+- [x] Retain separate inline/pager lifetimes, targeted Kitty cleanup, resize,
+  raw-mode restoration, quit/signals/suspend, text fallback, and idle blocking.
+- [x] 39 unit + 8 CLI tests, 25 text-pager + 23 image-pager scenarios, and the
+  existing 16 protocol + 34 layout + 23 cache scenarios pass. fmt/clippy/release
+  pass. Coverage includes all 100 previews beyond the old lifetime caps, bounded
+  output within an oversized viewport, and selection not renewing budgets.
+- [ ] User verifies the [pager in Ghostty](docs/compatibility.md#pager-checklist).
+
+There is no search, directory navigation, file launching, copying, or rich-TUI
+roadmap. Initial directory enumeration and terminal output remain synchronous;
+a codec or filesystem call cannot be cancelled, although quit never joins it.
+Snapshot refers to listing membership/order; image contents are read when needed.
+Preview failures never hide entries. Ordinary inline output is unchanged.
 
 ## 4. Package and expand — pending
 
@@ -174,10 +164,10 @@ SVG, TIFF, AVIF, HEIC, Sixel, or other protocols only from concrete demand.
 
 ## Next task
 
-Obtain the user's Ghostty pass for progressive browser images, scrolling/navigation,
-resize, detail view, quit/signals/suspend, cache reuse, and retention of prior inline
-images. Fix any reported issues before claiming visual compatibility. Then tune
-browser interaction and per-session limits from daily use; consider search if it
-solves a concrete need. Keep the single decoder and opt-in cache policy unless
-measurements or actual usage justify changing them. Other terminals/platforms and
-packaging remain unverified follow-up work.
+Review the simple pager in Ghostty using a large image directory and a mixed one.
+Check whether page scrolling and spatial selection serve the original need,
+along with name inspection, resize, cleanup, and prior inline-image retention.
+Fix concrete issues within that scope; do not resume the browser/search roadmap.
+Return to everyday inline use and packaging after that review. Keep the single
+decoder and opt-in cache unless measurements or usage justify a change. Linux,
+other terminals/transports, and the declared minimum Rust version remain unverified.

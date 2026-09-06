@@ -1,22 +1,23 @@
 # lsa
 
 A fast, human-oriented directory listing with inline image thumbnails and an
-explicit browser. Kitty graphics first; Sixel is an optional future addition.
+optional image pager. Kitty graphics first; Sixel is an optional future addition.
 
 **Status:** Rust CLI with compact text and automatic inline Kitty grids, both
 user-verified in Ghostty 1.3.1. Directories-first sorting, configurable long
 metadata, and opt-in cache commands also received a user pass at `7050349`.
 Improved cache replacement has automated tests and working-set measurements.
-The `--browse` text slice received a user pass at `1ea10e5`. Viewport-driven browser
-previews now have automated coverage; their Ghostty visual check is pending.
+The browser experiment was rejected after visual review: it expanded beyond the
+need to scroll large image listings. It has been replaced by `--page`, a pager for
+one listing. Automated checks cover it; its Ghostty visual check is pending.
 See [ROADMAP.md](ROADMAP.md) and [compatibility](docs/compatibility.md).
 
 ## Direction
 
 - One sorted collection of images, files, folders, links, and special files.
   A preview changes an entry's representation, never its membership or ordering.
-- Inline output returns to the shell and remains useful in history. Browsing is
-  explicit; automatic paging, if added, is opt-in.
+- Inline output returns to the shell and remains useful in history. Paging is
+  explicit; directory browsing is outside the product scope.
 - Names and metadata are terminal text. Unsupported images and preview failures
   retain a readable entry. Piped output is complete plain text.
 - Make the ordinary text path cheap: no content reads, graphics queries, eager
@@ -41,7 +42,7 @@ cargo build --release --locked
 ./target/release/lsa --fields=size,modified -h img-test
 ./target/release/lsa --grid img-test
 ./target/release/lsa --grid --protocol=kitty img-test
-./target/release/lsa --browse --dirs-first img-test
+./target/release/lsa --page --dirs-first img-test
 ./target/release/lsa --diagnose
 ```
 
@@ -61,16 +62,15 @@ Caching is opt-in via `--cache-dir=PATH`; `--no-cache` disables it and
 `--clear-cache` clears the selected cache. Inline output makes no terminal queries,
 reads no stdin, and uses no paging. No configuration file yet.
 
-`--browse [DIRECTORY]` explicitly enters a browser on a foreground terminal.
-Arrows or j/k move; PgUp/PgDn scroll; Enter enters directories; h/Left returns;
-Space shows the full name/path; r refreshes; q quits. Resize, Ctrl-C restoration,
-and Ctrl-Z/`fg` are supported. Sorting and hidden flags apply. On supported
-Kitty/Ghostty sessions, directories with preview candidates use a mixed grid.
-Names appear first; one worker decodes the viewport plus a two-entry margin.
-`--no-images` keeps the text browser. Image ownership/cleanup is session-scoped;
-optional cache settings apply. Search is not implemented. Browser mode rejects
-inline layout flags and multiple operands.
-See [browser controls and limits](docs/browser.md).
+`--page [DIRECTORY]` explicitly pages one fixed listing on a foreground terminal.
+Space/PgDn advances a page; b/PgUp goes back. Arrows or h/j/k/l move spatially through
+the grid; Enter inspects the full name/path; q quits. Directories and links remain
+entries. There is no directory navigation, refresh, search, or file-manager action.
+Resize, Ctrl-C restoration, and Ctrl-Z/`fg` are supported. Sorting and hidden flags
+apply. Supported Kitty/Ghostty sessions use a mixed grid; `--no-images` keeps text.
+One worker previews the viewport plus a two-entry margin; memory and output per
+viewport are bounded. The old `--browse` flag reports the replacement.
+See [pager controls and limits](docs/pager.md).
 
 Deliberate `ls` differences: bytewise name order; `-a` and `-A` both omit `.`/`..`;
 directory/link/FIFO/socket suffixes; numeric uid/gid and local minute timestamps in
@@ -127,21 +127,24 @@ and a neutral checker under transparency. GIF uses the first frame on its logica
 canvas. Symlinks to regular images can preview while retaining their link marker.
 Names wrap at grapheme boundaries; missing previews keep their tiles and labels.
 
-Inline output decodes synchronously, one source at a time. The browser moves that
+Inline output decodes synchronously, one source at a time. The pager moves that
 single decoder to a worker, with one outstanding request/completion, to keep input
 responsive. Optional cache hits skip decoding.
-Per invocation: 64 preview attempts by default (including failures), hard maximum
-256, and 8 MiB of image commands. Per source: 32 MiB input, 16 million pixels,
+Inline, per invocation: 64 preview attempts by default (including failures), hard
+maximum 256, and 8 MiB of image commands. The pager applies these caps per viewport
+change, including cleanup reservations; selection-only redraws do not renew them.
+Long paging sessions can therefore exceed those cumulative amounts.
+Per source: 32 MiB input, 16 million pixels,
 16,384 pixels per axis, 64 MiB decoded output, and a **best-effort** 64 MiB decoder allocation limit.
 Thumbnails fit within 320×240 pixels. These are starting caps, not performance
 claims or a hard process-memory/time sandbox. Inline preview work can delay a row; there
 is no timeout for slow filesystems or in-progress decodes. Names are never omitted
-after preview limits; stderr reports unavailable/limited previews.
+after preview limits; inline output reports unavailable/limited previews to stderr.
 
-Inline grid requires at least 12 columns × 8 rows; the browser grid needs 12×10.
+Inline grid requires at least 12 columns × 8 rows; the pager grid needs 12×10.
 Cell pixels come from the terminal's
 window size; if missing, 8×16 is estimated and aspect may be imperfect. Geometry is
-chosen once for inline output; the browser recalculates on resize. Detailed inline resize,
+chosen once for inline output; the pager recalculates on resize. Detailed inline resize,
 theme, and retention trials are not yet recorded. Inline images use anonymous
 placements and are left in terminal history; no global image deletion. Terminal storage may evict old previews.
 
@@ -179,9 +182,9 @@ cargo build --release --locked --examples --bins
 python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
-python3 tests/check_browser.py
-python3 tests/check_browser_images.py
-python3 benchmarks/browser.py
+python3 tests/check_pager.py
+python3 tests/check_pager_images.py
+python3 benchmarks/pager.py
 python3 benchmarks/measure.py
 python3 benchmarks/cache.py
 python3 benchmarks/cache_working_set.py
@@ -198,8 +201,9 @@ byte-level display tests. See [decisions](docs/decisions.md) and
 1. Tune layouts and metadata controls from daily use.
 2. Evaluate the opt-in cache from daily use before choosing a default policy;
    add bounded parallel work only where measurements justify it.
-3. Verify browser images, resize, and cleanup in Ghostty. Tune interaction and
-   session budgets from daily use; add search or broader formats when useful.
+3. Verify the narrower pager in Ghostty: spatial controls, page scrolling, readable
+   selection, and cleanup. Keep it focused on one listing; do not revive browsing
+   or build a rich TUI without a new product decision.
 4. Package tested macOS/Linux targets; expand formats and terminals from demand.
 
 See [AGENTS.md](AGENTS.md) for development practice.

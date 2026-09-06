@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser Kitty byte/ownership/viewport checks, without a terminal renderer."""
+"""Pager Kitty byte/ownership/viewport checks, without a terminal renderer."""
 import base64
 import hashlib
 import os
@@ -11,7 +11,7 @@ import tempfile
 import time
 import zlib
 
-from check_browser import Browser, CSI, ENTER, LEAVE
+from check_pager import Pager, CSI, ENTER, LEAVE
 from check_pty import APC, ROOT
 
 
@@ -23,16 +23,16 @@ def png(path, red=20):
                      + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
-def settle(browser):
+def settle(pager):
     # Generated sources are tiny; also allow the real-image and worker startup cases.
     quiet = time.monotonic()
     deadline = quiet + 5
     while time.monotonic() < deadline:
-        if browser.read(0.05):
+        if pager.read(0.05):
             quiet = time.monotonic()
         elif time.monotonic() - quiet >= 0.2:
             return
-    raise TimeoutError("browser preview work did not settle")
+    raise TimeoutError("pager preview work did not settle")
 
 
 class Model:
@@ -53,9 +53,9 @@ class Model:
         self.cols, self.rows = min(cols, 512), min(rows, 256)
         self.text = [[" "] * self.cols for _ in range(self.rows)]
 
-    def take(self, browser):
-        data = bytes(browser.data)[self.offset:]
-        self.offset = len(browser.data)
+    def take(self, pager):
+        data = bytes(pager.data)[self.offset:]
+        self.offset = len(pager.data)
         cursor = 0
         while cursor < len(data):
             apc = APC.match(data, cursor)
@@ -71,7 +71,7 @@ class Model:
                 elif (params, op) == (b"2", b"K"):
                     self.text[self.row] = [" "] * self.cols
                 elif (params, op) == (b"2", b"J"):
-                    assert not self.active, "full-screen erase used with browser images resident"
+                    assert not self.active, "full-screen erase used with pager images resident"
                     self.text = [[" "] * self.cols for _ in range(self.rows)]
                 elif op in [b"h", b"l"] and params == b"?1049":
                     assert not self.active, "images survived alternate-screen transition"
@@ -91,7 +91,6 @@ class Model:
 
     def command(self, apc):
         self.total += len(apc[0])
-        assert self.total <= 8 * 1024 * 1024, "session exceeded image command budget"
         controls = dict(part.split(b"=", 1) for part in apc[1].split(b","))
         assert controls[b"q"] == b"2"
         if controls.get(b"a") == b"d":
@@ -148,14 +147,14 @@ class Model:
 
 def main():
     cases = 0
-    with tempfile.TemporaryDirectory(dir=ROOT / "target", prefix="browser-images-") as temp:
+    with tempfile.TemporaryDirectory(dir=ROOT / "target", prefix="pager-images-") as temp:
         root = Path(temp)
         many = root / "many"
         many.mkdir()
         for i in range(100):
             png(many / f"image-{i:03}.png", i)
 
-        with Browser(many, "--cache-dir", root / "viewport-cache", "--cache-stats", graphics=True, cols=80, rows=24) as b:
+        with Pager(many, "--cache-dir", root / "viewport-cache", "--cache-stats", graphics=True, cols=80, rows=24) as b:
             first = b.frame()
             settle(b)
             m = Model()
@@ -165,11 +164,11 @@ def main():
             assert first.index(b"image-008.png") < first.index(b"\x1b_G"), "names did not precede decoding"
             # Selection-only redraw retains images without additional commands.
             before = m.total
-            b.send(b"j")
+            b.send(b"\x1b[C")
             m.take(b)
             assert m.total == before
             # Scroll one tile row; overlapping images move instead of re-uploading.
-            b.send(b"jjjjjjjj")
+            b.send(b"gjjj")
             settle(b)
             m.take(b)
             m.names_match_pixels()
@@ -186,8 +185,23 @@ def main():
             assert b"21 misses, 21 writes, 0 errors" in error, error
         cases += 1
 
+        with Pager(many, graphics=True, cols=80, rows=24) as b:
+            b.frame()
+            settle(b)
+            data = b.send(b" ")
+            assert b.screen(data)[5 + 1].startswith("> image-009.png"), "Space did not advance a full viewport"
+            data = b.send(b"b")
+            assert b.screen(data)[5 + 1].startswith("> image-000.png")
+            for keys, expected in [(b"\x1b[C", 1), (b"\x1b[B", 4), (b"\x1b[D", 3),
+                                   (b"\x1b[A", 0), (b"ll", 2), (b"l", 2),
+                                   (b"k", 2), (b"G", 99), (b"l", 99), (b"k", 96)]:
+                data = b.send(keys)
+                assert b.screen(data)[-2].startswith(f"{expected + 1} / 100  image-{expected:03}.png")
+            b.finish()
+        cases += 1
+
         for cols, rows in [(12, 10), (80, 24), (200, 50), (1000, 1000)]:
-            with Browser(many, graphics=True, cols=cols, rows=rows) as b:
+            with Pager(many, graphics=True, cols=cols, rows=rows) as b:
                 b.frame()
                 settle(b)
                 m = Model(cols, rows)
@@ -198,12 +212,12 @@ def main():
                 assert not m.active
             cases += 1
 
-        with Browser(many, graphics=True, cols=80, rows=24) as b:
+        with Pager(many, graphics=True, cols=80, rows=24) as b:
             b.frame()
             settle(b)
             m = Model()
             m.take(b)
-            b.send(b"jj ")
+            b.send(b"ll\r")
             m.take(b)
             assert not m.active
             assert b"Name: image-002.png" in bytes(b.data)
@@ -229,7 +243,7 @@ def main():
         for options, env in [(["--no-images"], {}), (["--protocol=none"], {}),
                              ([], {"TERM": "xterm", "TERM_PROGRAM": "unknown"}),
                              ([], {"TMUX": "test"})]:
-            with Browser(many, *options, "--cache-dir", root / "never-open", graphics=True, environment=env) as b:
+            with Pager(many, *options, "--cache-dir", root / "never-open", graphics=True, environment=env) as b:
                 assert b"\x1b_G" not in b.frame()
                 settle(b)
                 b.finish()
@@ -237,14 +251,14 @@ def main():
                 assert not (root / "never-open").exists()
             cases += 1
 
-        with Browser(many, "--preview-limit=0", "--cache-dir", root / "zero", graphics=True) as b:
+        with Pager(many, "--preview-limit=0", "--cache-dir", root / "zero", graphics=True) as b:
             assert b"[limit]" in b.frame()
             settle(b)
             b.finish()
             assert b"\x1b_G" not in b.data and not (root / "zero").exists()
         cases += 1
 
-        with Browser(many, "--preview-limit=2", graphics=True, cols=80, rows=24) as b:
+        with Pager(many, "--preview-limit=2", graphics=True, cols=80, rows=24) as b:
             b.frame()
             settle(b)
             m = Model()
@@ -254,22 +268,50 @@ def main():
             settle(b)
             b.finish()
             m.take(b)
-            assert len(m.uploads) == 2 and not m.active
+            assert len(m.uploads) == 4 and not m.active
         cases += 1
 
-        with Browser(many, "--preview-limit=256", graphics=True, cols=80, rows=24, pixels=(3840, 1152)) as b:
+        # A long listing keeps previewing beyond both old whole-session caps.
+        with Pager(many, graphics=True, cols=80, rows=24, pixels=(3840, 1152)) as b:
             b.frame()
             settle(b)
             m = Model()
             m.take(b)
-            for _ in range(10):
-                b.send(b"\x1b[6~")
+            for _ in range(11):
+                before = m.total
+                b.send(b" ")
                 settle(b)
                 m.take(b)
-            assert 10 < len(m.uploads) < 100 and b"[limit]" in b.data
+                assert m.total - before <= 8 * 1024 * 1024
+                m.names_match_pixels()
+            assert {p["red"] for p in m.uploads} == set(range(100))
+            assert m.total > 8 * 1024 * 1024
             b.finish()
             m.take(b)
-            assert not m.active and m.total <= 8 * 1024 * 1024
+            assert not m.active
+        cases += 1
+
+        # One oversized viewport still obeys its byte budget. Selection cannot
+        # reset it, but an explicit page change permits the next bounded batch.
+        with Pager(many, graphics=True, cols=200, rows=50, pixels=(3200, 2600)) as b:
+            b.frame()
+            settle(b)
+            m = Model(200, 50)
+            m.take(b)
+            assert 0 < len(m.active) < 32 and b"[limit]" in b.data
+            assert m.total <= 8 * 1024 * 1024
+            before = m.total
+            b.send(b"l")
+            settle(b)
+            m.take(b)
+            assert m.total == before
+            b.send(b" ")
+            settle(b)
+            m.take(b)
+            assert 0 < m.total - before <= 8 * 1024 * 1024
+            b.finish()
+            m.take(b)
+            assert not m.active
         cases += 1
 
         mixed = root / "mixed"
@@ -282,7 +324,7 @@ def main():
         (mixed / "e-link.png").symlink_to("c-image.png")
         os.mkfifo(mixed / "f-pipe.png")
         (mixed / "g-link.png").symlink_to("f-pipe.png")
-        with Browser(mixed, graphics=True, cols=80, rows=24) as b:
+        with Pager(mixed, graphics=True, cols=80, rows=24) as b:
             b.frame()
             settle(b)
             m = Model()
@@ -293,16 +335,12 @@ def main():
             b.send(b"\r")
             settle(b)
             m.take(b)
-            assert len(m.active) == 1 and next(iter(m.active.values()))["red"] == 77
-            b.send(b"h")
+            assert not m.active  # Enter inspects the folder; never lists its child.
+            assert b"Name: a-folder" in b.data and b"image-077.png" not in b.data
+            b.send(b"\x7f")
             settle(b)
             m.take(b)
             assert len(m.active) == 2
-            png(mixed / "c-image.png", 60)
-            b.send(b"r")
-            settle(b)
-            m.take(b)
-            assert {p["red"] for p in m.active.values()} == {60}
             b.finish()
             m.take(b)
             assert not m.active
@@ -311,7 +349,7 @@ def main():
         # Exact cached pixels match, while the CLI reports real completed cache work.
         digests = []
         for expected_hits in [0, 10]:
-            with Browser(many, "--cache-dir", root / "warm", "--cache-stats", graphics=True, cols=80, rows=24) as b:
+            with Pager(many, "--cache-dir", root / "warm", "--cache-stats", graphics=True, cols=80, rows=24) as b:
                 b.frame()
                 settle(b)
                 m = Model()
@@ -324,7 +362,7 @@ def main():
         cases += 1
 
         for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT]:
-            with Browser(many, graphics=True, cols=80, rows=24) as b:
+            with Pager(many, graphics=True, cols=80, rows=24) as b:
                 b.frame()
                 settle(b)
                 m = Model()
@@ -335,7 +373,7 @@ def main():
                 assert not m.active
             cases += 1
 
-        with Browser(many, graphics=True, cols=80, rows=24) as b:
+        with Pager(many, graphics=True, cols=80, rows=24) as b:
             b.frame()
             settle(b)
             m = Model()
@@ -349,7 +387,7 @@ def main():
                     assert os.WIFSTOPPED(status)
                     break
             else:
-                raise TimeoutError("browser did not suspend")
+                raise TimeoutError("pager did not suspend")
             m.take(b)
             assert not m.active and bytes(b.data).endswith(LEAVE)
             os.kill(b.child.pid, signal.SIGCONT)
@@ -362,14 +400,14 @@ def main():
             assert not m.active
         cases += 1
 
-        with Browser(many, graphics=True, cols=80, rows=24) as b:
+        with Pager(many, graphics=True, cols=80, rows=24) as b:
             b.frame()
             settle(b)
             assert b.read(0.5) == b"", "completed previews caused idle redraws"
             b.finish()
         cases += 1
 
-    print(f"{cases} browser image scenarios passed: viewport, ownership, limits, cache, signals, idle; no renderer")
+    print(f"{cases} pager image scenarios passed: viewport, ownership, limits, cache, signals, idle; no renderer")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser readiness/input measurements in a drained controlling PTY; no renderer."""
+"""Pager readiness/input measurements in a drained controlling PTY; no renderer."""
 from datetime import date
 import hashlib
 import json
@@ -16,7 +16,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
-from check_browser import Browser, LEAVE
+from check_pager import Pager, LEAVE
 from check_pty import APC, BIN
 
 
@@ -28,7 +28,7 @@ def trial(flags, action=None, source=ROOT / "img-test"):
     images = 0
     command_tail = bytearray()
     data = bytearray()
-    with Browser(source, *flags, "--cache-stats", graphics=True,
+    with Pager(source, *flags, "--cache-stats", graphics=True,
                  cols=122, rows=40, pixels=(976, 680)) as b:
         while time.perf_counter() - start < 10:
             if select.select([b.master], [], [], 0.001)[0]:
@@ -36,7 +36,7 @@ def trial(flags, action=None, source=ROOT / "img-test"):
                 data.extend(chunk)
                 command_tail.extend(chunk)
                 now = time.perf_counter()
-                if "names_ms" not in metrics and b"q quit\x1b[0m" in data:
+                if "names_ms" not in metrics and b"Enter name\x1b[0m" in data:
                     metrics["names_ms"] = (now - start) * 1000
                     names_at = now
                 consumed = 0
@@ -50,11 +50,11 @@ def trial(flags, action=None, source=ROOT / "img-test"):
                     metrics["first_preview_ms"] = (now - start) * 1000
                 if images == 4 and "all_previews_ms" not in metrics:
                     metrics["all_previews_ms"] = (now - start) * 1000
-                if action == b"G" and b"\x1b[7m> z-last" in data and "navigation_ms" not in metrics:
-                    metrics["navigation_ms"] = (now - sent) * 1000
+                if action == b"G" and b"\x1b[7m> z-last" in data and "selection_ms" not in metrics:
+                    metrics["selection_ms"] = (now - sent) * 1000
                     os.write(b.master, b"q")
                     sent = time.perf_counter()
-                if not action and sent is None and (images == 4 or "--no-images" in flags):
+                if not action and sent is None and "names_ms" in metrics and (images == 4 or "--no-images" in flags):
                     sent = time.perf_counter()
                     os.write(b.master, b"q")
                 if LEAVE in data:
@@ -65,7 +65,7 @@ def trial(flags, action=None, source=ROOT / "img-test"):
                 sent = time.perf_counter()
                 os.write(b.master, action)
         else:
-            raise TimeoutError("browser trial timed out")
+            raise TimeoutError("pager trial timed out")
         # Reap directly to obtain this child's CPU/RSS, without timed-wait overhead.
         deadline = time.perf_counter() + 3
         while True:
@@ -88,7 +88,7 @@ def trial(flags, action=None, source=ROOT / "img-test"):
 
 
 def main():
-    local = ROOT / "benchmarks/local/browser"
+    local = ROOT / "benchmarks/local/pager"
     local.mkdir(parents=True, exist_ok=True)
     cache = local / "cache"
     cache_flag = f"--cache-dir={cache}"
@@ -106,7 +106,7 @@ def main():
     report = {
         "date": date.today().isoformat(), "os": platform.platform(), "machine": platform.machine(),
         "binary_sha256": hashlib.sha256(BIN.read_bytes()).hexdigest(), "binary_bytes": BIN.stat().st_size,
-        "geometry": "122x40 cells, 8x17 pixels/cell; browser thumbnail 176x85",
+        "geometry": "122x40 cells, 8x17 pixels/cell; pager thumbnail 176x85",
         "fixture": "Four unchanged user images plus generated/ in img-test; input trials use a symlink to the original 2924x1932 JPEG plus z-last marker",
         "conditions": "Fresh processes; two warmups then nine trials. OS cache warm, not flushed. Cache clearing/priming outside timings. Clock starts before PTY setup/Popen. No renderer. Incremental command parsing, read timestamps include Python drain overhead. Input sent 10 ms after first names, before JPEG completion. CPU/RSS from wait4 for each child, including worker; exit observed separately.",
         "cases": {},
@@ -116,7 +116,7 @@ def main():
         ("cache_off", ["--no-cache"], None),
         ("cache_empty", [cache_flag], None),
         ("cache_warm", [cache_flag], None),
-        ("navigate_during_decode", ["--no-cache"], b"G"),
+        ("select_during_decode", ["--no-cache"], b"G"),
         ("quit_during_decode", ["--no-cache"], b"q"),
     ]:
         if name == "cache_warm":
@@ -135,7 +135,7 @@ def main():
             "samples": samples,
         }
         print(name, report["cases"][name]["median"], flush=True)
-    target = ROOT / "benchmarks/local/browser.json"
+    target = ROOT / "benchmarks/local/pager.json"
     target.write_text(json.dumps(report, indent=2) + "\n")
     print(target)
 

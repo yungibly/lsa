@@ -1,16 +1,14 @@
-//! An explicit browser. Entries are shared with inline output; screen
+//! An explicit pager. Entries are shared with inline output; screen
 //! ownership, input, and restoration belong exclusively to this session.
 use crate::{
-    browser_graphics::{Geometry, IMAGE_ROWS},
-    browser_previews::{Previews, View},
-    browser_terminal::{self, Event, Session},
     cli::Options,
     display,
-    entry::{self, Entry, Kind},
+    entry::{self, Entry},
+    pager_graphics::{Geometry, IMAGE_ROWS},
+    pager_previews::{Previews, View},
+    pager_terminal::{self, Event, Session},
 };
 use std::{
-    collections::VecDeque,
-    ffi::OsString,
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -18,8 +16,6 @@ use std::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-
-const HISTORY_LIMIT: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Key {
@@ -29,11 +25,11 @@ enum Key {
     PageDown,
     Home,
     End,
-    Open,
-    Parent,
+    Left,
+    Right,
+    Back,
     Detail,
     Escape,
-    Refresh,
     Quit,
     Interrupt,
     Suspend,
@@ -104,8 +100,8 @@ impl Input {
                         }
                         (b"", b'A') => Some(Key::Up),
                         (b"", b'B') => Some(Key::Down),
-                        (b"", b'C') => Some(Key::Open),
-                        (b"", b'D') => Some(Key::Parent),
+                        (b"", b'C') => Some(Key::Right),
+                        (b"", b'D') => Some(Key::Left),
                         (b"", b'H') | (b"1" | b"7", b'~') => Some(Key::Home),
                         (b"", b'F') | (b"4" | b"8", b'~') => Some(Key::End),
                         (b"5", b'~') => Some(Key::PageUp),
@@ -130,14 +126,14 @@ impl Input {
                 }
                 b'k' => Some(Key::Up),
                 b'j' => Some(Key::Down),
-                2 => Some(Key::PageUp),
-                6 => Some(Key::PageDown),
+                b'h' => Some(Key::Left),
+                b'l' => Some(Key::Right),
+                b'b' | 2 => Some(Key::PageUp),
+                b' ' | 6 => Some(Key::PageDown),
                 b'g' => Some(Key::Home),
                 b'G' => Some(Key::End),
-                b'\r' | b'\n' | b'l' => Some(Key::Open),
-                8 | 127 | b'h' => Some(Key::Parent),
-                b' ' | b'\t' => Some(Key::Detail),
-                b'r' => Some(Key::Refresh),
+                b'\r' | b'\n' | b'\t' => Some(Key::Detail),
+                8 | 127 => Some(Key::Back),
                 b'q' | 4 => Some(Key::Quit),
                 3 => Some(Key::Interrupt),
                 26 => Some(Key::Suspend),
@@ -147,32 +143,18 @@ impl Input {
     }
 }
 
-struct Position {
-    name: Option<OsString>,
-    selected: usize,
-    top: usize,
-}
-
-struct Visit {
-    path: PathBuf,
-    position: Position,
-}
-
 struct Detail {
     text: String,
     top: usize,
 }
 
-struct Browser<'a> {
-    opts: &'a Options,
+struct Pager {
     path: PathBuf,
     entries: Vec<Entry>,
     selected: usize,
     top: usize,
-    history: VecDeque<Visit>,
     detail: Option<Detail>,
     message: String,
-    revision: u64,
     has_candidates: bool,
 }
 
@@ -182,7 +164,7 @@ fn read_directory(path: &Path, opts: &Options) -> io::Result<entry::Listing> {
         return Err(io::Error::other(
             listing.errors.first().cloned().unwrap_or_else(|| {
                 format!(
-                    "{}: --browse requires a directory",
+                    "{}: --page requires a directory",
                     display::escape(path.as_os_str())
                 )
             }),
@@ -191,10 +173,10 @@ fn read_directory(path: &Path, opts: &Options) -> io::Result<entry::Listing> {
     Ok(listing)
 }
 
-impl<'a> Browser<'a> {
-    fn new(opts: &'a Options) -> io::Result<Self> {
-        // Resolve only explicitly requested navigation. Symlink entries retain
-        // their identity in listings; history remembers the route back through links.
+impl Pager {
+    fn new(opts: &Options) -> io::Result<Self> {
+        // Resolve the explicit operand once. The listing's membership/order is
+        // fixed for this invocation; directory entries are never navigation.
         let path = fs::canonicalize(&opts.paths[0]).map_err(|e| {
             io::Error::other(format!(
                 "{}: {e}",
@@ -202,49 +184,19 @@ impl<'a> Browser<'a> {
             ))
         })?;
         let listing = read_directory(&path, opts)?;
-        let mut browser = Self {
-            opts,
+        let has_candidates = listing.entries.iter().any(Entry::candidate);
+        let message = listing.errors.first().map_or_else(String::new, |error| {
+            format!("{} listing error(s): {error}", listing.errors.len())
+        });
+        Ok(Self {
             path,
-            entries: Vec::new(),
+            entries: listing.entries,
             selected: 0,
             top: 0,
-            history: VecDeque::new(),
             detail: None,
-            message: String::new(),
-            revision: 0,
-            has_candidates: false,
-        };
-        browser.install(listing, None);
-        Ok(browser)
-    }
-
-    fn position(&self) -> Position {
-        Position {
-            name: self.entries.get(self.selected).map(|e| e.name.clone()),
-            selected: self.selected,
-            top: self.top,
-        }
-    }
-
-    fn install(&mut self, listing: entry::Listing, position: Option<&Position>) {
-        self.revision += 1;
-        self.message = if let Some(error) = listing.errors.first() {
-            format!("{} listing error(s): {error}", listing.errors.len())
-        } else {
-            String::new()
-        };
-        self.entries = listing.entries;
-        self.has_candidates = self.entries.iter().any(Entry::candidate);
-        self.selected = position
-            .map_or(0, |p| {
-                self.entries
-                    .iter()
-                    .position(|e| Some(&e.name) == p.name.as_ref())
-                    .unwrap_or(p.selected)
-            })
-            .min(self.entries.len().saturating_sub(1));
-        self.top = position.map_or(0, |p| p.top);
-        self.detail = None;
+            message,
+            has_candidates,
+        })
     }
 
     fn keep_visible(&mut self, height: usize) {
@@ -254,30 +206,6 @@ impl<'a> Browser<'a> {
         } else if self.selected >= self.top + height {
             self.top = self.selected + 1 - height;
         }
-    }
-
-    fn open(&mut self) -> io::Result<()> {
-        let Some(entry) = self.entries.get(self.selected) else {
-            return Ok(());
-        };
-        if entry.kind != Kind::Directory
-            && (entry.kind != Kind::Link || !fs::metadata(&entry.path)?.is_dir())
-        {
-            self.show_detail();
-            return Ok(());
-        }
-        let path = fs::canonicalize(&entry.path)?;
-        let listing = read_directory(&path, self.opts)?;
-        if self.history.len() == HISTORY_LIMIT {
-            self.history.pop_front();
-        }
-        self.history.push_back(Visit {
-            path: self.path.clone(),
-            position: self.position(),
-        });
-        self.path = path;
-        self.install(listing, None);
-        Ok(())
     }
 
     fn fit_view(&mut self, geometry: Option<Geometry>, rows: usize) {
@@ -301,25 +229,6 @@ impl<'a> Browser<'a> {
         }
     }
 
-    fn parent(&mut self) -> io::Result<()> {
-        if let Some(visit) = self.history.back() {
-            let listing = read_directory(&visit.path, self.opts)?;
-            let visit = self.history.pop_back().unwrap();
-            self.path = visit.path;
-            self.install(listing, Some(&visit.position));
-        } else if let Some(parent) = self.path.parent() {
-            let listing = read_directory(parent, self.opts)?;
-            let position = Position {
-                name: self.path.file_name().map(|name| name.to_os_string()),
-                selected: 0,
-                top: 0,
-            };
-            self.path = parent.into();
-            self.install(listing, Some(&position));
-        }
-        Ok(())
-    }
-
     fn show_detail(&mut self) {
         let text = if let Some(entry) = self.entries.get(self.selected) {
             format!(
@@ -337,10 +246,10 @@ impl<'a> Browser<'a> {
         self.detail = Some(Detail { text, top: 0 });
     }
 
-    fn key(&mut self, key: Key, width: usize, height: usize) -> io::Result<()> {
+    fn key(&mut self, key: Key, width: usize, height: usize, columns: usize) {
         if let Some(detail) = &mut self.detail {
             match key {
-                Key::Escape | Key::Detail | Key::Open | Key::Parent => self.detail = None,
+                Key::Escape | Key::Detail | Key::Back => self.detail = None,
                 _ => {
                     detail.top = moved(
                         detail.top,
@@ -349,30 +258,31 @@ impl<'a> Browser<'a> {
                             .saturating_sub(height),
                         key,
                         height,
+                        1,
                     )
                 }
             }
-            return Ok(());
+            return;
         }
-        match key {
-            Key::Open => self.open()?,
-            Key::Parent => self.parent()?,
-            Key::Refresh => {
-                let listing = read_directory(&self.path, self.opts)?;
-                self.install(listing, Some(&self.position()));
+        if key == Key::Detail {
+            self.show_detail();
+        } else {
+            // Paging advances the viewport itself, keeping the selection's
+            // relative position when possible. Arrow scrolling moves only as
+            // far as needed to keep the selected entry visible.
+            match key {
+                Key::PageUp => self.top = self.top.saturating_sub(height),
+                Key::PageDown => self.top = self.top.saturating_add(height),
+                _ => {}
             }
-            Key::Detail => self.show_detail(),
-            _ => {
-                self.selected = moved(
-                    self.selected,
-                    self.entries.len().saturating_sub(1),
-                    key,
-                    height,
-                )
-            }
+            self.selected = moved(
+                self.selected,
+                self.entries.len().saturating_sub(1),
+                key,
+                height,
+                columns,
+            );
         }
-        self.keep_visible(height);
-        Ok(())
     }
 
     fn render(
@@ -401,7 +311,7 @@ impl<'a> Browser<'a> {
         }
         let height = rows - 3;
         self.fit_view(geometry, rows);
-        let header = format!("lsa  {}", display::escape(self.path.as_os_str()));
+        let header = display::escape(self.path.as_os_str());
         line(out, 1, &header, width, false)?;
         if let Some(detail) = &mut self.detail {
             let lines = detail_lines(&detail.text, width);
@@ -443,7 +353,15 @@ impl<'a> Browser<'a> {
                     } else {
                         entry.kind.label()
                     };
-                    cell(out, row + 2, col, placeholder, g.tile - 2, false)?;
+                    let offset = (g.tile - 2).saturating_sub(placeholder.width()) / 2;
+                    cell(
+                        out,
+                        row + 2,
+                        col + offset,
+                        placeholder,
+                        g.tile - 2 - offset,
+                        false,
+                    )?;
                     cell(out, row + IMAGE_ROWS, col, &text, g.tile - 2, selected)?;
                 } else {
                     line(out, i - self.top + 2, &text, width, selected)?;
@@ -451,13 +369,16 @@ impl<'a> Browser<'a> {
             }
             let status = if self.message.is_empty() {
                 format!(
-                    "{} / {} | Space: full name/path | r refresh",
+                    "{} / {}  {}",
                     if self.entries.is_empty() {
                         0
                     } else {
                         self.selected + 1
                     },
-                    self.entries.len()
+                    self.entries.len(),
+                    self.entries
+                        .get(self.selected)
+                        .map_or_else(String::new, Entry::label)
                 )
             } else {
                 self.message.clone()
@@ -466,7 +387,7 @@ impl<'a> Browser<'a> {
             line(
                 out,
                 rows,
-                "Up/Down j/k | PgUp/PgDn g/G | Enter open | h parent | q quit",
+                "q quit | Space/b page | Arrows move | Enter name",
                 width,
                 false,
             )?;
@@ -475,10 +396,12 @@ impl<'a> Browser<'a> {
     }
 }
 
-fn moved(current: usize, last: usize, key: Key, page: usize) -> usize {
+fn moved(current: usize, last: usize, key: Key, page: usize, columns: usize) -> usize {
     match key {
-        Key::Up => current.saturating_sub(1),
-        Key::Down => current.saturating_add(1).min(last),
+        Key::Left if !current.is_multiple_of(columns) => current - 1,
+        Key::Right if current % columns + 1 < columns => (current + 1).min(last),
+        Key::Up if current >= columns => current - columns,
+        Key::Down => current.saturating_add(columns).min(last),
         Key::PageUp => current.saturating_sub(page),
         Key::PageDown => current.saturating_add(page).min(last),
         Key::Home => 0,
@@ -487,7 +410,7 @@ fn moved(current: usize, last: usize, key: Key, page: usize) -> usize {
     }
 }
 
-// Clip only the overview; Space offers lossless, scrollable inspection. Keep
+// Clip only the overview; Enter offers lossless, scrollable inspection. Keep
 // graphemes intact, show a continuation marker, and never touch the last column.
 fn line(
     out: &mut impl Write,
@@ -523,6 +446,10 @@ fn cell(
     }
     if clipped && width > 0 {
         out.write_all(b">")?;
+        used += 1;
+    }
+    if selected {
+        write!(out, "{:width$}", "", width = width - used)?;
     }
     out.write_all(b"\x1b[0m")
 }
@@ -555,8 +482,8 @@ fn terminal_geometry(opts: &Options) -> ((usize, usize), Option<Geometry>) {
 }
 
 pub fn run(opts: &Options, out: &mut impl Write) -> io::Result<u8> {
-    browser_terminal::validate()?;
-    let mut browser = Browser::new(opts)?;
+    pager_terminal::validate()?;
+    let mut pager = Pager::new(opts)?;
     let mut session = Session::enter(out)?;
     let mut previews = Previews::new(opts.preview_limit, opts.cache_path().map(Path::to_path_buf));
     let mut input = Input::default();
@@ -564,21 +491,20 @@ pub fn run(opts: &Options, out: &mut impl Write) -> io::Result<u8> {
     let (mut size, mut base_geometry) = terminal_geometry(opts);
     let mut dirty = true;
     let code = 'events: loop {
-        let geometry = base_geometry.filter(|_| browser.detail.is_none() && browser.has_candidates);
-        browser.fit_view(geometry, size.1);
+        let geometry = base_geometry.filter(|_| pager.detail.is_none() && pager.has_candidates);
+        pager.fit_view(geometry, size.1);
         if dirty {
             let view = geometry.map(|geometry| View {
-                revision: browser.revision,
                 geometry,
-                range: browser.top..(browser.top + geometry.capacity()).min(browser.entries.len()),
+                range: pager.top..(pager.top + geometry.capacity()).min(pager.entries.len()),
             });
             previews.sync(
                 view,
-                browser.entries.len(),
+                pager.entries.len(),
                 &mut session.graphics,
                 session.out,
             )?;
-            browser.render(
+            pager.render(
                 session.out,
                 size.0,
                 size.1,
@@ -589,11 +515,8 @@ pub fn run(opts: &Options, out: &mut impl Write) -> io::Result<u8> {
             dirty = previews.paint(&mut session.graphics, session.out)?;
             session.out.write_all(b"\x1b[0m")?;
             session.out.flush()?;
-            dirty |= previews.schedule(
-                &browser.entries,
-                browser.selected,
-                session.graphics.remaining(),
-            );
+            dirty |=
+                previews.schedule(&pager.entries, pager.selected, session.graphics.remaining());
         }
         if dirty {
             continue;
@@ -637,14 +560,17 @@ pub fn run(opts: &Options, out: &mut impl Write) -> io::Result<u8> {
                     input = Input::default();
                 }
                 _ => {
-                    let page = if browser.detail.is_some() {
-                        size.1.saturating_sub(3).max(1)
-                    } else {
-                        geometry.map_or(size.1.saturating_sub(3).max(1), Geometry::capacity)
-                    };
-                    if let Err(error) = browser.key(key, size.0.saturating_sub(1).max(1), page) {
-                        browser.message = format!("Cannot navigate/refresh: {error}");
-                    }
+                    // Recompute for each key: Enter can change the mode halfway
+                    // through one input batch, and details always scroll by lines.
+                    let grid =
+                        base_geometry.filter(|_| pager.detail.is_none() && pager.has_candidates);
+                    let page = grid.map_or(size.1.saturating_sub(3).max(1), Geometry::capacity);
+                    pager.key(
+                        key,
+                        size.0.saturating_sub(1).max(1),
+                        page,
+                        grid.map_or(1, |g| g.columns),
+                    );
                 }
             }
             dirty = true;
@@ -701,46 +627,19 @@ mod tests {
     }
 
     #[test]
-    fn restored_selection_uses_raw_name_and_keeps_viewport() {
-        let opts = Options::default();
-        let make = |names: &[&str]| entry::Listing {
-            entries: names
-                .iter()
-                .map(|name| Entry {
-                    path: PathBuf::from(name),
-                    name: OsString::from(name),
-                    kind: Kind::File,
-                    metadata: None,
-                })
-                .collect(),
-            valid: true,
-            directory: true,
-            errors: Vec::new(),
-        };
-        let mut browser = Browser {
-            opts: &opts,
-            path: PathBuf::from("."),
-            entries: Vec::new(),
-            selected: 0,
-            top: 0,
-            history: VecDeque::new(),
-            detail: None,
-            message: String::new(),
-            revision: 0,
-            has_candidates: false,
-        };
-        browser.install(make(&["a", "b", "c", "d", "e"]), None);
-        browser.key(Key::End, 80, 2).unwrap();
-        assert_eq!((browser.selected, browser.top), (4, 3));
-        let position = browser.position();
-        browser.install(make(&["0", "a", "b", "c", "d", "e"]), Some(&position));
-        browser.keep_visible(3);
-        assert_eq!((browser.selected, browser.top), (5, 3));
-        browser.install(make(&["a"]), Some(&position));
-        browser.keep_visible(3);
-        assert_eq!((browser.selected, browser.top), (0, 0));
-        browser.install(make(&[]), Some(&position));
-        browser.key(Key::PageDown, 80, 1).unwrap();
-        assert_eq!((browser.selected, browser.top), (0, 0));
+    fn spatial_movement_stays_in_rows_and_handles_last_partial_row() {
+        // Three columns, last row contains only index 9.
+        assert_eq!(moved(0, 9, Key::Left, 9, 3), 0);
+        assert_eq!(moved(1, 9, Key::Left, 9, 3), 0);
+        assert_eq!(moved(1, 9, Key::Right, 9, 3), 2);
+        assert_eq!(moved(2, 9, Key::Right, 9, 3), 2);
+        assert_eq!(moved(2, 9, Key::Down, 9, 3), 5);
+        assert_eq!(moved(5, 9, Key::Up, 9, 3), 2);
+        assert_eq!(moved(8, 9, Key::Down, 9, 3), 9);
+        assert_eq!(moved(9, 9, Key::Right, 9, 3), 9);
+        assert_eq!(moved(4, 9, Key::Left, 6, 1), 4);
+        assert_eq!(moved(4, 9, Key::Right, 6, 1), 4);
+        assert_eq!(moved(4, 9, Key::PageDown, 6, 1), 9);
+        assert_eq!(moved(0, 0, Key::Down, 1, 3), 0);
     }
 }

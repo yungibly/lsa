@@ -1,4 +1,4 @@
-//! Browser-only terminal lifetime. Inline output never initializes this module.
+//! Pager-only terminal lifetime. Inline output never initializes this module.
 use std::{
     fs::{File, OpenOptions},
     io::{self, IsTerminal, Write},
@@ -95,7 +95,7 @@ pub enum Event {
 
 pub struct Session<'a, W: Write> {
     pub out: &'a mut W,
-    pub graphics: crate::browser_graphics::Screen,
+    pub graphics: crate::pager_graphics::Screen,
     original: libc::termios,
     input: File,
     active: bool,
@@ -105,12 +105,12 @@ pub struct Session<'a, W: Write> {
 pub fn validate() -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::other(
-            "--browse requires terminal stdin and stdout; use a normal listing for pipes",
+            "--page requires terminal stdin and stdout; use a normal listing for pipes",
         ));
     }
     if std::env::var_os("TERM").is_some_and(|term| term == "dumb") {
         return Err(io::Error::other(
-            "--browse requires a cursor-addressable terminal",
+            "--page requires a cursor-addressable terminal",
         ));
     }
     // Require the same foreground terminal for input, display, and restoration.
@@ -127,7 +127,7 @@ pub fn validate() -> io::Result<()> {
             || libc::tcgetpgrp(libc::STDIN_FILENO) != libc::getpgrp()
         {
             return Err(io::Error::other(
-                "--browse requires stdin and stdout on the same foreground terminal",
+                "--page requires stdin and stdout on the same foreground terminal",
             ));
         }
     }
@@ -149,11 +149,11 @@ impl<'a, W: Write> Session<'a, W> {
             .custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC)
             .open("/dev/tty")?;
         if input.as_raw_fd() as usize >= libc::FD_SETSIZE {
-            return Err(io::Error::other("browser input exceeds select fd limit"));
+            return Err(io::Error::other("pager input exceeds select fd limit"));
         }
         let mut session = Self {
             out,
-            graphics: crate::browser_graphics::Screen::default(),
+            graphics: crate::pager_graphics::Screen::default(),
             original: unsafe { original.assume_init() },
             input,
             active: false,
