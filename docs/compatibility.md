@@ -6,7 +6,10 @@
 | --- | --- |
 | Ghostty 1.3.1, arm64 macOS 26.6.2, 122×40 cells / 8×17 pixels | Earlier anonymous inline Kitty previews and compact text received user passes. Metadata/cache commands also received a pass at `7050349`; transport/version were not resupplied for that pass. |
 | User's latest Ghostty screenshot | Inline-only direction approved; requested smaller previews, visible folder/error artwork, simpler grid labels and tiny long-view previews. Version/geometry/transport were not resupplied. |
-| Local gallery-options change, arm64 macOS 26.6.2, Rust 1.98.0 | Rust unit/CLI tests, strict clippy, release build, 183 PTY byte/cursor scenarios, foreground-TTY completion and extracted host package smoke checks. New dependencies have not yet run on hosted Linux/Rust 1.88. |
+| Local v0.2.0, arm64 macOS 26.6.2, Rust 1.98.0 | Rust unit/CLI tests, strict clippy, release build, 183 PTY byte/cursor scenarios, foreground-TTY completion and extracted host package smoke checks passed. |
+| v0.2.0 CI: macos-14 (arm64), macos-15-intel, ubuntu-24.04-arm and ubuntu-24.04 (musl) | All four native jobs passed formatting, strict clippy, Rust tests, all 183 headless terminal scenarios and extracted-package smoke checks. Rust 1.88 and release-tooling tests passed separately on Ubuntu. |
+| v0.2.0 release and Homebrew | All eleven release jobs passed, including repeated native builds, Rust 1.88, checked archive publication, Homebrew installs/tests on both macOS architectures and x86-64 Linux, and the tap update. The public formula points to all four v0.2.0 archives. |
+| Published v0.2.0 Apple Silicon archive, local arm64 macOS | SHA-256, extraction, executable version and mixed-directory pipe output passed. No local install or shell changes. |
 | GitHub Actions: arm64 macOS 14.8.9 and Intel macOS 15.7.9, Rust 1.98.1 | Native release builds, formatting, strict clippy, all Rust tests, all 108 headless terminal scenarios, and extracted-package smoke tests passed. macOS deployment target is 14.0; Intel macOS 14 was not directly tested. |
 | GitHub Actions: ARM64 and x86-64 Ubuntu 24.04.4, Rust 1.98.1, musl targets | Native builds, strict clippy, all Rust tests, all 108 headless terminal scenarios, and extracted static-musl package smoke tests passed. |
 | GitHub Actions: Rust 1.88.0, x86-64 Ubuntu 24.04.4, GNU target | Declared minimum verified with `cargo test --locked --all-targets`; release metadata tests also passed. |
@@ -17,7 +20,12 @@
 | Final artwork optimization | Full offline artwork sheet and paired complete PTY output are byte-identical before/after, including all eleven categories. No new terminal behavior. |
 | Other terminals, multiplexers, SSH | Unverified. Protocol hints or upstream support are not lsa validation. |
 
-Hosted results: [CI at ded6e1c](https://github.com/yungibly/lsa/actions/runs/34011569797),
+Current hosted result: [CI at ba4a882](https://github.com/yungibly/lsa/actions/runs/34106546519),
+2026-09-07, and the complete
+[v0.2.0 release workflow](https://github.com/yungibly/lsa/actions/runs/34107070950).
+Other v0.1.0 results describe historical verification.
+
+Earlier hosted results: [CI at ded6e1c](https://github.com/yungibly/lsa/actions/runs/34011569797),
 2026-09-06. Hosted PTYs model direct Ghostty/Kitty protocol conditions; there is no
 terminal renderer or real SSH/multiplexer session in these jobs.
 The [v0.1.0 release workflow](https://github.com/yungibly/lsa/actions/runs/34011671355)

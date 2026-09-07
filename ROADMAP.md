@@ -74,8 +74,8 @@ test, three release-tooling tests, and 183 headless terminal scenarios (75 new),
 including all sizes at four geometries, 256/300-image galleries, 4,096 placements,
 full names, SVG/ICO pixels, special-file fallback, shared budgets and cache geometry.
 Formatting, strict clippy, release build and local extracted-package smoke checks
-pass. Hosted Linux/Rust 1.88 results above apply to
-v0.1.0, not yet to these new dependencies or behavior.
+pass. The [v0.2.0 commit's CI](https://github.com/yungibly/lsa/actions/runs/34106546519)
+also passed every native macOS/Linux job and Rust 1.88 compatibility.
 
 Paired measurements separate equal work from more previews and application cost
 from rendering. Plain output/cost and equal-work gallery speed are essentially
@@ -87,9 +87,17 @@ The user reported all requested Ghostty checks working perfectly on 2026-09-07.
 Version, geometry and transport were not resupplied. The final artwork optimization
 is byte-identical in the full artwork sheet and paired end-to-end galleries.
 
-**Next:** publish v0.2.0 as authorized, watch native CI and the complete release
-workflow through the Homebrew tap update, and record the results. WebM remains
-deferred; no additional visual check is needed for the identical artwork output.
+Commit `ba4a882` and tag `v0.2.0` are pushed; the
+[release workflow](https://github.com/yungibly/lsa/actions/runs/34107070950) passed
+all eleven jobs, including every native build, Rust 1.88, publication, Homebrew
+installations on both macOS architectures and x86-64 Linux, and the tap update.
+[v0.2.0](https://github.com/yungibly/lsa/releases/tag/v0.2.0) is published with
+release notes and checksummed binaries. The public Apple Silicon archive also
+passed checksum, extraction, version and mixed-listing checks locally.
+
+**Next:** normal personal use and any concrete regressions. WebM remains deferred;
+no additional visual check is needed for the identical artwork output. No pending
+release work. Use `brew update && brew upgrade lsa` for an existing installation.
 
 Keep cache policy opt-in. No recursive trees, Git scans, file operations, services or
 plugin system are planned. Add formats/concurrency only from demonstrated needs.

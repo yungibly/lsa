@@ -1,6 +1,6 @@
 # Session handoff
 
-## 2026-09-07 — verified Ghostty and v0.2.0 release preparation
+## 2026-09-07 — verified Ghostty and v0.2.0 release
 
 The user tested everything successfully in Ghostty and explicitly authorized a
 final efficiency pass, commit, tag, push, and watching CI until green. Their terminal
@@ -13,10 +13,24 @@ exactly. Folder grids use about 16% less CPU; mixed artwork grids about 22% less
 raster previews are unchanged. Evidence: benchmarks/artwork.json and its harness.
 Before binary: target/lsa-before-final-efficiency. Version chosen: v0.2.0.
 
-Next: complete local checks, commit/push main, wait for native CI, push the matching
-release tag, and watch release/build/Homebrew jobs through the final tap update.
-Record actual run links and outcomes when they finish. The prior "not requested"
-release restriction below is superseded by the user's latest authorization.
+Commit `ba4a882` and annotated tag `v0.2.0` are pushed. All five jobs passed in
+CI: https://github.com/yungibly/lsa/actions/runs/34106546519 (four native targets
+plus Rust 1.88). Local full checks and extracted v0.2.0 package also passed.
+Release workflow: https://github.com/yungibly/lsa/actions/runs/34107070950.
+All eleven release jobs passed, including native builds, Rust 1.88, publication,
+Homebrew installations on both macOS architectures and x86-64 Linux, and the tap
+update. Public release: https://github.com/yungibly/lsa/releases/tag/v0.2.0.
+Reviewed docs/releases/v0.2.0.md notes are applied. The public formula independently
+checks as v0.2.0 with all four architecture URLs. The published Apple Silicon
+archive passed SHA-256, extraction, version and mixed-listing checks locally.
+Progress/results and downloaded files stay under ignored target/automation/.
+No local Homebrew installation, shell changes or source-image modifications.
+
+The final documentation follow-up records these results with [skip ci]; source
+and the release tag remain exactly the successfully tested ba4a882 commit.
+Next: normal personal use and concrete regressions; no pending publication work.
+The prior "not requested" release restriction below is superseded by the user's
+latest authorization.
 
 ## 2026-09-07 — gallery defaults, sizing, UX and formats
 
