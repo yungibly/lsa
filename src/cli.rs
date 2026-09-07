@@ -64,6 +64,7 @@ pub struct Options {
     pub hyperlink: bool,
     pub protocol: Protocol,
     pub preview_limit: usize,
+    pub thumbnail_size: Option<usize>,
     pub diagnose: bool,
     pub cache_dir: Option<PathBuf>,
     pub no_cache: bool,
@@ -76,6 +77,14 @@ pub struct Options {
 pub const HELP: &str = "lsa — familiar listings, useful details, inline image previews
 
 Usage: lsa [OPTIONS] [PATH ...]
+
+Examples:
+  lsa                         Automatic columns or image grid
+  lsa -la --header             Details with column headings
+  lsa --grid --thumbnail-size=5 photos
+                              Larger thumbnails (5 terminal rows high)
+  lsa --preview-limit=1024 photos
+                              Preview more images in a large directory
 
 Everyday options:
   -a, -A, --all          Include hidden entries (without . and ..)
@@ -91,8 +100,9 @@ Everyday options:
   --sort=name|size|time|none
                          Natural, case-insensitive name order is the default
   --dirs-first          Group directories before other entries
-  --header              Add column headings to long output
-  --fields=LIST         Long columns: mode,links,user,group,uid,gid,size,modified
+  --header              Long output with column headings (implies -l)
+  --fields=LIST         Choose long columns (implies -l):
+                         mode,links,user,group,uid,gid,size,modified
 
 Appearance:
   --color=auto|always|never
@@ -105,10 +115,13 @@ Appearance:
 
 Images:
   --grid                Compact thumbnails and folder/file artwork for every tile
+  --thumbnail-size=N    Grid height in terminal rows (1..12; default 3)
+                         Width/spacing follow size; shrinks to fit the terminal
+                         Long output keeps its one-row miniatures
   --no-images           Text only; never open image contents
   --protocol=auto|kitty|none
                          Auto recognizes direct Ghostty/Kitty sessions
-  --preview-limit=N     At most N attempts across all paths (0..256; default 16)
+  --preview-limit=N     At most N attempts across all paths (0..4096; default 256)
   --cache-dir=PATH      Opt-in, bounded thumbnail cache (also accepts a space)
   --no-cache            Disable caching regardless of option order
   --clear-cache         Clear the selected cache and exit; requires --cache-dir
@@ -119,9 +132,11 @@ Images:
 
 Output always stays in terminal scrollback and returns to the shell. Image-heavy
 listings (at least half image candidates), small mixed listings, and individual
-images preview automatically. Work is sequential and capped at 8 MiB of image
-commands / 256 placements, including artwork; remaining names print as compact text.
+images preview automatically. Work is sequential and capped at 128 MiB of image
+commands / 4096 placements, including artwork; remaining names print as compact text.
 No pager or input handling. -l uses one-row thumbnails; -1 and --no-images keep text.
+Long options (-l, -n, --header, --fields) select details over --grid; -1 and image
+disabling flags also override --grid, regardless of order. A notice explains this.
 Pipes default to plain names, one per line; --grid never sends images to pipes.
 Unknown terminals and multiplexers use text. Preview failures are quiet and never
 hide names. Filenames are complete, with terminal controls escaped.
@@ -131,6 +146,47 @@ Exit: 0 success (including closed pipes), 1 listing/output/cache-clear error,
 ";
 
 impl Options {
+    /// Explain explicit requests that cannot affect the selected layout once,
+    /// without turning familiar text overrides into option errors.
+    pub fn layout_notice(&self) -> Option<String> {
+        let reason = if self.long {
+            Some(if self.header {
+                "--header selects long output (it implies -l)"
+            } else if !self.fields.is_empty() {
+                "--fields selects long output (it implies -l)"
+            } else {
+                "-l / -n / --long selects long output"
+            })
+        } else if self.one {
+            Some("-1 / --oneline selects text lines")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            let ignored = match (self.grid, self.thumbnail_size.is_some()) {
+                (true, true) => "--grid and --thumbnail-size",
+                (true, false) => "--grid",
+                (false, true) => "--thumbnail-size",
+                (false, false) => return None,
+            };
+            return Some(format!(
+                "{ignored} ignored: {reason}; omit the long/line options to use a grid"
+            ));
+        }
+        if self.grid {
+            let reason = if self.no_images {
+                "--no-images disables images"
+            } else if self.protocol == Protocol::None {
+                "--protocol=none disables images"
+            } else if self.preview_limit == 0 {
+                "--preview-limit=0 disables previews"
+            } else {
+                return None;
+            };
+            return Some(format!("--grid ignored: {reason}"));
+        }
+        None
+    }
     pub fn cache_path(&self) -> Option<&std::path::Path> {
         self.cache_dir.as_deref().filter(|_| !self.no_cache)
     }
@@ -141,7 +197,7 @@ impl Options {
 
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String> {
     let mut opts = Options {
-        preview_limit: 16,
+        preview_limit: 256,
         human: true,
         ..Options::default()
     };
@@ -219,12 +275,34 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                     _ => return Err("protocol must be auto, kitty, or none".into()),
                 };
             }
-            _ if s.starts_with("--preview-limit=") => {
-                opts.preview_limit = s[16..]
-                    .parse()
+            _ if s == "--preview-limit"
+                || s.starts_with("--preview-limit=")
+                || s == "--thumbnail-size"
+                || s.starts_with("--thumbnail-size=") =>
+            {
+                let option = s.split('=').next().unwrap();
+                let value = match s.split_once('=') {
+                    Some((_, value)) => value.to_owned(),
+                    None => args
+                        .next()
+                        .and_then(|v| v.into_string().ok())
+                        .ok_or_else(|| format!("{option} requires an integer"))?,
+                };
+                let (min, max) = if option == "--preview-limit" {
+                    (0, 4096)
+                } else {
+                    (1, 12)
+                };
+                let number = value
+                    .parse::<usize>()
                     .ok()
-                    .filter(|n| *n <= 256)
-                    .ok_or("preview limit must be an integer from 0 to 256")?;
+                    .filter(|n| (min..=max).contains(n))
+                    .ok_or_else(|| format!("{option} must be an integer from {min} to {max}"))?;
+                if option == "--preview-limit" {
+                    opts.preview_limit = number;
+                } else {
+                    opts.thumbnail_size = Some(number);
+                }
             }
             _ if s.starts_with("--") => {
                 return Err(format!("unknown option: {}", crate::display::escape(&arg)));
@@ -294,7 +372,10 @@ mod tests {
             "-z",
             "--protocol=sixel",
             "--preview-limit=-1",
-            "--preview-limit=257",
+            "--preview-limit=4097",
+            "--thumbnail-size=0",
+            "--thumbnail-size=13",
+            "--thumbnail-size=1.5",
             "--color=wat",
             "--icons=wat",
             "--sort=wat",
@@ -328,6 +409,62 @@ mod tests {
         ] {
             assert!(args(&[a]).is_err(), "{a}");
         }
+    }
+    #[test]
+    fn preview_controls_accept_spaces_and_equal_signs() {
+        assert_eq!(args(&[]).unwrap().preview_limit, 256);
+        for flags in [
+            vec!["--preview-limit=4096", "--thumbnail-size=12"],
+            vec!["--preview-limit", "4096", "--thumbnail-size", "12"],
+        ] {
+            let opts = args(&flags).unwrap();
+            assert_eq!(opts.preview_limit, 4096);
+            assert_eq!(opts.thumbnail_size, Some(12));
+        }
+        for flags in [
+            vec!["--preview-limit"],
+            vec!["--thumbnail-size"],
+            vec!["--thumbnail-size", "huge"],
+        ] {
+            assert!(args(&flags).is_err());
+        }
+    }
+    #[test]
+    fn explains_layout_overrides_in_either_order() {
+        for flag in [
+            "--header",
+            "--fields=size",
+            "-l",
+            "-n",
+            "-1",
+            "--no-images",
+            "--protocol=none",
+            "--preview-limit=0",
+        ] {
+            for flags in [[flag, "--grid"], ["--grid", flag]] {
+                assert!(
+                    args(&flags)
+                        .unwrap()
+                        .layout_notice()
+                        .unwrap()
+                        .contains("--grid ignored:")
+                );
+            }
+        }
+        assert!(
+            args(&["--header", "--thumbnail-size=5"])
+                .unwrap()
+                .layout_notice()
+                .unwrap()
+                .contains("--thumbnail-size ignored:")
+        );
+        assert!(args(&["--header"]).unwrap().layout_notice().is_none());
+        assert!(
+            args(&["--grid", "--thumbnail-size=5"])
+                .unwrap()
+                .layout_notice()
+                .is_none()
+        );
     }
     #[test]
     fn cache_controls_are_explicit_and_disable_wins() {

@@ -57,7 +57,7 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
     if opts.preview_limit == 0 {
         return text("preview budget disabled");
     }
-    let Some(geometry) = Geometry::new(term) else {
+    let Some(geometry) = Geometry::new(term, opts.thumbnail_size.unwrap_or(3)) else {
         return text("terminal too small for grid");
     };
     let candidates = entries.iter().filter(|e| e.candidate()).count();

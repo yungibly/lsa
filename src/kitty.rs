@@ -21,8 +21,10 @@ pub fn byte_len(width: u32, height: u32, cols: usize, rows: usize) -> usize {
 }
 
 pub fn write(out: &mut impl Write, image: &RgbaImage, cols: usize, rows: usize) -> io::Result<()> {
-    let encoded = STANDARD.encode(image.as_raw());
-    let mut chunks = encoded.as_bytes().chunks(4096).peekable();
+    // 3 KiB of RGBA becomes exactly one 4 KiB protocol chunk. Keep scratch
+    // space constant instead of allocating a base64 copy of every thumbnail.
+    let mut encoded = [0; 4096];
+    let mut chunks = image.as_raw().chunks(3072).peekable();
     let mut first = true;
     while let Some(chunk) = chunks.next() {
         let more = chunks.peek().is_some();
@@ -32,7 +34,10 @@ pub fn write(out: &mut impl Write, image: &RgbaImage, cols: usize, rows: usize) 
         } else {
             write!(out, "\x1b_Gm={},q=2;", u8::from(more))?;
         }
-        out.write_all(chunk)?;
+        let len = STANDARD
+            .encode_slice(chunk, &mut encoded)
+            .expect("base64 chunk fits");
+        out.write_all(&encoded[..len])?;
         out.write_all(b"\x1b\\")?;
     }
     Ok(())

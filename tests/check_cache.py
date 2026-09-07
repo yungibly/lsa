@@ -12,7 +12,7 @@ import tempfile
 from check_pty import APC, BIN, ROOT, capture, images
 
 STATS = re.compile(rb"lsa: cache: (\d+) hits, (\d+) misses, (\d+) writes, (\d+) errors\n")
-NAMESPACE = "lsa-thumbnails-v1"
+NAMESPACE = "lsa-thumbnails-v2"
 
 
 def run(args, **kwargs):
@@ -84,8 +84,8 @@ def main():
         large_args = [flag, "--grid", many]
         run(large_args, pixels=(2560, 1920))
         data, stats, err = run(large_args, pixels=(2560, 1920))
-        assert 0 < stats[0] == len(images(data)) < 40 and stats[1:] == (0, 0, 0)
-        assert not err and sum(len(m[0]) for m in APC.finditer(data)) <= 8 * 1024 * 1024
+        assert stats[0] == len(images(data)) == 40 and stats[1:] == (0, 0, 0)
+        assert not err and sum(len(m[0]) for m in APC.finditer(data)) <= 128 * 1024 * 1024
         cases += 1
         # Cache corruption cannot alter either pixels or mixed-entry text.
         expected, _, expected_err = run(["--grid", fixture])

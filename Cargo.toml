@@ -1,6 +1,6 @@
 [package]
 name = "lsa"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 description = "A human-oriented directory listing with inline Kitty thumbnails"
@@ -9,8 +9,10 @@ publish = false
 [dependencies]
 base64 = "0.22.1"
 crc32fast = "1.5.1"
-image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico"] }
 libc = "0.2"
+resvg = { version = "0.48.1", default-features = false }
+roxmltree = { version = "0.21.1", default-features = false, features = ["std"] }
 unicode-segmentation = "1.12"
 unicode-width = "0.2"
 

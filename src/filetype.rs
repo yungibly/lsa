@@ -22,11 +22,11 @@ pub struct Classification {
 pub fn classify(path: &Path) -> Classification {
     let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
     let is = |extensions: &[&str]| extensions.iter().any(|s| extension.eq_ignore_ascii_case(s));
-    let preview = is(&["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
+    let preview = is(&["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico"]);
     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
     let category = if preview
         || is(&[
-            "svg", "avif", "heic", "heif", "tif", "tiff", "ico", "jxl", "raw", "dng", "psd",
+            "avif", "heic", "heif", "tif", "tiff", "jxl", "raw", "dng", "psd",
         ]) {
         Category::Image
     } else if is(&["mp4", "mov", "mkv", "webm", "avi", "m4v", "mpeg", "mpg"]) {
@@ -62,12 +62,12 @@ mod tests {
     use super::*;
     #[test]
     fn recognized_images_have_consistent_styles_even_without_a_decoder() {
-        for extension in ["gif", "GIF", "JpEg", "webp", "png", "bmp"] {
+        for extension in ["gif", "GIF", "JpEg", "webp", "png", "bmp", "SVG", "ico"] {
             let kind = classify(Path::new(&format!("photo.{extension}")));
             assert_eq!(kind.category, Category::Image);
             assert!(kind.preview);
         }
-        for extension in ["svg", "HEIC", "avif", "jxl", "tiff", "psd"] {
+        for extension in ["HEIC", "avif", "jxl", "tiff", "psd"] {
             let kind = classify(Path::new(&format!("photo.{extension}")));
             assert_eq!(kind.category, Category::Image);
             assert!(!kind.preview);

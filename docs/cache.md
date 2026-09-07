@@ -7,7 +7,7 @@ the subsequent replacement-policy change has automated coverage. Linux is unveri
 ## Controls and lazy behavior
 
 - `--cache-dir=PATH` (or `--cache-dir PATH`) enables storage in
-  `PATH/lsa-thumbnails-v1/`. No environment variable or default user cache path.
+  `PATH/lsa-thumbnails-v2/`. No environment variable or default user cache path.
 - `--no-cache` wins regardless of option order and disables reads and writes.
 - `--clear-cache --cache-dir=PATH` clears known thumbnail slots and staging, then
   exits. Paths, `--diagnose`, and `--no-cache` cannot accompany clear. It returns
@@ -76,11 +76,12 @@ does not promise a particular hit rate or outperform every policy in every workl
 Old source/geometry versions can occupy slots until replaced or cleared, and even
 64 total slots do not guarantee 64 simultaneously useful hits.
 
-The record/key format, namespace, and 64 slot filenames stay at v1. Only the slot
-selection rule changed. Existing records in candidate slots remain readable;
-others become ordinary misses and are repopulated. Old and new binaries can share
-the same lock and bounded namespace; clear handles all 64 names. There is no
-second cache directory or migration scan.
+The current namespace and magic are v2 because thumbnail-before-rotation changes
+fractional edge pixels and SVG/ICO decoders were added. The key shape and 64-slot
+policy are unchanged. Existing v1 storage is left alone; there is no migration scan.
+`--clear-cache` affects the current namespace only. Old v1 files may be removed
+separately when no older lsa process uses them. The storage bound below is per
+namespace; retaining an old version's cache adds to total disk usage.
 
 At most 64 records plus one staging file contain lsa-written data. Each is at most
 307,284 bytes (84-byte header plus 320×240×4 pixels), for **19,973,460 bytes** total,

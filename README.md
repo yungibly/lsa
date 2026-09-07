@@ -32,11 +32,11 @@ To try it as `ls` in the current shell, from this checkout:
 alias ls="$PWD/target/release/lsa"
 ```
 
-The release binary is ready for local use. The user passed the inline-only direction
-and supplied Ghostty feedback. The smaller tiles, built-in artwork and long-view
-miniatures have automated coverage and await a fresh terminal check. Earlier inline
-image output was user-verified in Ghostty 1.3.1. See [compatibility](docs/compatibility.md)
-and [installation](docs/install.md).
+Version 0.2.0 includes larger preview budgets, adjustable grid size and SVG/ICO
+previews. The user verified the changes in Ghostty on 2026-09-07; terminal version,
+geometry and transport were not resupplied. Earlier inline image output was
+user-verified in Ghostty 1.3.1. See [compatibility](docs/compatibility.md) and
+[installation](docs/install.md).
 
 ## Everyday behavior
 
@@ -78,8 +78,24 @@ A single image also previews automatically. `--grid` requests previews in a spar
 mixed directory, including ones containing only folders or ordinary files.
 `-1`, `--no-images`, and `--protocol=none` keep text.
 
-Grid frames are **14 columns × 3 rows** at most; labels keep their wider columns,
-wrap completely, and have no duplicate font icon. Every tile has a thumbnail or
+Grid frames default to **14 columns × 3 rows** at most. Set
+`--thumbnail-size=N` to choose any height from **1 to 12 terminal rows**;
+width and spacing follow the size, and frames shrink to fit short/narrow terminals.
+Labels wrap completely and have no duplicate font icon. For example:
+
+```sh
+./target/release/lsa --grid --thumbnail-size=1 img-test  # dense gallery
+./target/release/lsa --grid --thumbnail-size=6 img-test  # larger previews
+./target/release/lsa --preview-limit=1024 img-test       # more source previews
+```
+
+Both size and preview limit accept `=N` or a separate argument. `--header`,
+`--fields`, `-l` and `-n` select long output; combining these with `--grid` now
+prints a brief explanation to stderr. Explicit text/image-disabling options also
+take precedence over grid, regardless of order. Thumbnail size affects grids;
+long output retains its one-row miniatures and reports an ignored size request.
+
+Every tile has a thumbnail or
 built-in folder, file, media, link or error drawing. GIFs share the image category
 with PNG/JPEG; unsupported image formats get image artwork, and unknown extensions
 get a generic file icon/color. Artwork is generated from code and needs no font.
@@ -90,8 +106,8 @@ terminal is too narrow/short, output is redirected, or images are disabled, long
 view stays text. Long filenames can still wrap normally. Small thumbnails have
 smaller output payloads, but still require decoding the source image.
 
-Tall galleries print into scrollback. At most **16 previews are attempted by default**,
-shared across every operand. `--preview-limit=N` adjusts that up to 256. Once the
+Tall galleries print into scrollback. At most **256 previews are attempted by default**,
+shared across every operand. `--preview-limit=N` adjusts that from 0 to **4,096**. Once the
 attempt, byte or placement budget is spent, the remaining entries print as compact
 text in the same order. A partially previewed grid row uses artwork for its remaining
 tiles; the next row becomes compact text. In long view, remaining entries keep the
@@ -99,17 +115,25 @@ same aligned name gutter. Small terminals, unsupported
 terminals and multiplexers fall back to text; `--protocol=kitty` is an explicit
 protocol override, not a compatibility guarantee. No terminal queries or input reads.
 
-Static PNG/JPEG/GIF/WebP/BMP are supported, including JPEG EXIF orientation, aspect
+Static PNG/JPEG/GIF/WebP/BMP/ICO are supported, including JPEG EXIF orientation, aspect
 ratio preservation, transparency checkerboarding, and GIF's first canvas frame.
-Image symlinks can preview after verifying a bounded regular-file target. SVG/HEIC/
-AVIF receive image icons/artwork but currently have no content decoder.
+SVG previews support self-contained shapes, paths, gradients and clipping, rasterized
+directly at thumbnail size. Fonts/text, embedded or external images, filters, masks,
+patterns, markers and `use` expansion currently fall back to error artwork for the
+whole preview. SVG input is limited to 256 KiB, 4,096 XML nodes and 32 nesting levels;
+DTDs/entities are rejected. No external resources or fonts are loaded.
+
+Image symlinks can preview after verifying a bounded regular-file target. HEIC/AVIF
+retain image artwork. WebM and other videos retain media artwork; video frame
+decoding is deferred to avoid a native codec stack or external process dependency.
 
 | Resource | Bound |
 | --- | --- |
-| Preview attempts | 16 default, 256 maximum; failures and cache hits count |
-| Image commands | 8 MiB and 256 placements per invocation, including built-in artwork |
-| Source | 32 MiB, 16 million pixels, 16,384 pixels per axis |
-| Decoded image / decoder allocation | 64 MiB; decoder allocation bound is best effort |
+| Preview attempts | 256 default, 4,096 maximum; failures and cache hits count |
+| Image commands | 128 MiB and 4,096 placements per invocation, including built-in artwork |
+| Raster source | 32 MiB, 16 million pixels, 16,384 pixels per axis |
+| Raster decoded image / decoder allocation | 64 MiB; decoder allocation bound is best effort |
+| SVG source | 256 KiB, 4,096 XML nodes, 32 nesting levels; restricted features as above |
 | Thumbnail | Grid at most 320×240 pixels; long view at most 96×64 pixels |
 | Work in flight | One sequential decoder and thumbnail; no worker or queue |
 | Optional cache | 64 slots, under 20 MiB of file contents; no scans or hit writes |
@@ -120,6 +144,13 @@ mode bits for executable icons/colors but retains no full metadata per entry. Pl
 name-only output avoids those stats. Long output caches bounded account names and
 exact timestamps. [Measurements](benchmarks/README.md) distinguish application cost
 from terminal rendering and warm from empty thumbnail caches.
+
+Raster sources use a bounded buffered reader, avoiding an application copy of the
+entire compressed file (some codecs still buffer internally). JPEG orientation is
+applied to the thumbnail, avoiding full-resolution rotation. Kitty encoding uses
+4 KiB of reusable scratch space. Raising the output allowance does not preallocate
+it; bytes stream as each entry finishes. The allowance fits all 256 default source
+previews even at maximum thumbnail resolution, with room for artwork in the last row.
 
 Caching stays **off by default**. Enable explicitly with `--cache-dir=PATH`; use
 `--no-cache` to bypass it or `--clear-cache --cache-dir=PATH` to clear known records.
@@ -142,7 +173,10 @@ python3 tests/check_pty.py
 python3 tests/check_layout.py
 python3 tests/check_cache.py
 python3 tests/check_thumbnails.py
+python3 tests/check_gallery.py
 python3 benchmarks/inline.py
+./target/release/examples/gallery_fixtures  # once: SVG/ICO/EXIF visual fixtures
+python3 benchmarks/gallery.py --before target/lsa-before-gallery-options
 ./target/release/examples/preview_sheet  # offline artwork QA PNG under target/
 python3 scripts/package.py
 python3 -m unittest discover -s tests -p 'test_release.py' -v

@@ -36,21 +36,32 @@ def measure(binary, flags, terminal=False):
     child = subprocess.Popen([str(binary), *map(str, flags)], cwd=ROOT, env=env,
                              stdin=subprocess.DEVNULL, stdout=slave if terminal else subprocess.PIPE,
                              stderr=subprocess.PIPE)
-    if terminal: os.close(slave)
     descriptor = master if terminal else child.stdout.fileno()
     data = bytearray()
+    usage = None
     try:
         while True:
             if time.perf_counter() - start > 15: raise TimeoutError("measurement exceeded 15s")
-            if not select.select([descriptor], [], [], .05)[0]: continue
+            if usage is None:
+                pid, status, measured = os.wait4(child.pid, os.WNOHANG)
+                if pid:
+                    usage = measured
+                    child.returncode = os.waitstatus_to_exitcode(status)
+            if not select.select([descriptor], [], [], .001)[0]:
+                if terminal and usage is not None and slave is not None:
+                    # Preserve the queued PTY tail after exit, as in check_pty.
+                    os.close(slave)
+                    slave = None
+                continue
             try: chunk = os.read(descriptor, 65536)
             except OSError as error:
                 if error.errno != errno.EIO: raise
                 break
             if not chunk: break
             data.extend(chunk)
-        _, status, usage = os.wait4(child.pid, 0)
-        child.returncode = os.waitstatus_to_exitcode(status)
+        if usage is None:
+            _, status, usage = os.wait4(child.pid, 0)
+            child.returncode = os.waitstatus_to_exitcode(status)
         elapsed = time.perf_counter() - start
         err = child.stderr.read()
         assert child.returncode == 0 and not err, (child.returncode, err)
@@ -63,6 +74,7 @@ def measure(binary, flags, terminal=False):
         child.stderr.close()
         if child.stdout: child.stdout.close()
         if master is not None: os.close(master)
+        if slave is not None: os.close(slave)
 
 
 def summarize(samples):

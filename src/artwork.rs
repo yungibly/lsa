@@ -113,11 +113,23 @@ pub fn render(icon: Icon, width: u32, height: u32, color: bool) -> RgbaImage {
 struct Canvas(RgbaImage);
 impl Canvas {
     fn rect(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: [u8; 4]) {
-        self.polygon(&[(x1, y1), (x2, y1), (x2, y2), (x1, y2)], color);
+        // Integer rectangle edges cover exactly these pixel centers; no
+        // point-in-polygon test is needed for the common solid rectangles.
+        for y in y1.max(0)..y2.min(80) {
+            for x in x1.max(0)..x2.min(100) {
+                self.0.put_pixel(x as u32, y as u32, Rgba(color));
+            }
+        }
     }
     fn polygon(&mut self, points: &[(i32, i32)], color: [u8; 4]) {
-        for y in 0..80 {
-            for x in 0..100 {
+        // Pixels outside the vertices' bounds cannot be inside the polygon.
+        // Restrict raster work instead of scanning all 8,000 canvas pixels.
+        let x1 = points.iter().map(|p| p.0).min().unwrap_or(0).max(0);
+        let x2 = points.iter().map(|p| p.0).max().unwrap_or(0).min(100);
+        let y1 = points.iter().map(|p| p.1).min().unwrap_or(0).max(0);
+        let y2 = points.iter().map(|p| p.1).max().unwrap_or(0).min(80);
+        for y in y1..y2 {
+            for x in x1..x2 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
                 let mut inside = false;
                 for i in 0..points.len() {
@@ -129,7 +141,7 @@ impl Canvas {
                     }
                 }
                 if inside {
-                    self.0.put_pixel(x, y, Rgba(color));
+                    self.0.put_pixel(x as u32, y as u32, Rgba(color));
                 }
             }
         }

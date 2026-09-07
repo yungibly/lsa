@@ -1,0 +1,83 @@
+{
+  "date": "2026-09-07T09:30:48.292627+00:00",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "conditions": "Two warmups then seven paired/interleaved fresh release processes. OS caches warm. No thumbnail cache. 122x40 PTY with 8x17 cell pixels, drained without renderer; stdin /dev/null; wait4 child CPU/RSS. Build/tests finished before timing. Mixed rotates through all eleven artwork categories. Raster control links one synthetic 320x160 PNG. Every comparison asserts identical complete output SHA-256.",
+  "binaries": {
+    "before": {
+      "bytes": 2289008,
+      "sha256": "0c541d9c890930fb71c9a49a9f86d06926302f905ce6d5e6def9be5d2c07e6c6"
+    },
+    "after": {
+      "bytes": 2288960,
+      "sha256": "cbd60d5e437fc21e1efc21fad8d88b55598c45177a84e0d53484d5dd40e770d3"
+    }
+  },
+  "cases": {
+    "folders_256": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 58.285,
+        "median_cpu_ms": 37.053,
+        "median_rss_bytes": 2473984,
+        "output_bytes": 7848567,
+        "image_bytes": 7834880,
+        "images": 256,
+        "sha256": "e7028d6974777d783e5493dd63d7f3b4f3f919445bb1cc0244f59ccada059502"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 52.244,
+        "median_cpu_ms": 31.281,
+        "median_rss_bytes": 2424832,
+        "output_bytes": 7848567,
+        "image_bytes": 7834880,
+        "images": 256,
+        "sha256": "e7028d6974777d783e5493dd63d7f3b4f3f919445bb1cc0244f59ccada059502"
+      }
+    },
+    "mixed_artwork_256": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 60.847,
+        "median_cpu_ms": 39.732,
+        "median_rss_bytes": 2621440,
+        "output_bytes": 7848103,
+        "image_bytes": 7834880,
+        "images": 256,
+        "sha256": "ceb6b9b85a390786944a91aaee9fd32e335b088284e84f3d2d14dfc63297077b"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 51.851,
+        "median_cpu_ms": 31.15,
+        "median_rss_bytes": 2621440,
+        "output_bytes": 7848103,
+        "image_bytes": 7834880,
+        "images": 256,
+        "sha256": "ceb6b9b85a390786944a91aaee9fd32e335b088284e84f3d2d14dfc63297077b"
+      }
+    },
+    "raster_256": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 84.21,
+        "median_cpu_ms": 61.835,
+        "median_rss_bytes": 3047424,
+        "output_bytes": 7848055,
+        "image_bytes": 7834880,
+        "images": 256,
+        "sha256": "59ad373f0aec830c9ec6040662d6394be01701ec9556f7a895fd27c6257e8bea"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 83.671,
+        "median_cpu_ms": 61.642,
+        "median_rss_bytes": 3063808,
+        "output_bytes": 7848055,
+        "image_bytes": 7834880,
+        "images": 256,
+        "sha256": "59ad373f0aec830c9ec6040662d6394be01701ec9556f7a895fd27c6257e8bea"
+      }
+    }
+  }
+}

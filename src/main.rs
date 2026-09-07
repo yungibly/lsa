@@ -12,6 +12,7 @@ mod metadata;
 mod preview;
 mod sort;
 mod style;
+mod svg;
 mod terminal;
 
 use std::io::{self, BufWriter, Write};
@@ -62,6 +63,9 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     }
     let term = terminal::Terminal::detect(opts);
     let style = style::Style::detect(opts, &term);
+    if let Some(notice) = opts.layout_notice() {
+        let _ = writeln!(io::stderr().lock(), "lsa: {notice}");
+    }
     if opts.diagnose {
         writeln!(
             out,
@@ -114,6 +118,13 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
      -> io::Result<()> {
         let choice = layout::choose(entries, &term, opts);
         if opts.diagnose {
+            if let layout::Layout::Grid(g) = choice.layout {
+                writeln!(
+                    out,
+                    "\ngrid_frame={}x{} cells\ngrid_pixels={}x{}\ngrid_columns={}",
+                    g.image_cols, g.image_rows, g.width, g.height, g.columns
+                )?;
+            }
             return writeln!(
                 out,
                 "\npath={}\nentries={}\npreview_candidates={}\nlayout={}\nlayout_reason={}\ncolor={}\nicons={:?}",

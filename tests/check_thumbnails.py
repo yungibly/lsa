@@ -141,12 +141,12 @@ def main():
         # A directory made entirely of ordinary files still has artwork with
         # explicit --grid, but icon traffic cannot grow past the placement cap.
         many=root/'many';many.mkdir()
-        for i in range(300): (many/f'file-{i:03}').touch()
-        data=run(['--grid','--preview-limit=256',many],cols=80,rows=8,pixels=(80,8))
-        assert 250<=len(images(data))<=256
-        assert sum(len(m[0]) for m in APC.finditer(data))<=8*1024*1024
+        for i in range(4100): (many/f'file-{i:04}').touch()
+        data=run(['--grid',many],cols=80,rows=8,pixels=(80,8))
+        assert 4093<=len(images(data))<=4096
+        assert sum(len(m[0]) for m in APC.finditer(data))<=128*1024*1024
         plain=APC.sub(b'',data)
-        for i in range(300): assert plain.count(f'file-{i:03}'.encode())==1
+        for i in range(4100): assert plain.count(f'file-{i:04}'.encode())==1
         cases+=1
     print(f'{cases} thumbnail UX checks passed: visible artwork, GIF styling, compact grid, one-row long previews, alignment, budgets, and cache geometry.')
 

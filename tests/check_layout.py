@@ -15,9 +15,13 @@ def plain(data):
     return CSI.sub(b"", SGR.sub(b"", OSC.sub(b"", APC.sub(b"", data)))).replace(b"\r", b"")
 
 
-def run(args, **kwargs):
+def run(args, *, notice=False, **kwargs):
     code, data, err, _ = capture(args, **kwargs)
-    assert code == 0 and not err, (code, err)
+    assert code == 0, (code, err)
+    if notice:
+        assert err.startswith(b'lsa: --grid ignored:') and err.count(b'\n') == 1, err
+    else:
+        assert not err, err
     assert not any(command in data for command in [b"\x1b[?1049", b"\x1b[?25", b"\x1b[2J"]), "interactive terminal lifecycle returned"
     return data
 
@@ -36,7 +40,7 @@ def main():
             assert check_cursor(data, width, 24, 23) == 0
             cases += 1
         for args in [["-1"], ["--grid", "-1"], ["-1", "--grid"]]:
-            assert plain(run([*args, text])) == b"a\nbb\nccc\nd\nee\n"
+            assert plain(run([*args, text], notice='--grid' in args)) == b"a\nbb\nccc\nd\nee\n"
             cases += 1
 
         image = ROOT / "img-test/generated/landscape.png"
@@ -65,7 +69,7 @@ def main():
         expected = run(["--no-images", mixed], **geometry)
         for flag in ["--no-images", "--protocol=none", "--preview-limit=0"]:
             for args in [["--grid", flag], [flag, "--grid"]]:
-                assert run([*args, mixed], **geometry) == expected
+                assert run([*args, mixed], notice=True, **geometry) == expected
                 cases += 1
         assert len(images(run(["--preview-limit=3", mixed], **geometry))) == 5
         cases += 1
@@ -160,7 +164,7 @@ def main():
         cases += 1
         # A zero budget skips both row reservations and lazy cache initialization.
         cache = root / "unused-cache"
-        data = run(["--grid", "--preview-limit=0", f"--cache-dir={cache}", one], decorated=True)
+        data = run(["--grid", "--preview-limit=0", f"--cache-dir={cache}", one], decorated=True, notice=True)
         assert not APC.search(data) and not cache.exists()
         cases += 1
         # Overflow must exit even with stdin/stdout on the same foreground TTY.
@@ -174,11 +178,11 @@ def main():
     many = ROOT / "img-test/generated/many"
     for tty_input in [False, True]:
         data = run([many], cols=122, rows=40, tty_input=tty_input)
-        assert len(images(data)) == 20
+        assert len(images(data)) == 40
         labels = plain(data)
         for i in range(40): assert labels.count(f"image-{i:02}.png@".encode()) == 1
-        # The budget's tail stays compact instead of producing 24 empty tiles.
-        assert len(labels.splitlines()) < 40
+        # The old 16-preview cutoff no longer truncates this whole gallery.
+        assert len(labels.splitlines()) >= 40
         cases += 1
     print(f"{cases} inline layout/style checks passed; real terminal appearance remains unverified.")
 

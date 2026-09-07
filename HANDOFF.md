@@ -1,5 +1,69 @@
 # Session handoff
 
+## 2026-09-07 — verified Ghostty and v0.2.0 release preparation
+
+The user tested everything successfully in Ghostty and explicitly authorized a
+final efficiency pass, commit, tag, push, and watching CI until green. Their terminal
+version/geometry/transport were not resupplied. Recheck Git state before continuing.
+
+The final pass limits artwork polygon rasterization to vertex bounds and paints
+integer rectangles directly. No caching, memory policy, image pixels or terminal
+behavior changes. The full artwork sheet and paired end-to-end outputs match
+exactly. Folder grids use about 16% less CPU; mixed artwork grids about 22% less;
+raster previews are unchanged. Evidence: benchmarks/artwork.json and its harness.
+Before binary: target/lsa-before-final-efficiency. Version chosen: v0.2.0.
+
+Next: complete local checks, commit/push main, wait for native CI, push the matching
+release tag, and watch release/build/Homebrew jobs through the final tap update.
+Record actual run links and outcomes when they finish. The prior "not requested"
+release restriction below is superseded by the user's latest authorization.
+
+## 2026-09-07 — gallery defaults, sizing, UX and formats
+
+The user's personal use found the 16-image default frustrating. Work is local and
+uncommitted on main; recheck Git state. The original images remain unchanged, all
+work/artifacts are in this repository, and no computer use was performed. The
+published Homebrew v0.1.0 release has not been changed by this session.
+
+- Default source attempts: 256; `--preview-limit=0..4096`, with equals or space.
+  Graphics: 128 MiB and 4,096 placements across all operands. Budget exhaustion
+  retains compact text; partially completed grid rows retain artwork.
+- `--thumbnail-size=1..12`: terminal-row increments, default 3, proportional width/
+  spacing, terminal clamping, unchanged 320×240 maximum pixels. Long miniatures
+  stay one row. Cache keys continue to separate pixel geometry.
+- Help now has examples, says --header/--fields imply -l, and explains precedence.
+  An explicit ignored grid/size request gets one notice per invocation, including
+  --grid --header. Familiar text overrides remain order independent.
+- SVG shapes/paths/gradients/clipping via resvg 0.48.1 with default features off;
+  bounded XML preflight, disabled image resolvers, no fonts/resources. Whole-preview
+  fallback for text, embedded/external images, filters, masks, patterns, markers,
+  use expansion; 256 KiB, 4,096 nodes, 32 nesting levels. ICO uses existing image
+  codecs. WebM is deliberately deferred to avoid codec/process complexity, as the
+  user allowed. No pager: existing scrollback model remains.
+- Bounded buffered raster reads remove one compressed-source copy. JPEG EXIF
+  rotation follows thumbnailing; 4 KiB base64 scratch replaces whole-image encoding
+  allocation. Slight fractional resize-edge changes require cache v2; old cache
+  namespace is untouched and clear acts on the new one only.
+
+Checks: 46 unit + 12 macOS CLI + one artwork-example + three release-tooling tests;
+183 PTY scenarios including 75 new gallery checks; formatting, strict clippy,
+release build, extracted host-package smoke checks. Unix socket fixtures needed
+normal sandbox escalation. CI includes the new gallery script, but hosted Linux
+and Rust 1.88 have not yet checked this change; prior passes below are historical.
+
+The before binary is `target/lsa-before-gallery-options`. Paired reports and
+methodology are in benchmarks/README.md. Equal-work galleries and text timings are
+essentially unchanged; 6.4 MP rotated JPEGs use substantially less time/memory.
+PTY timing is not renderer timing. The extra fixtures are at
+`target/visual-checks/gallery-files`, created by examples/gallery_fixtures.rs.
+
+**Next:** user Ghostty check of large personal directories, sizes 1/3/6/12, SVG/ICO/
+EXIF fixtures, --grid --header notice, long alignment, and prior placements in
+scrollback. Record version, geometry and transport. See docs/compatibility.md for
+commands. A new release/push was not requested; run hosted CI when preparing it.
+
+## Previous session — distribution
+
 2026-09-06. Recheck Git state. Distribution work started at `8f71819` with the user's
 `.gitignore` addition for `.env`. The user authorized GitHub builds, release and
 Homebrew tap setup, including pushing the needed changes and publication.

@@ -1,9 +1,35 @@
 # Roadmap
 
-Updated 2026-09-06. Print into scrollback, return to the shell, keep one mixed
+Updated 2026-09-07. Print into scrollback, return to the shell, keep one mixed
 ordering and complete names. No pager or file browser.
 
-## Current change — GitHub builds and Homebrew distribution
+## Current change — larger galleries and simpler preview controls
+
+Personal use showed that the 16-preview cutoff hurts the experience. The local
+implementation now defaults to 256 source attempts, with `--preview-limit=0..4096`.
+The shared graphics limits increase to 128 MiB / 4,096 placements, enough for 256
+maximum-resolution thumbnails. Output still streams sequentially to scrollback;
+every name survives exhaustion or failure. No pager was added.
+
+`--thumbnail-size=1..12` chooses grid height in single terminal-row steps, default
+3. Width/spacing follow, frames shrink to fit, pixel dimensions remain capped at
+320×240, and labels wrap completely. Long previews stay one row. `--header` and
+`--fields` are documented as long-implying options, help has examples, and explicit
+grid/size requests overridden by other flags get one explanatory stderr notice.
+
+SVG vector artwork and ICO have content previews. SVG rendering is restricted to
+self-contained shapes, paths, gradients and clipping, with source/node/depth bounds
+and no fonts/external resources. Text, embedded images, filters and expansion-heavy
+features fall back as a whole preview. WebM frame decoding is deferred because it
+would add a video codec stack or external process management.
+
+Efficiency changes: buffered bounded source reads, fixed 4 KiB base64 scratch,
+JPEG rotation after thumbnailing, and artwork rasterization restricted to each
+shape's bounds. The last pass preserves exact pixels while reducing artwork CPU.
+Cache namespace/magic advance to v2 because
+fractional resize-edge pixels can change; storage stays opt-in and bounded.
+
+## Previous change — GitHub builds and Homebrew distribution
 
 The name remains **lsa — ls, augmented**. CI and tagged-release workflows now
 target native Apple Silicon/Intel macOS and ARM64/x86-64 Linux. Every target runs
@@ -43,19 +69,27 @@ icons. This change addresses that feedback:
 
 ## Verification and next task
 
-38 unit tests, 12 macOS / 13 Linux CLI tests, one artwork-example test, three
-release-tooling tests, 108 PTY scenarios, strict clippy, formatting, native release
-builds and extracted-package smoke checks pass. The published Apple Silicon
-archive also passed checksum and executable checks locally. Paired measurements show 52.2% fewer
-graphics bytes for the mixed grid and unchanged plain pipe output/cost; uncached
-long-view miniatures still incur source decoding. See
-[compatibility](docs/compatibility.md), [benchmarks](benchmarks/README.md) and
-[handoff](HANDOFF.md). The user handles Ghostty visual verification.
+The gallery change has 46 unit tests, 12 local macOS CLI tests, one artwork-example
+test, three release-tooling tests, and 183 headless terminal scenarios (75 new),
+including all sizes at four geometries, 256/300-image galleries, 4,096 placements,
+full names, SVG/ICO pixels, special-file fallback, shared budgets and cache geometry.
+Formatting, strict clippy, release build and local extracted-package smoke checks
+pass. Hosted Linux/Rust 1.88 results above apply to
+v0.1.0, not yet to these new dependencies or behavior.
 
-**Next:** check the installed smaller gallery and long-view miniatures in Ghostty, particularly
-folder/error recognizability, filenames wrapping, scrollback and long-row alignment.
-Linux package and Rust 1.88 verification is now covered by the passing CI jobs.
-Earlier terminal passes do not verify this new placement/presentation.
+Paired measurements separate equal work from more previews and application cost
+from rendering. Plain output/cost and equal-work gallery speed are essentially
+unchanged; source buffering lowers memory and thumbnail-first rotation saves both
+time and memory. See [benchmarks](benchmarks/README.md),
+[compatibility](docs/compatibility.md) and [handoff](HANDOFF.md).
+
+The user reported all requested Ghostty checks working perfectly on 2026-09-07.
+Version, geometry and transport were not resupplied. The final artwork optimization
+is byte-identical in the full artwork sheet and paired end-to-end galleries.
+
+**Next:** publish v0.2.0 as authorized, watch native CI and the complete release
+workflow through the Homebrew tap update, and record the results. WebM remains
+deferred; no additional visual check is needed for the identical artwork output.
 
 Keep cache policy opt-in. No recursive trees, Git scans, file operations, services or
 plugin system are planned. Add formats/concurrency only from demonstrated needs.

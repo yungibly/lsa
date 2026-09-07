@@ -1,5 +1,94 @@
 # Application measurements
 
+## Final artwork pass for v0.2.0 — 2026-09-07
+
+[Paired report](artwork.json), same arm64 macOS/122×40 drained-PTY conditions as
+below. Seven paired/interleaved runs after two warmups; no thumbnail cache and no
+concurrent builds/tests. Before is the user's Ghostty-verified gallery build saved
+as `target/lsa-before-final-efficiency`; after is the local v0.2.0 release binary.
+The report records exact hashes. Every case asserts identical complete output.
+
+| 256 entries | Elapsed before → after | CPU before → after |
+| --- | ---: | ---: |
+| Folders with grid artwork | 58.29 → 52.24 ms | 37.05 → 31.28 ms |
+| All eleven artwork categories | 60.85 → 51.85 ms | 39.73 → 31.15 ms |
+| Raster image control | 84.21 → 83.67 ms | 61.84 → 61.64 ms |
+
+Integer rectangles now paint directly, and polygons scan only their vertex bounds
+instead of all 8,000 canvas pixels. Folder CPU falls about **16%** and mixed artwork
+CPU about **22%**, with identical pixels/bytes and essentially unchanged peak memory.
+The complete offline artwork sheet is also byte-identical. Source image decoding
+is unaffected. No additional retained cache, queue or worker was introduced.
+
+```sh
+python3 benchmarks/artwork.py --before target/lsa-before-final-efficiency --runs=7
+```
+
+Earlier measurements below describe the gallery build before this final pass.
+
+## Larger galleries, variable size and SVG/ICO — 2026-09-07
+
+[Everyday cases](gallery-options.json) and [equal-work/EXIF cases](gallery-efficiency.json),
+arm64 macOS 26.6.2, Rust 1.98.0, release/thin-LTO/stripped. Before: checkout
+`e966c9e`, saved as `target/lsa-before-gallery-options`. Both reports identify the
+exact before/after binaries by SHA-256. Two warmups, seven paired/interleaved fresh
+processes per case; OS caches warm, not flushed. Output goes to a drained 122×40
+PTY with 8×17 cell pixels, no renderer, and stdin `/dev/null`. `wait4` records child
+CPU/RSS. Cache clearing/priming and output parsing are outside elapsed timing.
+The helper preserves the queued PTY tail after process exit.
+
+| Median elapsed time | Before | After |
+| --- | ---: | ---: |
+| 10,000 plain names, pipe | 7.98 ms | 8.14 ms |
+| 10,000 styled names, terminal | 26.94 ms | 27.08 ms |
+| 10,000 long entries, pipe | 24.90 ms | 24.98 ms |
+| Four original images, cache off | 71.02 ms | 70.94 ms |
+| Four original images, empty cache | 71.56 ms | 70.90 ms |
+| Four original images, warm cache | 5.28 ms | 5.43 ms |
+| 40-image gallery, defaults | 10.27 ms (16 previews + 4 artwork) | 16.93 ms (40 previews) |
+| 256-image gallery, explicit equal limits | 84.43 ms | 85.35 ms |
+| 6.4 MP rotated JPEG, cache off | 20.82 ms | 15.60 ms |
+| Same JPEG, empty cache | 20.91 ms | 15.53 ms |
+| Same JPEG, warm cache | 4.56 ms | 4.57 ms |
+| Same JPEG, long miniature, cache off | 20.75 ms | 15.41 ms |
+
+The 256-image case uses **distinct copies** of one synthetic 320×160 PNG, cache
+off, with `--preview-limit=256` on both versions. Both print 256 source previews
+and byte-identical output: 7,834,880 graphics bytes. Its speed and roughly 2.9 MiB
+RSS are essentially unchanged. The default 40-image case instead does more work:
+graphics traffic doubles to 1,224,200 bytes. It links one small source and does not
+model 256 large photographs. More previews increase terminal traffic and residency;
+these measurements do not establish Ghostty rendering time or image memory.
+
+Bounded buffered reads reduce the original four-image case from **31.45 to 29.97
+MiB** peak RSS, about 1.5 MiB, without changing output bytes. Whole-file base64
+allocation is replaced with fixed 4 KiB scratch space. These changes do not produce
+a broad timing gain in the sampled PNGs or ordinary text.
+
+Moving EXIF rotation after thumbnailing gives the clearest gain: the generated
+3,200×2,000 JPEG with orientation 6 takes **25% less elapsed time**, **30% less CPU**,
+and **47% less peak RSS** (39.58 → 21.12 MiB) with caching off. Long miniatures show
+similar savings. Fractional resize-edge pixels can differ slightly when rotating
+after sampling; all eight orientations have content/coverage tests, and cache v2
+prevents stale transform reuse. Off, empty and warm caches remain byte-identical
+within each binary. This sample is one synthetic JPEG, not a universal decoder gain.
+
+SVG/ICO support adds about 0.90 MiB to the stripped binary: **1,345,936 → 2,289,008
+bytes**. resvg 0.48.1 has text/system-font/raster-image/SVGZ features disabled.
+The SVG path renders at thumbnail resolution with bounded input complexity; it
+does not allocate a native-resolution image. CPU/allocation bounds remain best
+effort for third-party decoders/renderers; no hard wall-clock timeout was added.
+
+```sh
+cargo build --release --locked --examples --bins
+./target/release/examples/gallery_fixtures  # once; refuses to overwrite
+python3 benchmarks/inline.py --before target/lsa-before-gallery-options --runs=7
+python3 benchmarks/gallery.py --before target/lsa-before-gallery-options --runs=7
+```
+
+Run measurements after builds/tests finish to avoid local contention. Reports go
+under `benchmarks/local/`; copying checked reports into the repository is explicit.
+
 ## Smaller grids and long-view miniatures — 2026-09-06
 
 [Paired report](thumbnail-ux.json), arm64 macOS 26.6.2, Rust 1.98.0,

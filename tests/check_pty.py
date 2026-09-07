@@ -166,10 +166,10 @@ def main():
     for i in range(40):
         assert f"image-{i:02}.png@".encode() in text
     runs += 1
-    # At 32x80 cells, 40 full tiles exceed the 8 MiB image-output cap.
+    # Large cell pixels no longer hit the former 8 MiB cap at forty entries.
     code, data, err, _ = capture(["--grid", "--preview-limit=64", many], pixels=(2560, 1920))
-    assert code == 0 and 0 < len(images(data)) < 40 and not err
-    assert sum(len(m[0]) for m in APC.finditer(data)) <= 8 * 1024 * 1024
+    assert code == 0 and len(images(data)) == 40 and not err
+    assert 8 * 1024 * 1024 < sum(len(m[0]) for m in APC.finditer(data)) <= 128 * 1024 * 1024
     runs += 1
     for args, env, cols, rows in [
         (["--no-images"], {}, 80, 24), (["-1"], {}, 80, 24), (["-l", "--no-images"], {}, 80, 24),
@@ -178,7 +178,11 @@ def main():
         ([], {}, 11, 24), ([], {}, 80, 5),
     ]:
         code, data, err, _ = capture(["--grid", *args, many], environment=env, cols=cols, rows=rows)
-        assert code == 0 and b"\x1b" not in data and not err
+        assert code == 0 and b"\x1b" not in data
+        if args:
+            assert err.startswith(b'lsa: --grid ignored:') and err.count(b'\n') == 1, err
+        else:
+            assert not err, err
         runs += 1
     code, data, err, _ = capture(["--grid", ROOT / "img-test/generated"])
     assert code == 0 and len(images(data)) == 15 and not err, err

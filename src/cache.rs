@@ -16,8 +16,8 @@ use std::{
 
 // Bump BOTH for changes to the record, source limits, decoder, orientation,
 // resize filter, transparency checker, or other pixel transforms.
-pub const NAMESPACE: &str = "lsa-thumbnails-v1";
-const MAGIC: &[u8; 8] = b"LSATHM01";
+pub const NAMESPACE: &str = "lsa-thumbnails-v2";
+const MAGIC: &[u8; 8] = b"LSATHM02";
 pub const SLOTS: usize = 64;
 const WAYS: usize = 8;
 const KEY_LEN: usize = 80;

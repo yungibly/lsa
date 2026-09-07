@@ -12,30 +12,31 @@ use crate::{
 use std::io::{self, Write};
 use unicode_width::UnicodeWidthStr;
 
-const ROWS: usize = 3;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Geometry {
     pub columns: usize,
     pub tile: usize,
     pub image_cols: usize,
+    pub image_rows: usize,
     pub width: u32,
     pub height: u32,
     pub bytes: usize,
 }
 
 impl Geometry {
-    pub fn new(term: &Terminal) -> Option<Self> {
+    pub fn new(term: &Terminal, rows: usize) -> Option<Self> {
         if term.cols < 12 || term.rows < 6 {
             return None;
         }
         // Reserve the rightmost cell; bound row scratch space on very wide TTYs.
         let available = (term.cols - 1).min(240);
-        let columns = (available / 24).clamp(1, 10);
+        let image_rows = rows.clamp(1, 12).min(term.rows - 3);
+        let preferred_cols = (14 * image_rows).div_ceil(3);
+        let columns = (available / (preferred_cols + 10)).clamp(1, 16);
         let tile = available / columns;
-        let image_cols = (tile - 2).min(14);
+        let image_cols = (tile - 2).min(preferred_cols);
         let width = image_cols as f64 * f64::from(term.cell_width);
-        let height = ROWS as f64 * f64::from(term.cell_height);
+        let height = image_rows as f64 * f64::from(term.cell_height);
         let scale = (320.0 / width).min(240.0 / height).min(1.0);
         let width = (width * scale).round().max(1.0) as u32;
         let height = (height * scale).round().max(1.0) as u32;
@@ -43,9 +44,10 @@ impl Geometry {
             columns,
             tile,
             image_cols,
+            image_rows,
             width,
             height,
-            bytes: kitty::byte_len(width, height, image_cols, ROWS),
+            bytes: kitty::byte_len(width, height, image_cols, image_rows),
         })
     }
 }
@@ -63,6 +65,7 @@ pub fn write(
         columns,
         tile,
         image_cols,
+        image_rows,
         width,
         height,
         bytes,
@@ -77,7 +80,7 @@ pub fn write(
         }
         // Reserve the image area AND a label line before placing images. This
         // scrolls first, so a placement never extends below the visible screen.
-        for _ in 0..=ROWS {
+        for _ in 0..=image_rows {
             out.write_all(b"\r\n")?;
         }
         out.flush()?;
@@ -92,10 +95,10 @@ pub fn write(
                 artwork::render(entry.artwork(), width, height, style.color)
             };
             let left = column * tile + (tile - image_cols) / 2 + 1;
-            write!(out, "\x1b[{}A\x1b[{}G", ROWS + 1, left)?;
-            kitty::write(out, &image, image_cols, ROWS)?;
+            write!(out, "\x1b[{}A\x1b[{}G", image_rows + 1, left)?;
+            kitty::write(out, &image, image_cols, image_rows)?;
             budget.placed(bytes);
-            write!(out, "\r\x1b[{}B", ROWS + 1)?;
+            write!(out, "\r\x1b[{}B", image_rows + 1)?;
             out.flush()?;
         }
         out.write_all(b"\x1b[1A")?;
