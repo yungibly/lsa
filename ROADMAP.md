@@ -1,9 +1,41 @@
 # Roadmap
 
-Updated 2026-09-07. Print into scrollback, return to the shell, keep one mixed
+Updated 2026-09-10. Print into scrollback, return to the shell, keep one mixed
 ordering and complete names. No pager or file browser.
 
-## Current change — larger galleries and simpler preview controls
+## Current change — everyday defaults and listing efficiency
+
+Terminal text now defaults to long details; image-heavy and small mixed listings
+still switch automatically to grids. `-C` / `--columns` selects compact text,
+`-1` keeps lines, and pipes still default to plain names. Explicit `-l`, `-n`,
+`--header` and `--fields` retain their precedence. Default directory-symlink
+operands continue to list contents; explicit `-l` / `-d` still show the link itself.
+
+`--12-hour` uses zero-padded 12-hour local times with AM/PM. The default remains
+24-hour, and the flag alone does not add metadata to pipes. Dates, timezone/DST
+conversion and complete alignment are preserved.
+
+Listing metadata retains only required stat fields. Layout selection precedes
+metadata reads, so automatic grids and plain pipes do not acquire long-form cost.
+Local timestamps convert once per entry across alignment/output; compact civil
+components supplement the existing bounded lookup cache only for the modified
+column. Safe filenames avoid an escaped copy and permission characters no longer
+allocate individually. No new dependencies, workers, cache policy or image changes.
+
+Local validation: 47 unit tests, 13 macOS CLI tests, one artwork-example test,
+three release-tooling tests, and 195 headless terminal scenarios. Formatting,
+strict clippy, release build and extracted-package smoke checks pass. Paired
+measurements show materially less time for distinct-timestamp long listings and
+less metadata memory; image decoding/output is unchanged. See
+[measurements](benchmarks/README.md). These are application/PTY measurements,
+not Ghostty rendering measurements.
+
+Version 0.3.0 is prepared for the user-authorized commit, tag, push and CI/release
+watch. **Next:** finish publication and record hosted results; then normal use
+and a user Ghostty pass for default details and AM/PM alignment. No new real-terminal
+visual pass has been claimed. Keep cache opt-in and WebM deferred.
+
+## Previous change — larger galleries and simpler preview controls
 
 Personal use showed that the 16-preview cutoff hurts the experience. The local
 implementation now defaults to 256 source attempts, with `--preview-limit=0..4096`.
@@ -67,7 +99,7 @@ icons. This change addresses that feedback:
   alignment, GIF/unknown types, budget sharing and cache geometry. Offline light/dark
   artwork inspection supplements byte tests; it is not a real-terminal pass.
 
-## Verification and next task
+## Previous v0.2.0 verification
 
 The gallery change has 46 unit tests, 12 local macOS CLI tests, one artwork-example
 test, three release-tooling tests, and 183 headless terminal scenarios (75 new),
@@ -95,7 +127,7 @@ installations on both macOS architectures and x86-64 Linux, and the tap update.
 release notes and checksummed binaries. The public Apple Silicon archive also
 passed checksum, extraction, version and mixed-listing checks locally.
 
-**Next:** normal personal use and any concrete regressions. WebM remains deferred;
+**At v0.2.0:** normal personal use and any concrete regressions. WebM remains deferred;
 no additional visual check is needed for the identical artwork output. No pending
 release work. Use `brew update && brew upgrade lsa` for an existing installation.
 

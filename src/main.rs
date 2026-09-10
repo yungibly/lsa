@@ -165,7 +165,16 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
         }
     };
     for path in &opts.paths {
-        let listing = entry::list(path, opts, !opts.diagnose && style.needs_mode());
+        let mut listing = entry::list(path, opts);
+        if listing.directory {
+            let long = layout::choose(&listing.entries, &term, opts).layout == layout::Layout::Long;
+            entry::prepare(
+                &mut listing,
+                opts,
+                long,
+                !opts.diagnose && style.needs_mode(),
+            );
+        }
         for error in &listing.errors {
             let _ = writeln!(io::stderr().lock(), "lsa: {error}");
             failed = true;

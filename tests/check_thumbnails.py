@@ -107,6 +107,14 @@ def main():
                 assert all(line.count(name)==1 for name,line in zip(names,body))
                 assert body[-2].endswith('e-link.png@ -> c-photo.png')
                 cases+=1
+        # AM/PM adds three metadata cells without shifting names into previews.
+        data=run(['--header','--12-hour',entries],**geometry)
+        assert len(images(data))==4 and check_cursor(data,122,8,7)==4
+        body=replay(data)[1:]
+        names=sorted(p.name for p in entries.iterdir())
+        assert len(body)==6 and len({line.index(name) for name,line in zip(names,body)})==1
+        assert all(re.search(r'\d{2}:\d{2} [AP]M ',line) for line in body)
+        cases+=1
         # After a limit, the name gutter stays aligned and later sources are not
         # decoded. No extra physical row is added for a miniature.
         data=run(['--fields=size','--preview-limit=2',entries],**geometry)

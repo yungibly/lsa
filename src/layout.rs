@@ -29,7 +29,11 @@ pub struct Choice {
 
 pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
     let text = |reason| Choice {
-        layout: Layout::Columns,
+        layout: if opts.columns {
+            Layout::Columns
+        } else {
+            Layout::Long
+        },
         reason,
     };
     if opts.long {
@@ -47,6 +51,9 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
                 "stdout is not a terminal"
             },
         };
+    }
+    if opts.columns {
+        return text("compact columns requested");
     }
     if opts.no_images || opts.protocol == Protocol::None {
         return text("images disabled");
@@ -125,7 +132,7 @@ mod tests {
             assert!(matches!(choice(images, files, &[]).layout, Layout::Grid(_)));
         }
         for (images, files) in [(0, 0), (0, 1000), (1, 5), (4, 5), (4, 1000)] {
-            assert_eq!(choice(images, files, &[]).layout, Layout::Columns);
+            assert_eq!(choice(images, files, &[]).layout, Layout::Long);
         }
         assert!(matches!(
             choice(1, 1000, &["--grid"]).layout,
@@ -136,10 +143,11 @@ mod tests {
     fn explicit_text_and_zero_budget_never_decode() {
         for (flag, layout) in [
             ("-1", Layout::Lines),
+            ("-C", Layout::Columns),
             ("-l", Layout::Long),
-            ("--no-images", Layout::Columns),
-            ("--protocol=none", Layout::Columns),
-            ("--preview-limit=0", Layout::Columns),
+            ("--no-images", Layout::Long),
+            ("--protocol=none", Layout::Long),
+            ("--preview-limit=0", Layout::Long),
         ] {
             for args in [[flag, "--grid"], ["--grid", flag]] {
                 assert_eq!(choice(4, 0, &args).layout, layout);
@@ -151,6 +159,6 @@ mod tests {
         assert_eq!(choose(&entries(4, 0), &term, &opts).layout, Layout::Lines);
         term.tty = true;
         term.kitty = false;
-        assert_eq!(choose(&entries(4, 0), &term, &opts).layout, Layout::Columns);
+        assert_eq!(choose(&entries(4, 0), &term, &opts).layout, Layout::Long);
     }
 }

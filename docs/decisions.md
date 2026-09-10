@@ -1,13 +1,16 @@
 # Product and implementation decisions
 
-Updated 2026-09-07 after personal-use feedback. The priority is an `ls` alias that feels
+Updated 2026-09-10 after the performance and default-view pass. The priority is an `ls` alias that feels
 right immediately, with useful previews and bounded work.
 
 | Decision | Reason |
 | --- | --- |
 | Always print and exit | A listing belongs in shell scrollback. Removed automatic/explicit paging, selection, inspection, terminal mode handling, worker queues and image residency management. |
 | One mixed ordering | A preview represents an entry. Ordinary files, folders and links remain alongside images; no separate gallery section or hidden failures. |
-| Compact text; bounded inline galleries | Image-heavy and single-row mixed listings preview automatically. Tall galleries continue inline, with compact text after the shared budget is spent. |
+| Long terminal default; automatic inline galleries | User preference is details for everyday directories. Image-heavy and single-row mixed listings still preview automatically; `-C` explicitly selects compact text. Pipes remain plain names. Grid exhaustion still uses compact text. |
+| Compact metadata and one timestamp conversion | Keep 48 bytes of listing/sorting fields per metadata record on supported 64-bit targets, plus 24 bytes of civil-time state only when displaying modification time. Avoid a second localtime conversion without retaining formatted strings. |
+| Borrow safe names | Allocate escaped filenames only when escaping, classification or icons require a changed representation; permission characters use stack scratch. |
+| Explicit 12-hour clock | `--12-hour` changes only hour/AM/PM formatting; local dates, DST and pipe defaults remain intact. |
 | 256 default attempts; up to 4,096 explicitly | The 16-preview cutoff hurt real directory browsing. Raise it and retain shared finite budgets. Failures and cache hits count. |
 | 128 MiB image commands, 4,096 placements | Enough for 256 maximum-resolution source thumbnails, including artwork to finish the last row. Stream sequentially; the cap is not an allocation. All graphics count and overflow retains every filename. |
 | Adjustable grid size | Keep 14×3 cells by default; `--thumbnail-size=1..12` changes height one terminal row at a time. Width, spacing and column count follow; clamp to the terminal and retain 320×240 pixel bounds. Long miniatures stay one row. |

@@ -4,6 +4,7 @@
 
 | Environment | Result |
 | --- | --- |
+| Local v0.3.0, arm64 macOS 26.6.2, Rust 1.98.0 | Long default, compact override, 12-hour dates/DST and aligned miniatures pass Rust/PTY checks. Equal-work listings and image output match v0.2.0 bytes. New default/AM-PM appearance has not received a fresh Ghostty user pass. |
 | Ghostty 1.3.1, arm64 macOS 26.6.2, 122×40 cells / 8×17 pixels | Earlier anonymous inline Kitty previews and compact text received user passes. Metadata/cache commands also received a pass at `7050349`; transport/version were not resupplied for that pass. |
 | User's latest Ghostty screenshot | Inline-only direction approved; requested smaller previews, visible folder/error artwork, simpler grid labels and tiny long-view previews. Version/geometry/transport were not resupplied. |
 | Local v0.2.0, arm64 macOS 26.6.2, Rust 1.98.0 | Rust unit/CLI tests, strict clippy, release build, 183 PTY byte/cursor scenarios, foreground-TTY completion and extracted host package smoke checks passed. |
@@ -20,7 +21,7 @@
 | Final artwork optimization | Full offline artwork sheet and paired complete PTY output are byte-identical before/after, including all eleven categories. No new terminal behavior. |
 | Other terminals, multiplexers, SSH | Unverified. Protocol hints or upstream support are not lsa validation. |
 
-Current hosted result: [CI at ba4a882](https://github.com/yungibly/lsa/actions/runs/34106546519),
+Previous hosted result: [CI at ba4a882](https://github.com/yungibly/lsa/actions/runs/34106546519),
 2026-09-07, and the complete
 [v0.2.0 release workflow](https://github.com/yungibly/lsa/actions/runs/34107070950).
 Other v0.1.0 results describe historical verification.
@@ -31,9 +32,9 @@ terminal renderer or real SSH/multiplexer session in these jobs.
 The [v0.1.0 release workflow](https://github.com/yungibly/lsa/actions/runs/34011671355)
 also passed every build, Homebrew test and the final tap update.
 
-Automated suite: 46 unit tests, 12 local macOS CLI tests, one artwork-example
+Automated suite: 47 unit tests, 13 local macOS CLI tests, one artwork-example
 test, three release-tooling tests, 16 protocol/cursor scenarios,
-48 inline layout/style scenarios, 23 cache scenarios, and 21 focused thumbnail
+59 inline layout/style scenarios, 23 cache scenarios, and 22 focused thumbnail
 scenarios, plus 75 gallery scenarios. Gallery checks exercise all twelve sizes at
 four terminal geometries, the 256 default, 300 explicitly requested previews,
 4,096 placements, shared budgets, option notices and SVG/ICO/cache/error content.
@@ -52,9 +53,17 @@ No PTY test renders the pixels or establishes a visual pass.
 
 ## Ghostty check
 
+For v0.3.0, check default details in an ordinary directory, `-C` compact columns,
+`--12-hour` with and without `--header`, sparse-directory miniatures and automatic
+image grids. No computer-use verification was performed in this session. Record
+Ghostty version, terminal geometry and transport with any new visual result.
+
 Run from this repository in Ghostty:
 
 ```sh
+./target/release/lsa .
+./target/release/lsa -C .
+./target/release/lsa --12-hour --header img-test
 ./target/release/lsa --diagnose img-test
 ./target/release/lsa img-test
 ./target/release/lsa --grid --thumbnail-size=1 img-test

@@ -1,0 +1,203 @@
+{
+  "date": "2026-09-10T23:57:50.603287+00:00",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "rust": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "timezone": "(host local timezone)",
+  "conditions": "Two warmups, then 7 paired/interleaved fresh release processes. OS caches warm, not flushed. 122x40 PTY, 8x17 cell pixels, drained without renderer; stdin /dev/null. wait4 child CPU/RSS. Fixture setup excluded. No concurrent builds/tests. All cases except changed_default_tty assert identical output.",
+  "binaries": {
+    "before": {
+      "bytes": 2288960,
+      "sha256": "cbd60d5e437fc21e1efc21fad8d88b55598c45177a84e0d53484d5dd40e770d3"
+    },
+    "after": {
+      "bytes": 2289040,
+      "sha256": "64f96a2b74049ef6ff03362483470a3e7574b39aedaef4cb93dc5d418f7e5cf4"
+    }
+  },
+  "cases": {
+    "plain_pipe": {
+      "equal_output": true,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 8.257,
+        "median_cpu_ms": 7.368,
+        "median_rss_bytes": 4145152,
+        "output_bytes": 160000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d2aecb6e05ab6b19cbb3eb5141de8f7edfa0af59909ee4233200b27657b4a87d"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 7.688,
+        "median_cpu_ms": 6.916,
+        "median_rss_bytes": 4145152,
+        "output_bytes": 160000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d2aecb6e05ab6b19cbb3eb5141de8f7edfa0af59909ee4233200b27657b4a87d"
+      }
+    },
+    "compact_tty": {
+      "equal_output": true,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 29.679,
+        "median_cpu_ms": 25.505,
+        "median_rss_bytes": 4374528,
+        "output_bytes": 300000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "13e220824505960ee18c4c39ba77fe183f83cef87923ac951b16117ac413c921"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 27.662,
+        "median_cpu_ms": 23.856,
+        "median_rss_bytes": 4374528,
+        "output_bytes": 300000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "13e220824505960ee18c4c39ba77fe183f83cef87923ac951b16117ac413c921"
+      }
+    },
+    "long_repeated_pipe": {
+      "equal_output": true,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 27.515,
+        "median_cpu_ms": 25.642,
+        "median_rss_bytes": 6111232,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "7243a32af8a6c42cacfbba0b29c2e8f4d76f3f5330dbcdcefa114508df857d6e"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 24.265,
+        "median_cpu_ms": 22.348,
+        "median_rss_bytes": 5275648,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "7243a32af8a6c42cacfbba0b29c2e8f4d76f3f5330dbcdcefa114508df857d6e"
+      }
+    },
+    "long_distinct_pipe": {
+      "equal_output": true,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 995.718,
+        "median_cpu_ms": 992.876,
+        "median_rss_bytes": 6144000,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d57afe623da53fdf29b909e8b055f9fdaddc7a20995ab7c2b1afa9e00a4a35d8"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 530.71,
+        "median_cpu_ms": 528.006,
+        "median_rss_bytes": 5308416,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d57afe623da53fdf29b909e8b055f9fdaddc7a20995ab7c2b1afa9e00a4a35d8"
+      }
+    },
+    "numeric_without_time_pipe": {
+      "equal_output": true,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 26.08,
+        "median_cpu_ms": 24.895,
+        "median_rss_bytes": 5832704,
+        "output_bytes": 380000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "94ba95b1fb717885e734c9803e21dc034b44698f041e41f0616eb5e09acf7d56"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 23.895,
+        "median_cpu_ms": 22.798,
+        "median_rss_bytes": 4751360,
+        "output_bytes": 380000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "94ba95b1fb717885e734c9803e21dc034b44698f041e41f0616eb5e09acf7d56"
+      }
+    },
+    "long_repeated_tty": {
+      "equal_output": true,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 44.676,
+        "median_cpu_ms": 36.299,
+        "median_rss_bytes": 6176768,
+        "output_bytes": 1750000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "9c36df1b6b9ab85210a924c8cd9f6a3b3aca2257b334d5003fe209c72ab54107"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 43.221,
+        "median_cpu_ms": 34.936,
+        "median_rss_bytes": 5341184,
+        "output_bytes": 1750000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "9c36df1b6b9ab85210a924c8cd9f6a3b3aca2257b334d5003fe209c72ab54107"
+      }
+    },
+    "long_distinct_tty": {
+      "equal_output": true,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 975.443,
+        "median_cpu_ms": 965.618,
+        "median_rss_bytes": 6193152,
+        "output_bytes": 1750000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "903cbba87ef254bf5002b7de36f939d3d9ec9fa1fd11a74bc382774baf7b9998"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 510.101,
+        "median_cpu_ms": 500.792,
+        "median_rss_bytes": 5341184,
+        "output_bytes": 1750000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "903cbba87ef254bf5002b7de36f939d3d9ec9fa1fd11a74bc382774baf7b9998"
+      }
+    },
+    "changed_default_tty": {
+      "equal_output": false,
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 28.294,
+        "median_cpu_ms": 24.139,
+        "median_rss_bytes": 4358144,
+        "output_bytes": 300000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "13e220824505960ee18c4c39ba77fe183f83cef87923ac951b16117ac413c921"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 43.921,
+        "median_cpu_ms": 34.634,
+        "median_rss_bytes": 5324800,
+        "output_bytes": 1750000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "9c36df1b6b9ab85210a924c8cd9f6a3b3aca2257b334d5003fe209c72ab54107"
+      }
+    }
+  }
+}

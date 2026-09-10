@@ -19,10 +19,12 @@ See [installation and releases](docs/install.md) for details. To build locally:
 ```sh
 export CARGO_HOME="$PWD/.cargo-home"
 cargo build --release --locked
-./target/release/lsa                # compact, styled listing
+./target/release/lsa                # automatic details or image grid
 ./target/release/lsa -la            # hidden files and readable details
 ./target/release/lsa img-test       # automatic inline thumbnails
-./target/release/lsa --no-images .  # compact text
+./target/release/lsa --no-images .  # long text
+./target/release/lsa -C .           # compact text columns
+./target/release/lsa --12-hour .    # AM/PM modification times
 ./target/release/lsa -1 . | head    # plain names; closed pipes succeed
 ```
 
@@ -32,21 +34,27 @@ To try it as `ls` in the current shell, from this checkout:
 alias ls="$PWD/target/release/lsa"
 ```
 
-Version 0.2.0 includes larger preview budgets, adjustable grid size and SVG/ICO
-previews. The user verified the changes in Ghostty on 2026-09-07; terminal version,
-geometry and transport were not resupplied. Earlier inline image output was
-user-verified in Ghostty 1.3.1. See [compatibility](docs/compatibility.md) and
-[installation](docs/install.md).
+Version 0.3.0 defaults to long details on terminals while preserving automatic
+image grids and plain piped names. `-C` selects compact text; `--12-hour` adds AM/PM
+times. Listing improvements reduce metadata memory and repeated formatting work.
+The new defaults have automated coverage; a fresh Ghostty visual pass is pending.
+The user verified v0.2.0 galleries in Ghostty on 2026-09-07; terminal version,
+geometry and transport were not resupplied. Earlier inline output was verified in
+Ghostty 1.3.1. See [compatibility](docs/compatibility.md) and [installation](docs/install.md).
 
 ## Everyday behavior
 
-- Terminal output uses compact columns, colors from the terminal palette, and icons.
+- Terminal text defaults to long details, colors from the terminal palette, and icons.
+  `-C` / `--columns` selects compact text columns; `-1` selects plain lines.
   Ghostty gets Nerd Font icons; other terminals get portable Unicode symbols.
   `--icons=always` selects Nerd Font icons elsewhere; `--no-icons` disables them.
 - `--color=auto|always|never` controls color. Auto respects nonempty `NO_COLOR`.
   Common `LS_COLORS` file-type and literal `*suffix` rules customize the palette;
   values are bounded and validated as SGR codes. `TERM=dumb` disables auto styling.
-- `-l` shows permissions, human-readable size, owner and local modification time.
+- Long form shows permissions, human-readable size, owner and local modification time.
+  `-l` always selects it, including in image-heavy directories and pipes.
+  `--12-hour` shows times such as `01:05 PM`; the default is `13:05`.
+  Dates and local timezone rules stay the same.
   On graphics terminals, images get one-row miniatures beside their names without
   making entries taller. `--no-images` keeps ordinary icons. `--header` labels the columns. `--bytes` uses exact sizes; `-n` adds numeric uid/gid
   and link count. `--fields=mode,size,modified` chooses a smaller set of details.
@@ -76,7 +84,7 @@ On a direct Ghostty/Kitty terminal, previews are automatic when at least half th
 entries are image candidates, or when a mixed listing fits a single thumbnail row.
 A single image also previews automatically. `--grid` requests previews in a sparse
 mixed directory, including ones containing only folders or ordinary files.
-`-1`, `--no-images`, and `--protocol=none` keep text.
+`-C`, `-1`, `--no-images`, and `--protocol=none` keep text.
 
 Grid frames default to **14 columns × 3 rows** at most. Set
 `--thumbnail-size=N` to choose any height from **1 to 12 terminal rows**;
@@ -91,7 +99,7 @@ Labels wrap completely and have no duplicate font icon. For example:
 
 Both size and preview limit accept `=N` or a separate argument. `--header`,
 `--fields`, `-l` and `-n` select long output; combining these with `--grid` now
-prints a brief explanation to stderr. Explicit text/image-disabling options also
+prints a brief explanation to stderr. Explicit `-C`/`-1` and image-disabling options also
 take precedence over grid, regardless of order. Thumbnail size affects grids;
 long output retains its one-row miniatures and reports an ignored size request.
 
@@ -111,8 +119,8 @@ shared across every operand. `--preview-limit=N` adjusts that from 0 to **4,096*
 attempt, byte or placement budget is spent, the remaining entries print as compact
 text in the same order. A partially previewed grid row uses artwork for its remaining
 tiles; the next row becomes compact text. In long view, remaining entries keep the
-same aligned name gutter. Small terminals, unsupported
-terminals and multiplexers fall back to text; `--protocol=kitty` is an explicit
+same aligned name gutter. Unsupported terminals and multiplexers fall back to long text. Small terminals
+use long form, with miniatures only when they fit; `--protocol=kitty` is an explicit
 protocol override, not a compatibility guarantee. No terminal queries or input reads.
 
 Static PNG/JPEG/GIF/WebP/BMP/ICO are supported, including JPEG EXIF orientation, aspect
@@ -139,10 +147,13 @@ decoding is deferred to avoid a native codec stack or external process dependenc
 | Optional cache | 64 slots, under 20 MiB of file contents; no scans or hit writes |
 
 Text output and the entry vector scale with directory size. Filesystem, account-name
-lookup, decoder and terminal writes have no hard timeout. Styling reads regular-file
-mode bits for executable icons/colors but retains no full metadata per entry. Plain
-name-only output avoids those stats. Long output caches bounded account names and
-exact timestamps. [Measurements](benchmarks/README.md) distinguish application cost
+lookup, decoder and terminal writes have no hard timeout. Layout is chosen before
+per-entry metadata reads: plain name-only output avoids those stats, and grids
+retain only the executable bit needed for styling. Long output stores only the
+metadata fields used by listing/sorting. Each local timestamp is converted at most
+once across alignment and printing, with compact civil components retained per
+entry only when the modified column is selected. Account/time lookup caches stay
+bounded. Safe filenames are borrowed without an escaped copy. [Measurements](benchmarks/README.md) distinguish application cost
 from terminal rendering and warm from empty thumbnail caches.
 
 Raster sources use a bounded buffered reader, avoiding an application copy of the

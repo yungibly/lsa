@@ -347,3 +347,43 @@ fn long_timestamps_preserve_epoch_boundaries_and_repeated_values() {
         b"1969-12-31 23:59 a\n1970-01-01 00:00 b\n1970-01-01 00:01 c\n1970-01-01 00:00 d\n"
     );
 }
+
+#[test]
+fn twelve_hour_time_preserves_local_dst_and_plain_pipe_defaults() {
+    let f = Fixture::new();
+    // UTC midnight/noon, then either side of US spring/fall DST transitions.
+    for (i, seconds) in [0_u64, 43200, 1710053999, 1710054000, 1730613599, 1730613600]
+        .iter()
+        .enumerate()
+    {
+        let name = format!("{i}");
+        f.touch(&name, b"");
+        fs::File::options()
+            .write(true)
+            .open(f.0.join(&name))
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new()
+                    .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(*seconds)),
+            )
+            .unwrap();
+    }
+    let run = |tz: &str, flags: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_lsa"))
+            .current_dir(&f.0)
+            .env("TZ", tz)
+            .args(flags)
+            .output()
+            .unwrap();
+        assert!(out.status.success() && out.stderr.is_empty());
+        String::from_utf8(out.stdout).unwrap()
+    };
+    assert_eq!(run("UTC0", &["--12-hour"]), "0\n1\n2\n3\n4\n5\n");
+    let utc = run("UTC0", &["--fields=modified", "--12-hour"]);
+    assert!(utc.starts_with("1970-01-01 12:00 AM 0\n1970-01-01 12:00 PM 1\n"));
+    let local = run(
+        "EST5EDT,M3.2.0,M11.1.0",
+        &["--fields=modified", "--12-hour"],
+    );
+    assert!(local.ends_with("2024-03-10 01:59 AM 2\n2024-03-10 03:00 AM 3\n2024-11-03 01:59 AM 4\n2024-11-03 01:00 AM 5\n"));
+}

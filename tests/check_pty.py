@@ -178,7 +178,11 @@ def main():
         ([], {}, 11, 24), ([], {}, 80, 5),
     ]:
         code, data, err, _ = capture(["--grid", *args, many], environment=env, cols=cols, rows=rows)
-        assert code == 0 and b"\x1b" not in data
+        assert code == 0
+        if not args and not env and rows == 5:
+            assert len(images(data)) == 40  # Long fallback miniatures still fit.
+        else:
+            assert b"\x1b" not in data
         if args:
             assert err.startswith(b'lsa: --grid ignored:') and err.count(b'\n') == 1, err
         else:

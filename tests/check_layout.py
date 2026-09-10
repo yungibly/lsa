@@ -35,10 +35,23 @@ def main():
         for name in ["a", "bb", "ccc", "d", "ee"]:
             (text / name).touch()
         for width, expected in [(10, b"a    bb\nccc  d\nee\n"), (11, b"a  bb  ccc\nd  ee\n")]:
-            data = run([text], cols=width)
+            data = run(["-C", text], cols=width)
             assert plain(data) == expected, data
             assert check_cursor(data, width, 24, 23) == 0
             cases += 1
+        # Default terminal details agree with explicit -l; compact/pipe overrides
+        # keep familiar names and the default does not imply -l for symlink operands.
+        for environment in [{}, {"TERM_PROGRAM": "other"}, {"TMUX": "test"}, {"TERM": "dumb"}]:
+            automatic = run([text], environment=environment)
+            assert automatic == run(["-l", text], environment=environment)
+            assert plain(automatic).count(b"-rw") == 5
+            cases += 1
+        assert plain(run(["--columns", text], cols=11)) == b"a  bb  ccc\nd  ee\n"
+        cases += 1
+        link = root / "directory-link"; link.symlink_to(text)
+        assert run([link]) == run([text])
+        assert b"directory-link@ ->" in plain(run(["-l", link]))
+        cases += 1
         for args in [["-1"], ["--grid", "-1"], ["-1", "--grid"]]:
             assert plain(run([*args, text], notice='--grid' in args)) == b"a\nbb\nccc\nd\nee\n"
             cases += 1
@@ -64,8 +77,14 @@ def main():
             if environment: assert not SGR.search(decorated)
             cases += 1
         (mixed / ".extra").touch()
-        assert b"\x1b" not in run(["-a", mixed], **geometry)
+        assert len(images(run(["-a", mixed], **geometry))) == 4
         cases += 1
+        assert run(["-a", mixed], **geometry) == run(["-la", mixed], **geometry)
+        cases += 1
+        for flags in [["-C"], ["--columns"], ["--grid", "-C"], ["-C", "--grid"]]:
+            data = run([*flags, mixed], notice="--grid" in flags, **geometry)
+            assert not images(data) and len(plain(data).split()) == 8
+            cases += 1
         expected = run(["--no-images", mixed], **geometry)
         for flag in ["--no-images", "--protocol=none", "--preview-limit=0"]:
             for args in [["--grid", flag], [flag, "--grid"]]:
@@ -172,7 +191,8 @@ def main():
         many_text.mkdir()
         for i in range(1000): (many_text / f"file{i:04}").touch()
         data = run([many_text], cols=40, rows=8, tty_input=True)
-        assert len(data.split()) == 1000
+        assert len(plain(data).splitlines()) == 1000
+        assert plain(data).count(b"file") == 1000
         cases += 1
 
     many = ROOT / "img-test/generated/many"

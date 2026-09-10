@@ -1,5 +1,31 @@
 # Session handoff
 
+## 2026-09-10 — performance, long defaults and AM/PM
+
+The user requested a performance/resource hunt, long form as the automatic text
+default, a 12-hour clock flag, then commit/tag/push and watching CI until green.
+All work/access remains in this repository; no computer use or source-image edits.
+Recheck Git state before continuing. Version 0.3.0 is prepared.
+
+Terminal fallback now uses long details; automatic grids, plain pipes and default
+directory-symlink traversal remain. `-C` / `--columns` selects compact text and
+`--12-hour` adds AM/PM only where timestamps are shown. Compact metadata, one
+localtime conversion per entry, borrowed safe names and stack permission glyphs
+reduce cost without workers or cache changes. Distinct-time cases show the main
+speed gain; long-form defaults emit more text than old compact defaults.
+
+Validation: 47 unit + 13 macOS CLI + one artwork-example + three release tests,
+195 PTY scenarios, formatting, strict lint and package checks. Tests cover UTC,
+midnight/noon, DST, epoch boundaries, extreme year widths, layout precedence,
+symlinks and AM/PM thumbnail alignment. Unix-socket tests used approved sandbox
+escalation. No new Ghostty visual pass; image pixels remain unchanged.
+
+Before binary: `target/lsa-before-performance` from 02762c1. Reproducible paired
+reports/harnesses live under benchmarks; final reported binary hashes must match
+the release build. GitHub access requires the ordinary network escalation.
+Next: push the tested commit, tag v0.3.0, watch both CI and full Release through
+Homebrew/tap publication, apply docs/releases/v0.3.0.md notes and record results.
+
 ## 2026-09-07 — verified Ghostty and v0.2.0 release
 
 The user tested everything successfully in Ghostty and explicitly authorized a

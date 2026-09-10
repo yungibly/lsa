@@ -12,7 +12,6 @@ use crate::{
 use std::{
     fs,
     io::{self, Write},
-    os::unix::fs::MetadataExt,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,7 +41,7 @@ struct FormatCache {
     groups: std::collections::HashMap<u32, String>,
     // Directory entries often share timestamps. Retain 64 exact-second values,
     // avoiding repeated localtime_r work in both width and output passes.
-    times: [Option<(i64, String)>; 64],
+    times: [Option<(i64, Option<Timestamp>)>; 64],
 }
 impl Default for FormatCache {
     fn default() -> Self {
@@ -54,15 +53,15 @@ impl Default for FormatCache {
     }
 }
 impl FormatCache {
-    fn timestamp(&mut self, seconds: i64) -> String {
+    fn timestamp(&mut self, seconds: i64) -> Option<Timestamp> {
         let slot = &mut self.times[seconds.rem_euclid(64) as usize];
         if let Some((key, value)) = slot
             && *key == seconds
         {
-            return value.clone();
+            return *value;
         }
         let value = timestamp(seconds);
-        *slot = Some((seconds, value.clone()));
+        *slot = Some((seconds, value));
         value
     }
     fn name(&mut self, id: u32, group: bool) -> String {
@@ -134,19 +133,25 @@ impl FormatCache {
 }
 
 impl Field {
-    fn value(self, entry: &Entry, human: bool, owners: &mut FormatCache) -> String {
+    fn value(
+        self,
+        entry: &Entry,
+        opts: &Options,
+        owners: &mut FormatCache,
+        time: Option<Timestamp>,
+    ) -> String {
         let Some(m) = &entry.metadata else {
             return "?".into();
         };
         match self {
-            Self::Mode => permissions(m.mode()),
-            Self::Links => m.nlink().to_string(),
-            Self::User => owners.name(m.uid(), false),
-            Self::Group => owners.name(m.gid(), true),
-            Self::Uid => m.uid().to_string(),
-            Self::Gid => m.gid().to_string(),
-            Self::Size => size(m.len(), human),
-            Self::Modified => owners.timestamp(m.mtime()),
+            Self::Mode => permissions(m.mode),
+            Self::Links => m.links.to_string(),
+            Self::User => owners.name(m.uid, false),
+            Self::Group => owners.name(m.gid, true),
+            Self::Uid => m.uid.to_string(),
+            Self::Gid => m.gid.to_string(),
+            Self::Size => size(m.len, opts.human),
+            Self::Modified => format_time(time, opts.twelve_hour),
         }
     }
 }
@@ -201,9 +206,30 @@ pub fn write(
         Field::Size => "Size",
         Field::Modified => "Modified",
     };
-    for entry in entries {
+    // Convert each timestamp at most once across width and output passes. Keep
+    // compact civil components (24 bytes including Option), not formatted strings.
+    // The bounded exact-second cache still avoids conversions for repeated times.
+    let times: Vec<_> = if fields.contains(&Field::Modified) {
+        entries
+            .iter()
+            .map(|entry| {
+                entry
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| owners.timestamp(m.modified))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for (row, entry) in entries.iter().enumerate() {
         for (i, field) in fields.iter().enumerate() {
-            widths[i] = widths[i].max(field.value(entry, opts.human, &mut owners).width());
+            let width = if *field == Field::Modified && entry.metadata.is_some() {
+                time_width(times[row], opts.twelve_hour)
+            } else {
+                field.value(entry, opts, &mut owners, None).width()
+            };
+            widths[i] = widths[i].max(width);
         }
     }
     if opts.header {
@@ -237,7 +263,7 @@ pub fn write(
                 (h * scale).round().max(1.0) as u32,
             )
         });
-    for entry in entries {
+    for (row, entry) in entries.iter().enumerate() {
         let image = if let Some((w, h)) = mini
             && entry.candidate()
         {
@@ -261,13 +287,13 @@ pub fn write(
             out.write_all(b"\r\n\x1b[1A\r")?;
         }
         for (i, field) in fields.iter().enumerate() {
-            let value = field.value(entry, opts.human, &mut owners);
+            let value = field.value(entry, opts, &mut owners, times.get(row).copied().flatten());
             let padding = widths[i] - value.width();
             let right = matches!(field, Field::Links | Field::Uid | Field::Gid | Field::Size);
             if right {
                 write!(out, "{:padding$}", "")?;
             }
-            if *field == Field::Mode {
+            if *field == Field::Mode && style.color {
                 for c in value.chars() {
                     style.paint(
                         out,
@@ -278,7 +304,7 @@ pub fn write(
                             '-' => "2",
                             _ => "36",
                         },
-                        &c.to_string(),
+                        c.encode_utf8(&mut [0; 4]),
                     )?;
                 }
             } else {
@@ -350,30 +376,73 @@ fn size(n: u64, human: bool) -> String {
     format!("{v:.1}{unit}")
 }
 
-fn timestamp(seconds: i64) -> String {
-    // Infer the C time type from localtime_r; musl deprecates the named alias
-    // while transitioning 32-bit platforms to time64.
+#[derive(Clone, Copy, Debug)]
+struct Timestamp {
+    year: i64,
+    month: u8,
+    day: u8,
+    hour: u8,
+    minute: u8,
+}
+
+fn timestamp(seconds: i64) -> Option<Timestamp> {
+    // Infer the C time type; musl is transitioning the named alias to time64.
     let time = seconds as _;
     let mut tm = std::mem::MaybeUninit::<libc::tm>::uninit();
     // SAFETY: both pointers are valid, and tm is read only after success.
     if unsafe { libc::localtime_r(&time, tm.as_mut_ptr()) }.is_null() {
-        return "????-??-?? ??:??".into();
+        return None;
     }
     let tm = unsafe { tm.assume_init() };
+    Some(Timestamp {
+        year: i64::from(tm.tm_year) + 1900,
+        month: (tm.tm_mon + 1) as u8,
+        day: tm.tm_mday as u8,
+        hour: tm.tm_hour as u8,
+        minute: tm.tm_min as u8,
+    })
+}
+
+fn time_width(time: Option<Timestamp>, twelve_hour: bool) -> usize {
+    let year = time.map_or(4, |t| {
+        let digits = t.year.unsigned_abs().checked_ilog10().unwrap_or(0) as usize + 1;
+        (digits + usize::from(t.year < 0)).max(4)
+    });
+    year + 12 + if twelve_hour { 3 } else { 0 }
+}
+
+fn format_time(time: Option<Timestamp>, twelve_hour: bool) -> String {
+    let Some(t) = time else {
+        return if twelve_hour {
+            "????-??-?? ??:?? ??"
+        } else {
+            "????-??-?? ??:??"
+        }
+        .into();
+    };
+    let hour = if twelve_hour {
+        (t.hour + 11) % 12 + 1
+    } else {
+        t.hour
+    };
+    let suffix = if !twelve_hour {
+        ""
+    } else if t.hour < 12 {
+        " AM"
+    } else {
+        " PM"
+    };
     format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}",
-        tm.tm_year + 1900,
-        tm.tm_mon + 1,
-        tm.tm_mday,
-        tm.tm_hour,
-        tm.tm_min
+        "{:04}-{:02}-{:02} {:02}:{:02}{suffix}",
+        t.year, t.month, t.day, hour, t.minute
     )
 }
 
 // mode_t constants are u16 on macOS and u32 on Linux; retain portable casts.
 #[allow(clippy::unnecessary_cast)]
 fn permissions(mode: u32) -> String {
-    let mut out = String::from(match mode & libc::S_IFMT as u32 {
+    let mut out = String::with_capacity(10);
+    out.push_str(match mode & libc::S_IFMT as u32 {
         x if x == libc::S_IFDIR as u32 => "d",
         x if x == libc::S_IFLNK as u32 => "l",
         x if x == libc::S_IFIFO as u32 => "p",
@@ -409,6 +478,40 @@ fn permissions(mode: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clock_formats_midnight_noon_and_unusual_year_widths() {
+        for (hour, expected) in [
+            (0, "12:07 AM"),
+            (1, "01:07 AM"),
+            (11, "11:07 AM"),
+            (12, "12:07 PM"),
+            (13, "01:07 PM"),
+            (23, "11:07 PM"),
+        ] {
+            for year in [-10000, -1, 0, 2026, 10000, i64::from(i32::MAX) + 1900] {
+                let time = Some(Timestamp {
+                    year,
+                    month: 9,
+                    day: 10,
+                    hour,
+                    minute: 7,
+                });
+                assert!(format_time(time, true).ends_with(expected));
+                for twelve_hour in [false, true] {
+                    assert_eq!(
+                        format_time(time, twelve_hour).len(),
+                        time_width(time, twelve_hour)
+                    );
+                }
+            }
+        }
+        for twelve_hour in [false, true] {
+            assert_eq!(
+                format_time(None, twelve_hour).len(),
+                time_width(None, twelve_hour)
+            );
+        }
+    }
     #[test]
     fn missing_metadata_keeps_the_entry_and_fields() {
         let entry = Entry {

@@ -47,6 +47,8 @@ pub struct Options {
     pub paths: Vec<PathBuf>,
     pub all: bool,
     pub long: bool,
+    pub columns: bool,
+    pub twelve_hour: bool,
     pub human: bool,
     pub numeric: bool,
     pub header: bool,
@@ -79,7 +81,7 @@ pub const HELP: &str = "lsa — familiar listings, useful details, inline image 
 Usage: lsa [OPTIONS] [PATH ...]
 
 Examples:
-  lsa                         Automatic columns or image grid
+  lsa                         Automatic details or image grid
   lsa -la --header             Details with column headings
   lsa --grid --thumbnail-size=5 photos
                               Larger thumbnails (5 terminal rows high)
@@ -88,7 +90,9 @@ Examples:
 
 Everyday options:
   -a, -A, --all          Include hidden entries (without . and ..)
-  -l, --long            Readable details; tiny image previews on graphics terminals
+  -l, --long            Always show details; tiny previews on graphics terminals
+  -C, --columns         Compact text columns; no automatic image grid
+  --12-hour            Show modification times with AM/PM (default: 24-hour)
   -h                    Human-readable sizes (the default); --bytes uses bytes
   -n                    Long listing with numeric uid/gid and link count
   -1, --oneline         One entry per line; no images
@@ -134,8 +138,9 @@ Output always stays in terminal scrollback and returns to the shell. Image-heavy
 listings (at least half image candidates), small mixed listings, and individual
 images preview automatically. Work is sequential and capped at 128 MiB of image
 commands / 4096 placements, including artwork; remaining names print as compact text.
+Terminal text defaults to long details; automatic image grids remain enabled.
 No pager or input handling. -l uses one-row thumbnails; -1 and --no-images keep text.
-Long options (-l, -n, --header, --fields) select details over --grid; -1 and image
+Long options (-l, -n, --header, --fields) select details over --grid; -C, -1 and image
 disabling flags also override --grid, regardless of order. A notice explains this.
 Pipes default to plain names, one per line; --grid never sends images to pipes.
 Unknown terminals and multiplexers use text. Preview failures are quiet and never
@@ -159,6 +164,8 @@ impl Options {
             })
         } else if self.one {
             Some("-1 / --oneline selects text lines")
+        } else if self.columns {
+            Some("-C / --columns selects compact text columns")
         } else {
             None
         };
@@ -170,7 +177,7 @@ impl Options {
                 (false, false) => return None,
             };
             return Some(format!(
-                "{ignored} ignored: {reason}; omit the long/line options to use a grid"
+                "{ignored} ignored: {reason}; omit the long/column/line options to use a grid"
             ));
         }
         if self.grid {
@@ -217,6 +224,8 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--version" => opts.version = true,
             "--grid" => opts.grid = true,
             "--long" => opts.long = true,
+            "--columns" => opts.columns = true,
+            "--12-hour" => opts.twelve_hour = true,
             "--all" | "--almost-all" => opts.all = true,
             "--oneline" => opts.one = true,
             "--directory" | "--list-dirs" => opts.directory = true,
@@ -312,6 +321,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                     match c {
                         'a' | 'A' => opts.all = true,
                         'l' => opts.long = true,
+                        'C' => opts.columns = true,
                         'h' => opts.human = true,
                         'n' => {
                             opts.long = true;
@@ -360,6 +370,8 @@ mod tests {
         assert_eq!(o.sort, Sort::Size);
         assert_eq!(o.paths, [PathBuf::from("dir"), PathBuf::from("-image.png")]);
         assert!(args(&[]).unwrap().human);
+        assert!(!args(&[]).unwrap().long);
+        assert!(args(&["--12-hour"]).unwrap().twelve_hour);
         assert!(args(&["--bytes", "-h"]).unwrap().human);
         assert!(!args(&["-h", "--bytes"]).unwrap().human);
     }
@@ -433,6 +445,8 @@ mod tests {
     fn explains_layout_overrides_in_either_order() {
         for flag in [
             "--header",
+            "-C",
+            "--columns",
             "--fields=size",
             "-l",
             "-n",

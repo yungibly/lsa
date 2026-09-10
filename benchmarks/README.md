@@ -1,5 +1,66 @@
 # Application measurements
 
+## Listing efficiency and long defaults — 2026-09-10
+
+[Equal-output report](performance.json) and [image/cache controls](performance-images.json).
+Before: v0.2.0 source at `02762c1`, saved as `target/lsa-before-performance`.
+After: v0.3.0 release binary; both reports record exact binary SHA-256 values.
+Arm64 macOS 26.6.2, Rust 1.98.0, thin-LTO/stripped. Two warmups followed by seven
+paired/interleaved fresh processes, OS caches warm and not flushed, no concurrent
+builds/tests. PTY output is drained at 122×40 cells / 8×17 pixels without a renderer;
+stdin is `/dev/null`. Child CPU and peak RSS come from `wait4`.
+
+| 10,000 entries, equal output | Elapsed before → after | Peak RSS before → after |
+| --- | ---: | ---: |
+| Plain names, pipe | 8.26 → 7.69 ms | 3.95 → 3.95 MiB |
+| Styled compact columns, PTY | 29.68 → 27.66 ms | 4.17 → 4.17 MiB |
+| Long, repeated timestamp, pipe | 27.52 → 24.27 ms | 5.83 → 5.03 MiB |
+| Long, distinct timestamps, pipe | 995.72 → 530.71 ms | 5.86 → 5.06 MiB |
+| Numeric fields without time, pipe | 26.08 → 23.90 ms | 5.56 → 4.53 MiB |
+| Long, repeated timestamp, PTY | 44.68 → 43.22 ms | 5.89 → 5.09 MiB |
+| Long, distinct timestamps, PTY | 975.44 → 510.10 ms | 5.91 → 5.09 MiB |
+
+The distinct fixture spaces times by 64 seconds, exceeding/defeating the bounded
+exact-second cache. It demonstrates the removed second `localtime_r` conversion:
+roughly **47–48% less elapsed/CPU time** on this host. This is not a universal speedup;
+libc/timezone costs differ by platform and repeated times already hit the cache.
+Repeated-time pipe CPU falls **13%** (25.64 → 22.35 ms); plain/compact elapsed gains
+are about **7%**. Complete output hashes match in every equal-work case.
+
+Long-listing peak RSS falls about **14%**, or **19%** without the time column.
+Each retained metadata record now contains 48 bytes of used stat fields on the
+supported 64-bit targets. A modified column retains another 24 bytes of civil-time
+state per entry so output never repeats the conversion. This still uses less memory
+than the old full stat records; no per-entry formatted timestamp strings are retained.
+Safe filenames borrow their original storage, and permission characters no longer
+allocate individually. Plain output retains no per-entry metadata; grids do not
+collect long details just because long is now the terminal fallback.
+
+The **changed default is a different workload**: styled output grows from 300,000
+to 1,750,000 bytes, elapsed from 28.29 to 43.92 ms, and RSS from 4.16 to 5.08 MiB in
+the repeated-time fixture. Explicit `-C` restores compact columns; the equal-work
+PTY rows compare old `-l` with the new default. Automatic sparse-image long listings
+also perform miniature decoding just as explicit `-l` does; `--no-images` avoids it.
+
+Image controls are essentially unchanged: four original images take 73.06 → 72.51 ms
+with cache off, 73.20 → 73.04 ms with an empty cache, and 5.58 → 5.42 ms with a warm
+cache. The 40-image gallery takes 17.66 → 17.67 ms. Long miniatures, images, artwork and all output bytes agree across versions
+and off/empty/warm cache modes. Image RSS
+and graphics traffic are essentially unchanged. Cache setup is outside timing.
+The stripped binary grows by only 80 bytes (2,288,960 → 2,289,040), with no
+new dependencies. These measurements establish application/transport costs, not Ghostty rendering
+speed, image memory, or a new real-terminal visual pass.
+
+```sh
+python3 benchmarks/performance.py --before target/lsa-before-performance --runs=7
+python3 benchmarks/inline.py --before target/lsa-before-performance --runs=7
+```
+
+The first harness fixes timestamps and alternates version order per pair. The
+second retains the existing image/cache controls. Reports first go under ignored
+`benchmarks/local/`; checked final reports are copied explicitly.
+
+
 ## Final artwork pass for v0.2.0 — 2026-09-07
 
 [Paired report](artwork.json), same arm64 macOS/122×40 drained-PTY conditions as

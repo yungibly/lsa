@@ -1,11 +1,12 @@
 use crate::{
     cli::{Options, When},
-    display::escape,
+    display::escaped,
     entry::{Entry, Kind},
     filetype::{self, Category},
     terminal::Terminal,
 };
 use std::{
+    borrow::Cow,
     collections::HashMap,
     env,
     io::{self, Write},
@@ -153,28 +154,31 @@ impl Style {
         }
     }
 
-    pub fn label(&self, entry: &Entry) -> String {
+    pub fn label<'a>(&self, entry: &'a Entry) -> Cow<'a, str> {
         let name = self.name(entry);
         if self.icons == Icons::None {
             name
         } else {
-            format!("{} {name}", self.icon(entry))
+            format!("{} {name}", self.icon(entry)).into()
         }
     }
 
     /// Names below a thumbnail retain classification and links, without a
     /// redundant font glyph. Long-view thumbnails use the same text path.
-    pub fn name(&self, entry: &Entry) -> String {
-        let mut name = escape(&entry.name);
+    pub fn name<'a>(&self, entry: &'a Entry) -> Cow<'a, str> {
+        let mut name = escaped(&entry.name);
         if self.classify {
-            name.push_str(match entry.kind {
+            let suffix = match entry.kind {
                 Kind::Directory => "/",
                 Kind::Link => "@",
                 Kind::Pipe => "|",
                 Kind::Socket => "=",
                 Kind::File if entry.executable => "*",
                 _ => "",
-            });
+            };
+            if !suffix.is_empty() {
+                name.to_mut().push_str(suffix);
+            }
         }
         name
     }
@@ -292,7 +296,7 @@ mod tests {
                 assert!(
                     String::from_utf8(out)
                         .unwrap()
-                        .contains(&style.label(&entry))
+                        .contains(style.label(&entry).as_ref())
                 );
             }
         }

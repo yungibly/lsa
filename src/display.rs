@@ -1,10 +1,19 @@
-use std::{ffi::OsStr, fmt::Write};
+use std::{borrow::Cow, ffi::OsStr, fmt::Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 // UTF-8 remains readable; invalid bytes and terminal controls remain unambiguous.
 pub fn escape(name: &OsStr) -> String {
-    let mut out = String::new();
+    escaped(name).into_owned()
+}
+
+pub fn escaped(name: &OsStr) -> Cow<'_, str> {
+    if let Some(text) = name.to_str()
+        && !text.chars().any(needs_escape)
+    {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(name.len());
     for chunk in name.as_encoded_bytes().utf8_chunks() {
         for c in chunk.valid().chars() {
             match c {
@@ -12,9 +21,7 @@ pub fn escape(name: &OsStr) -> String {
                 '\n' => out.push_str("\\n"),
                 '\r' => out.push_str("\\r"),
                 '\t' => out.push_str("\\t"),
-                c if c.is_control()
-                    || matches!(c, '\u{061c}' | '\u{200e}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2066}'..='\u{2069}') =>
-                {
+                c if needs_escape(c) => {
                     write!(out, "\\u{{{:x}}}", c as u32).unwrap();
                 }
                 c => out.push(c),
@@ -24,7 +31,13 @@ pub fn escape(name: &OsStr) -> String {
             write!(out, "\\x{b:02x}").unwrap();
         }
     }
-    out
+    Cow::Owned(out)
+}
+
+fn needs_escape(c: char) -> bool {
+    c == '\\'
+        || c.is_control()
+        || matches!(c, '\u{061c}' | '\u{200e}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 
 // Wrap rather than truncate, so every displayed name can be inspected inline.
