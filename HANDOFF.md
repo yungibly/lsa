@@ -5,7 +5,7 @@
 The user requested a performance/resource hunt, long form as the automatic text
 default, a 12-hour clock flag, then commit/tag/push and watching CI until green.
 All work/access remains in this repository; no computer use or source-image edits.
-Recheck Git state before continuing. Version 0.3.0 is prepared.
+Recheck Git state before continuing. Version 0.3.0 is published.
 
 Terminal fallback now uses long details; automatic grids, plain pipes and default
 directory-symlink traversal remain. `-C` / `--columns` selects compact text and
@@ -21,10 +21,28 @@ symlinks and AM/PM thumbnail alignment. Unix-socket tests used approved sandbox
 escalation. No new Ghostty visual pass; image pixels remain unchanged.
 
 Before binary: `target/lsa-before-performance` from 02762c1. Reproducible paired
-reports/harnesses live under benchmarks; final reported binary hashes must match
-the release build. GitHub access requires the ordinary network escalation.
-Next: push the tested commit, tag v0.3.0, watch both CI and full Release through
-Homebrew/tap publication, apply docs/releases/v0.3.0.md notes and record results.
+reports/harnesses live under benchmarks and match the final local release binary.
+GitHub access requires the ordinary network escalation.
+
+Commit `96755cd` and annotated tag `v0.3.0` are pushed. CI passed all five jobs:
+https://github.com/yungibly/lsa/actions/runs/34544594224. Release passed all eleven:
+https://github.com/yungibly/lsa/actions/runs/34544595865, including native builds,
+Rust 1.88, checked archives, Homebrew installs on both macOS architectures and
+x86-64 Linux, and the tap update. Public release notes match docs/releases/v0.3.0.md:
+https://github.com/yungibly/lsa/releases/tag/v0.3.0. The public Apple Silicon archive
+passed checksum/extraction/version and the new option/pipe/default checks locally.
+The public formula independently points to all four v0.3.0 architecture archives.
+
+The initial Intel release job failed tests/check_layout.py's diagnostic-output
+assertion, without recording the captured output. The independent Intel CI job
+and the unchanged release retry passed. All 500 consecutive local diagnostic
+captures also passed. Cause remains unconfirmed; no test was skipped or weakened,
+and the tag/source stayed unchanged. Investigate if it recurs. Watch logs, public
+archive, formula and smoke-check script stay under target/automation/v0.3.0/.
+
+The documentation-only follow-up uses [skip ci]; tagged source remains the tested
+96755cd. Next: normal use and optional user Ghostty verification of the new
+default/AM-PM appearance. No pending release work, local installation or shell edits.
 
 ## 2026-09-07 — verified Ghostty and v0.2.0 release
 

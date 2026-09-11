@@ -4,6 +4,7 @@
 
 | Environment | Result |
 | --- | --- |
+| v0.3.0 hosted CI and release, 2026-09-10 local / 2026-09-11 UTC | All four native targets and Rust 1.88 passed; all eleven release jobs completed, including macOS ARM/Intel and Linux x86-64 Homebrew tests and tap update. Published Apple Silicon archive passed checksum, extraction, version, default/compact/AM-PM and pipe checks locally. |
 | Local v0.3.0, arm64 macOS 26.6.2, Rust 1.98.0 | Long default, compact override, 12-hour dates/DST and aligned miniatures pass Rust/PTY checks. Equal-work listings and image output match v0.2.0 bytes. New default/AM-PM appearance has not received a fresh Ghostty user pass. |
 | Ghostty 1.3.1, arm64 macOS 26.6.2, 122×40 cells / 8×17 pixels | Earlier anonymous inline Kitty previews and compact text received user passes. Metadata/cache commands also received a pass at `7050349`; transport/version were not resupplied for that pass. |
 | User's latest Ghostty screenshot | Inline-only direction approved; requested smaller previews, visible folder/error artwork, simpler grid labels and tiny long-view previews. Version/geometry/transport were not resupplied. |
@@ -20,6 +21,13 @@
 | Ghostty user pass, 2026-09-07: larger galleries, variable sizes, SVG/ICO and long miniatures | User reported testing everything and that all worked perfectly. Version/geometry/transport were not resupplied; this is a functional/visual pass, not a renderer timing or memory measurement. |
 | Final artwork optimization | Full offline artwork sheet and paired complete PTY output are byte-identical before/after, including all eleven categories. No new terminal behavior. |
 | Other terminals, multiplexers, SSH | Unverified. Protocol hints or upstream support are not lsa validation. |
+
+Current hosted results: [CI at 96755cd](https://github.com/yungibly/lsa/actions/runs/34544594224)
+and the complete [v0.3.0 release](https://github.com/yungibly/lsa/actions/runs/34544595865).
+The first Intel release attempt failed a diagnostic-output assertion; the independent
+Intel CI and an unchanged release retry passed. All 500 consecutive local diagnostic
+captures passed too. No captured failure output was logged, so the cause is unconfirmed.
+No checks were skipped or weakened, and the release tag/source stayed unchanged.
 
 Previous hosted result: [CI at ba4a882](https://github.com/yungibly/lsa/actions/runs/34106546519),
 2026-09-07, and the complete

@@ -30,10 +30,21 @@ less metadata memory; image decoding/output is unchanged. See
 [measurements](benchmarks/README.md). These are application/PTY measurements,
 not Ghostty rendering measurements.
 
-Version 0.3.0 is prepared for the user-authorized commit, tag, push and CI/release
-watch. **Next:** finish publication and record hosted results; then normal use
-and a user Ghostty pass for default details and AM/PM alignment. No new real-terminal
-visual pass has been claimed. Keep cache opt-in and WebM deferred.
+Commit `96755cd` and tag `v0.3.0` are pushed. [CI](https://github.com/yungibly/lsa/actions/runs/34544594224)
+passed all five jobs; the [release workflow](https://github.com/yungibly/lsa/actions/runs/34544595865)
+passed all eleven, including native builds, Rust 1.88, publication, three Homebrew
+installations and the tap update. [v0.3.0](https://github.com/yungibly/lsa/releases/tag/v0.3.0)
+is published with reviewed notes and checksummed archives. The public Apple Silicon
+archive passed local checksum, extraction, version, pipe and new-option checks.
+
+One Intel release attempt failed a diagnostic-output assertion. The independent
+Intel CI run and the unchanged release retry passed, as did 500 consecutive local
+diagnostic captures. The original output was not logged, so the cause is unconfirmed;
+record another occurrence before attributing it to the PTY helper or application.
+
+**Next:** normal use and a user Ghostty pass for default details and AM/PM alignment.
+No new real-terminal visual pass has been claimed. Publication is complete; keep
+cache opt-in and WebM deferred.
 
 ## Previous change — larger galleries and simpler preview controls
 
