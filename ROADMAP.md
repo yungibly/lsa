@@ -25,11 +25,18 @@ Paired equal-output measurements show about 4–7% less CPU for the sampled styl
 and repeated-time/numeric listings, and 4.8–7.5% less artwork CPU. Plain names,
 distinct-time conversion, raster previews and retained memory are essentially
 unchanged. See [measurements](benchmarks/README.md) for conditions and controls.
-Version 0.3.1 is ready for commit, tag, push and hosted release checks.
-Real Ghostty appearance is not newly verified.
+Commit `564388f` and annotated tag `v0.3.1` are pushed.
+[CI](https://github.com/yungibly/lsa/actions/runs/34678732155) passed all five jobs;
+the [release workflow](https://github.com/yungibly/lsa/actions/runs/34678732395)
+passed all eleven, including native builds, Rust 1.88, publication, three Homebrew
+installations and the tap update. [v0.3.1](https://github.com/yungibly/lsa/releases/tag/v0.3.1)
+is published with reviewed notes and checksummed archives. The public Apple Silicon
+archive passed checksum, extraction, version, plain listing and AM/PM long checks;
+the public formula points to all four v0.3.1 archives. Real Ghostty appearance is
+not newly verified.
 
-**Next:** finish the release checks, then normal use and
-the pending user Ghostty pass for default details and AM/PM alignment.
+**Next:** normal use and the pending user Ghostty pass for default details and
+AM/PM alignment. Publication is complete; keep cache opt-in and WebM deferred.
 
 ## Previous change — everyday defaults and listing efficiency
 

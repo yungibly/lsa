@@ -4,7 +4,7 @@
 
 The user requested another performance/resource hunt and authorized commit, tag,
 push and watching CI until green. Work/access stays in this repository; no computer
-use or source-image edits. Recheck Git state. Local v0.3.1 is ready for publication.
+use or source-image edits. Recheck Git state. Version 0.3.1 is published.
 
 Metadata formatting reuses one scratch string and borrows cached owner/group
 names. Text labels stream icon/name/type-marker components without a combined
@@ -33,8 +33,27 @@ Local validation: 50 unit tests, 13 macOS CLI tests, two artwork-example tests,
 three release tests, all 196 PTY scenarios, formatting, strict clippy, release build,
 extracted-package smoke checks and matching release-tag validation. No new Ghostty
 visual pass is claimed; pending v0.3.0 default details/AM-PM appearance verification
-still belongs to the user. Next: commit/tag/push v0.3.1 and watch both workflows,
-including Homebrew installation/tap update, until green.
+still belongs to the user.
+
+Commit `564388f05befc85e580d7fca287f3bdc9063caa1` and annotated tag `v0.3.1` are
+pushed. CI passed all five jobs:
+https://github.com/yungibly/lsa/actions/runs/34678732155. Release passed all eleven:
+https://github.com/yungibly/lsa/actions/runs/34678732395, including Rust 1.88, four
+native builds, publication, all three Homebrew installations and the tap update.
+Public release notes match docs/releases/v0.3.1.md:
+https://github.com/yungibly/lsa/releases/tag/v0.3.1. The public Apple Silicon archive
+passed checksum/extraction/version, complete plain names and AM/PM long-listing
+checks. The public formula independently points to all four v0.3.1 archives.
+Watch logs, public downloads/formula and smoke script stay under the ignored
+target/automation/v0.3.1 directory.
+
+Automatic approval review initially rejected the push as an unverified destination
+and payload. Read-only checks confirmed the configured public yungibly/lsa remote,
+ADMIN access and the sole reviewed outgoing commit without ignored files or changed
+release workflow. The same direct push was then approved and succeeded; no user
+confirmation or workaround was needed. This documentation-only follow-up uses
+[skip ci]; the release tag retains exactly the fully tested source commit.
+Next: normal use and the pending Ghostty appearance pass. No pending release work.
 
 ## 2026-09-10 — performance, long defaults and AM/PM
 
