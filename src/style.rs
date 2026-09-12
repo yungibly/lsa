@@ -12,6 +12,7 @@ use std::{
     io::{self, Write},
     path::PathBuf,
 };
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Icons {
@@ -154,33 +155,43 @@ impl Style {
         }
     }
 
-    pub fn label<'a>(&self, entry: &'a Entry) -> Cow<'a, str> {
-        let name = self.name(entry);
-        if self.icons == Icons::None {
-            name
-        } else {
-            format!("{} {name}", self.icon(entry)).into()
-        }
+    // Measure the same components that write_name streams, without building an
+    // icon-prefixed String just to discard it after planning the columns.
+    // The separating space and ASCII classifier reset Unicode width state, so
+    // combining/emoji sequences cannot cross these component boundaries.
+    pub fn label_width(&self, entry: &Entry) -> usize {
+        escaped(&entry.name).width()
+            + self.suffix(entry).len()
+            + if self.icons == Icons::None {
+                0
+            } else {
+                self.icon(entry).width() + 1
+            }
     }
 
     /// Names below a thumbnail retain classification and links, without a
     /// redundant font glyph. Long-view thumbnails use the same text path.
     pub fn name<'a>(&self, entry: &'a Entry) -> Cow<'a, str> {
         let mut name = escaped(&entry.name);
-        if self.classify {
-            let suffix = match entry.kind {
-                Kind::Directory => "/",
-                Kind::Link => "@",
-                Kind::Pipe => "|",
-                Kind::Socket => "=",
-                Kind::File if entry.executable => "*",
-                _ => "",
-            };
-            if !suffix.is_empty() {
-                name.to_mut().push_str(suffix);
-            }
+        let suffix = self.suffix(entry);
+        if !suffix.is_empty() {
+            name.to_mut().push_str(suffix);
         }
         name
+    }
+
+    fn suffix(&self, entry: &Entry) -> &'static str {
+        if !self.classify {
+            return "";
+        }
+        match entry.kind {
+            Kind::Directory => "/",
+            Kind::Link => "@",
+            Kind::Pipe => "|",
+            Kind::Socket => "=",
+            Kind::File if entry.executable => "*",
+            _ => "",
+        }
     }
 
     fn code<'a>(&'a self, entry: &Entry) -> &'a str {
@@ -221,22 +232,39 @@ impl Style {
     }
 
     pub fn write_name(&self, out: &mut impl Write, entry: &Entry) -> io::Result<()> {
-        self.write_label(out, entry, &self.label(entry))
+        let name = escaped(&entry.name);
+        let (icon, space) = if self.icons == Icons::None {
+            ("", "")
+        } else {
+            (self.icon(entry), " ")
+        };
+        self.write_parts(out, entry, &[icon, space, &name, self.suffix(entry)])
     }
 
     // Width calculation and wrapping always operate on plain text, before SGR
     // or OSC framing. Wrapping calls this separately for each label fragment.
     pub fn write_label(&self, out: &mut impl Write, entry: &Entry, text: &str) -> io::Result<()> {
-        if text.is_empty() {
+        self.write_parts(out, entry, &[text])
+    }
+
+    // Keep one SGR/OSC frame around the complete label while writing borrowed
+    // components. Safe names with icons or classification need no label buffer.
+    fn write_parts(&self, out: &mut impl Write, entry: &Entry, parts: &[&str]) -> io::Result<()> {
+        if parts.iter().all(|part| part.is_empty()) {
             return Ok(());
         }
         if let Some(root) = &self.hyperlink_root {
             write!(out, "\x1b]8;;{}\x1b\\", file_url(&root.join(&entry.path)))?;
         }
-        if self.color {
-            self.paint(out, self.code(entry), text)?;
-        } else {
-            out.write_all(text.as_bytes())?;
+        let code = if self.color { self.code(entry) } else { "" };
+        if !code.is_empty() {
+            write!(out, "\x1b[{code}m")?;
+        }
+        for part in parts {
+            out.write_all(part.as_bytes())?;
+        }
+        if !code.is_empty() {
+            out.write_all(b"\x1b[0m")?;
         }
         if self.hyperlink_root.is_some() {
             out.write_all(b"\x1b]8;;\x1b\\")?;
@@ -269,7 +297,6 @@ fn file_url(path: &std::path::Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unicode_width::UnicodeWidthStr;
     fn entry(name: &str, kind: Kind) -> Entry {
         Entry {
             path: name.into(),
@@ -277,6 +304,15 @@ mod tests {
             kind,
             metadata: None,
             executable: false,
+        }
+    }
+
+    fn label(style: &Style, entry: &Entry) -> String {
+        let name = style.name(entry);
+        if style.icons == Icons::None {
+            name.into_owned()
+        } else {
+            format!("{} {name}", style.icon(entry))
         }
     }
     #[test]
@@ -290,14 +326,86 @@ mod tests {
             for name in ["x", "x.png", "x.mp3", "x.zip", "x.rs", "x.json", "x.md"] {
                 let entry = entry(name, Kind::File);
                 assert_eq!(style.icon(&entry).width(), 1);
-                assert_eq!(style.label(&entry).width(), name.width() + 2);
+                assert_eq!(style.label_width(&entry), name.width() + 2);
                 let mut out = Vec::new();
                 style.write_name(&mut out, &entry).unwrap();
                 assert!(
                     String::from_utf8(out)
                         .unwrap()
-                        .contains(style.label(&entry).as_ref())
+                        .contains(&label(&style, &entry))
                 );
+            }
+        }
+    }
+    #[test]
+    fn streamed_names_keep_complete_widths_and_single_color_link_frames() {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        let names = [
+            OsStr::new(""),
+            OsStr::new("ordinary.rs"),
+            OsStr::new("桃e\u{301}👩‍💻"),
+            OsStr::new("\u{fe0f}\u{20e3}1\u{fe0f}\u{20e3}"),
+            OsStr::new("لاא\u{200d}ל가\u{200d}"),
+            OsStr::new("line\nslash\\"),
+            OsStr::from_bytes(b"raw\xff\x1b"),
+        ];
+        for icons in [Icons::None, Icons::Portable, Icons::Nerd] {
+            for classify in [false, true] {
+                for color in [false, true] {
+                    for hyperlink in [false, true] {
+                        let mut style = Style {
+                            icons,
+                            classify,
+                            color,
+                            hyperlink_root: hyperlink.then(|| PathBuf::from("/lsa fixtures")),
+                            ..Style::default()
+                        };
+                        // Empty codes omit SGR entirely, while the suffix rule
+                        // still styles the complete icon/name/classifier label.
+                        style.read_colors("di=:*.rs=38;5;123");
+                        for kind in [
+                            Kind::File,
+                            Kind::Directory,
+                            Kind::Link,
+                            Kind::Pipe,
+                            Kind::Socket,
+                            Kind::Device,
+                            Kind::Unknown,
+                        ] {
+                            for name in names {
+                                let entry = Entry {
+                                    path: name.into(),
+                                    name: name.into(),
+                                    kind,
+                                    metadata: None,
+                                    executable: true,
+                                };
+                                let text = label(&style, &entry);
+                                assert_eq!(style.label_width(&entry), text.width());
+                                let mut expected = Vec::new();
+                                if !text.is_empty() {
+                                    if let Some(root) = &style.hyperlink_root {
+                                        write!(
+                                            expected,
+                                            "\x1b]8;;{}\x1b\\",
+                                            file_url(&root.join(&entry.path))
+                                        )
+                                        .unwrap();
+                                    }
+                                    style
+                                        .paint(&mut expected, style.code(&entry), &text)
+                                        .unwrap();
+                                    if hyperlink {
+                                        expected.extend_from_slice(b"\x1b]8;;\x1b\\");
+                                    }
+                                }
+                                let mut actual = Vec::new();
+                                style.write_name(&mut actual, &entry).unwrap();
+                                assert_eq!(actual, expected);
+                            }
+                        }
+                    }
+                }
             }
         }
     }

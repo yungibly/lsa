@@ -1,0 +1,239 @@
+{
+  "date": "2026-09-12T06:36:51.210057+00:00",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "rust": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "conditions": "Fresh release processes; OS caches warm, not flushed. 2 warmups, paired/interleaved versions. PTY 122x40, 8x17 pixels/cell, drained without renderer; stdin /dev/null. wait4 includes child CPU/RSS. Empty means thumbnail cache cleared before each timed run. Cache setup excluded.",
+  "binaries": {
+    "before": {
+      "bytes": 2289040,
+      "sha256": "64f96a2b74049ef6ff03362483470a3e7574b39aedaef4cb93dc5d418f7e5cf4"
+    },
+    "after": {
+      "bytes": 2288992,
+      "sha256": "408386362131b208d3d91d59f8c151f442cd6f2369bcd7b5f88b42976e11bfe0"
+    }
+  },
+  "cases": {
+    "text_10000_pipe": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 9.084,
+        "median_cpu_ms": 8.008,
+        "median_rss_bytes": 4014080,
+        "output_bytes": 160000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d2aecb6e05ab6b19cbb3eb5141de8f7edfa0af59909ee4233200b27657b4a87d"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 9.06,
+        "median_cpu_ms": 7.908,
+        "median_rss_bytes": 3981312,
+        "output_bytes": 160000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d2aecb6e05ab6b19cbb3eb5141de8f7edfa0af59909ee4233200b27657b4a87d"
+      }
+    },
+    "text_10000_tty": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 47.657,
+        "median_cpu_ms": 37.238,
+        "median_rss_bytes": 5193728,
+        "output_bytes": 1750000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "5cb2b84501c8c0cfa33b584dc40afa231540dc12d4e2e45bb583ec0cd128e7d8"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 45.834,
+        "median_cpu_ms": 35.571,
+        "median_rss_bytes": 5111808,
+        "output_bytes": 1750000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "5cb2b84501c8c0cfa33b584dc40afa231540dc12d4e2e45bb583ec0cd128e7d8"
+      }
+    },
+    "long_10000_pipe": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 27.534,
+        "median_cpu_ms": 25.705,
+        "median_rss_bytes": 5160960,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "a8c4f25429a093bdbcaf0e57d768ab9b63c5912c977eef93da0a7b2b324b883a"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 27.092,
+        "median_cpu_ms": 25.069,
+        "median_rss_bytes": 5095424,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "a8c4f25429a093bdbcaf0e57d768ab9b63c5912c977eef93da0a7b2b324b883a"
+      }
+    },
+    "user_images_off": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 84.666,
+        "median_cpu_ms": 79.526,
+        "median_rss_bytes": 31555584,
+        "output_bytes": 153434,
+        "image_bytes": 153025,
+        "images": 5,
+        "sha256": "e282cab805f37fdf57c2677a56a990c267a8d08eafb64fa5e94eb75f5895cbc4"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 83.531,
+        "median_cpu_ms": 78.465,
+        "median_rss_bytes": 31522816,
+        "output_bytes": 153434,
+        "image_bytes": 153025,
+        "images": 5,
+        "sha256": "e282cab805f37fdf57c2677a56a990c267a8d08eafb64fa5e94eb75f5895cbc4"
+      }
+    },
+    "user_images_empty": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 80.276,
+        "median_cpu_ms": 76.195,
+        "median_rss_bytes": 31490048,
+        "output_bytes": 153434,
+        "image_bytes": 153025,
+        "images": 5,
+        "sha256": "e282cab805f37fdf57c2677a56a990c267a8d08eafb64fa5e94eb75f5895cbc4"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 81.077,
+        "median_cpu_ms": 76.628,
+        "median_rss_bytes": 31490048,
+        "output_bytes": 153434,
+        "image_bytes": 153025,
+        "images": 5,
+        "sha256": "e282cab805f37fdf57c2677a56a990c267a8d08eafb64fa5e94eb75f5895cbc4"
+      }
+    },
+    "user_images_warm": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 6.177,
+        "median_cpu_ms": 2.295,
+        "median_rss_bytes": 2326528,
+        "output_bytes": 153434,
+        "image_bytes": 153025,
+        "images": 5,
+        "sha256": "e282cab805f37fdf57c2677a56a990c267a8d08eafb64fa5e94eb75f5895cbc4"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 6.245,
+        "median_cpu_ms": 2.237,
+        "median_rss_bytes": 2310144,
+        "output_bytes": 153434,
+        "image_bytes": 153025,
+        "images": 5,
+        "sha256": "e282cab805f37fdf57c2677a56a990c267a8d08eafb64fa5e94eb75f5895cbc4"
+      }
+    },
+    "gallery_default": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 20.083,
+        "median_cpu_ms": 12.435,
+        "median_rss_bytes": 2981888,
+        "output_bytes": 1226256,
+        "image_bytes": 1224200,
+        "images": 40,
+        "sha256": "811f02bd4a0c21b3feb9189b6612778813ad5b04c16c8691ec4daf09f4291c24"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 20.026,
+        "median_cpu_ms": 12.584,
+        "median_rss_bytes": 2965504,
+        "output_bytes": 1226256,
+        "image_bytes": 1224200,
+        "images": 40,
+        "sha256": "811f02bd4a0c21b3feb9189b6612778813ad5b04c16c8691ec4daf09f4291c24"
+      }
+    },
+    "long_images_off": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 78.814,
+        "median_cpu_ms": 74.507,
+        "median_rss_bytes": 31637504,
+        "output_bytes": 9884,
+        "image_bytes": 8896,
+        "images": 4,
+        "sha256": "0840315816983ee9dbfd0786a9987ecb1bf846129decd3e2133b842aa54bd0e7"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 79.203,
+        "median_cpu_ms": 74.501,
+        "median_rss_bytes": 31621120,
+        "output_bytes": 9884,
+        "image_bytes": 8896,
+        "images": 4,
+        "sha256": "0840315816983ee9dbfd0786a9987ecb1bf846129decd3e2133b842aa54bd0e7"
+      }
+    },
+    "long_images_empty": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 79.498,
+        "median_cpu_ms": 74.982,
+        "median_rss_bytes": 31571968,
+        "output_bytes": 9884,
+        "image_bytes": 8896,
+        "images": 4,
+        "sha256": "0840315816983ee9dbfd0786a9987ecb1bf846129decd3e2133b842aa54bd0e7"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 79.584,
+        "median_cpu_ms": 75.548,
+        "median_rss_bytes": 31637504,
+        "output_bytes": 9884,
+        "image_bytes": 8896,
+        "images": 4,
+        "sha256": "0840315816983ee9dbfd0786a9987ecb1bf846129decd3e2133b842aa54bd0e7"
+      }
+    },
+    "long_images_warm": {
+      "before": {
+        "runs": 7,
+        "median_elapsed_ms": 6.667,
+        "median_cpu_ms": 2.616,
+        "median_rss_bytes": 2392064,
+        "output_bytes": 9884,
+        "image_bytes": 8896,
+        "images": 4,
+        "sha256": "0840315816983ee9dbfd0786a9987ecb1bf846129decd3e2133b842aa54bd0e7"
+      },
+      "after": {
+        "runs": 7,
+        "median_elapsed_ms": 6.412,
+        "median_cpu_ms": 2.477,
+        "median_rss_bytes": 2359296,
+        "output_bytes": 9884,
+        "image_bytes": 8896,
+        "images": 4,
+        "sha256": "0840315816983ee9dbfd0786a9987ecb1bf846129decd3e2133b842aa54bd0e7"
+      }
+    }
+  }
+}

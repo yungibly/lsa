@@ -1,5 +1,41 @@
 # Session handoff
 
+## 2026-09-12 — formatting/artwork efficiency and v0.3.1
+
+The user requested another performance/resource hunt and authorized commit, tag,
+push and watching CI until green. Work/access stays in this repository; no computer
+use or source-image edits. Recheck Git state. Local v0.3.1 is ready for publication.
+
+Metadata formatting reuses one scratch string and borrows cached owner/group
+names. Text labels stream icon/name/type-marker components without a combined
+allocation; column widths and color/hyperlink framing retain exact behavior.
+Artwork computes polygon crossings per scanline with at most six stack floats,
+instead of recomputing them for every pixel. No dependency, worker, cache-policy
+or resource-budget change. Reference tests preserve every artwork source pixel.
+
+Before binary: `target/lsa-before-efficiency-031` at `0e91944` (v0.3.0). Paired
+seven-run reports are `benchmarks/efficiency-{listings,artwork,images}.json`; every
+output hash matches. Sampled styled/repeated-time/numeric listing CPU falls about
+4–7%, artwork CPU 4.8–7.5%. Plain names, distinct-time conversion, raster previews
+and retained memory are essentially unchanged. Conditions and limitations are in
+benchmarks/README.md. Final release binary SHA-256 starts `408386362131b208`.
+
+An intermittent thumbnail assertion exposed a PTY helper race: select could time
+out just before a child wrote/exited, then closing the last slave discarded queued
+bytes on macOS. The unchanged old binary reproduced an empty capture in 2,000
+trials; all ten forced timing gaps lost output with the old helper. Observing exit
+before readiness fixes it. All 2,000 normal and ten forced captures then passed,
+and a gated regression is in check_pty.py. The earlier unlogged Intel diagnostic
+failure remains unconfirmed; this is independent evidence of a helper defect.
+Reproduction scripts/results stay in `target/automation/v0.3.1/`.
+
+Local validation: 50 unit tests, 13 macOS CLI tests, two artwork-example tests,
+three release tests, all 196 PTY scenarios, formatting, strict clippy, release build,
+extracted-package smoke checks and matching release-tag validation. No new Ghostty
+visual pass is claimed; pending v0.3.0 default details/AM-PM appearance verification
+still belongs to the user. Next: commit/tag/push v0.3.1 and watch both workflows,
+including Homebrew installation/tap update, until green.
+
 ## 2026-09-10 — performance, long defaults and AM/PM
 
 The user requested a performance/resource hunt, long form as the automatic text

@@ -15,6 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--before', type=Path, required=True)
     parser.add_argument('--runs', type=int, default=7)
+    parser.add_argument('--same-options', action='store_true',
+                        help='Compare two versions with the current CLI defaults and identical flags')
     args = parser.parse_args()
     assert 3 <= args.runs <= 51
     before = args.before.resolve()
@@ -41,7 +43,8 @@ def main():
                       'OS caches warm, not flushed. 122x40 PTY, 8x17 cell pixels, drained '
                       'without renderer; stdin /dev/null. wait4 child CPU/RSS. '
                       'Fixture setup excluded. No concurrent builds/tests. '
-                      'All cases except changed_default_tty assert identical output.',
+                      + ('Every case asserts identical output.' if args.same_options else
+                         'All cases except changed_default_tty assert identical output.'),
         'binaries': {label: {'bytes': path.stat().st_size,
                             'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
                      for label, path in variants.items()},
@@ -59,6 +62,10 @@ def main():
         ('changed_default_tty', True, repeated, [], [], False),
     ]
     for case, terminal, directory, old, new, equal in cases:
+        if args.same_options:
+            old, equal = new, True
+            if case == 'changed_default_tty':
+                case = 'default_tty'
         samples = {label: [] for label in variants}
         for i in range(args.runs + 2):
             order = list(variants) if i % 2 == 0 else list(reversed(variants))

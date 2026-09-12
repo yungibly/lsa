@@ -87,6 +87,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--before", type=Path)
     parser.add_argument("--runs", type=int, default=11)
+    parser.add_argument("--equal-output", action="store_true",
+                        help="Require stable, identical output for every before/after case")
     args = parser.parse_args()
     assert 3 <= args.runs <= 51
     local = ROOT / "benchmarks/local/inline"
@@ -113,7 +115,9 @@ def main():
     for case, terminal, path in cases:
         samples = {label: [] for label in variants}
         for i in range(args.runs + 2):
-            for label, binary in variants.items():
+            order = list(variants) if i % 2 == 0 else list(reversed(variants))
+            for label in order:
+                binary = variants[label]
                 flags = []
                 if case == "long_10000_pipe" or case.startswith("long_images"): flags = ["-l"]
                 if case.startswith(("user_images", "long_images")):
@@ -126,6 +130,9 @@ def main():
                         if case.endswith("warm") and i == 0: measure(binary, [*flags, path], terminal)
                 sample = measure(binary, [*flags, path], terminal)
                 if i >= 2: samples[label].append(sample)
+        if args.equal_output:
+            assert len({sample['sha256'] for values in samples.values()
+                        for sample in values}) == 1, case
         report["cases"][case] = {label: summarize(runs) for label, runs in samples.items()}
         print(case, report["cases"][case], flush=True)
     if "before" in variants:

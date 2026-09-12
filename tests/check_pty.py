@@ -10,9 +10,11 @@ import re
 import select
 import struct
 import subprocess
+import sys
 import termios
 import tempfile
 import time
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = Path(os.environ.get("LSA_TEST_BINARY", ROOT / "target/release/lsa"))
@@ -44,6 +46,10 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
         while True:
             if time.perf_counter() - start > 15:
                 raise TimeoutError("lsa PTY output took more than 15 seconds")
+            # Observe exit before readiness: the child may write and exit after
+            # select times out. That stale empty result cannot justify closing
+            # the last slave, which can discard those queued bytes on macOS.
+            exited = child.poll() is not None
             readable = select.select([master], [], [], 0.001)[0]
             if readable:
                 try:
@@ -55,7 +61,7 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
                 if not chunk:
                     break
                 data.extend(chunk)
-            if child.poll() is not None and slave is not None and not readable:
+            if exited and slave is not None and not readable:
                 try: after = termios.tcgetattr(slave)
                 except termios.error as error:
                     if not tty_input or error.args[0] != errno.ENOTTY: raise
@@ -82,6 +88,35 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
         child.stderr.close()
         os.close(master)
         if slave is not None: os.close(slave)
+
+
+def check_exit_readiness_gap():
+    """Force a child write/exit between empty readiness and the next loop."""
+    with tempfile.TemporaryDirectory(dir=ROOT / "target", prefix="pty-exit-gap-") as temp:
+        gate = Path(temp) / "release"
+        process = None
+        injected = False
+        original_popen, original_select = subprocess.Popen, select.select
+
+        def launch(*args, **kwargs):
+            nonlocal process
+            process = original_popen(*args, **kwargs)
+            return process
+
+        def readiness(*args):
+            nonlocal injected
+            result = original_select(*args)
+            if not injected:
+                assert not result[0], "child wrote before the test released it"
+                gate.touch()
+                process.wait(timeout=2)
+                injected = True
+            return result
+
+        script = "import os,sys,time\nwhile not os.path.exists(sys.argv[1]): time.sleep(.001)\nos.write(1,b'capture tail\\n')"
+        with patch.object(subprocess, "Popen", launch), patch.object(select, "select", readiness):
+            code, data, err, _ = capture([], prefix=[sys.executable, "-c", script, str(gate)])
+        assert injected and (code, data, err) == (0, b"capture tail\r\n", b""), (code, data, err)
 
 
 def images(data, *, pixels=False):
@@ -152,7 +187,8 @@ def check_cursor(data, cols, rows, start_row):
 def main():
     many = ROOT / "img-test/generated/many"
     assert many.is_dir(), "Run target/release/examples/fixtures first"
-    runs = 0
+    check_exit_readiness_gap()
+    runs = 1
     for cols, rows in [(80, 24), (80, 8), (12, 8), (200, 50)]:
         code, data, err, _ = capture(["--grid", "--preview-limit=64", many], cols=cols, rows=rows, pixels=(cols * 8, rows * 16))
         assert code == 0 and not err, err

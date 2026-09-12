@@ -10,6 +10,7 @@ use crate::{
     terminal::Terminal,
 };
 use std::{
+    fmt::Write as _,
     fs,
     io::{self, Write},
 };
@@ -64,18 +65,19 @@ impl FormatCache {
         *slot = Some((seconds, value));
         value
     }
-    fn name(&mut self, id: u32, group: bool) -> String {
+    fn name(&mut self, id: u32, group: bool) -> Option<&str> {
+        use std::collections::hash_map::Entry;
         let names = if group {
             &mut self.groups
         } else {
             &mut self.users
         };
-        if let Some(name) = names.get(&id) {
-            return name.clone();
-        }
-        if names.len() >= 64 {
-            return id.to_string();
-        }
+        let at_capacity = names.len() >= 64;
+        let vacant = match names.entry(id) {
+            Entry::Occupied(name) => return Some(name.into_mut().as_str()),
+            Entry::Vacant(_) if at_capacity => return None,
+            Entry::Vacant(name) => name,
+        };
         // One bounded buffer, including negative lookups cached per invocation.
         let mut buffer = vec![0u8; 16 * 1024];
         let name = unsafe {
@@ -127,31 +129,39 @@ impl FormatCache {
         let name = name
             .map(|bytes| escape(std::ffi::OsStr::from_bytes(&bytes)))
             .unwrap_or_else(|| id.to_string());
-        names.insert(id, name.clone());
-        name
+        Some(vacant.insert(name).as_str())
     }
 }
 
 impl Field {
     fn value(
         self,
+        out: &mut String,
         entry: &Entry,
         opts: &Options,
         owners: &mut FormatCache,
         time: Option<Timestamp>,
-    ) -> String {
+    ) {
+        out.clear();
         let Some(m) = &entry.metadata else {
-            return "?".into();
+            out.push('?');
+            return;
         };
         match self {
-            Self::Mode => permissions(m.mode),
-            Self::Links => m.links.to_string(),
-            Self::User => owners.name(m.uid, false),
-            Self::Group => owners.name(m.gid, true),
-            Self::Uid => m.uid.to_string(),
-            Self::Gid => m.gid.to_string(),
-            Self::Size => size(m.len, opts.human),
-            Self::Modified => format_time(time, opts.twelve_hour),
+            Self::Mode => permissions(out, m.mode),
+            Self::Links => write!(out, "{}", m.links).unwrap(),
+            Self::User | Self::Group => {
+                let id = if self == Self::Group { m.gid } else { m.uid };
+                if let Some(name) = owners.name(id, self == Self::Group) {
+                    out.push_str(name);
+                } else {
+                    write!(out, "{id}").unwrap();
+                }
+            }
+            Self::Uid => write!(out, "{}", m.uid).unwrap(),
+            Self::Gid => write!(out, "{}", m.gid).unwrap(),
+            Self::Size => size(out, m.len, opts.human),
+            Self::Modified => format_time(out, time, opts.twelve_hour),
         }
     }
 }
@@ -195,6 +205,9 @@ pub fn write(
         DEFAULT_FIELDS
     };
     let mut owners = FormatCache::default();
+    // Reuse field storage across alignment and output; retain no formatted
+    // metadata strings per entry, including numeric account-cache fallbacks.
+    let mut value = String::with_capacity(32);
     let mut widths = [0; 8];
     let heading = |field: Field| match field {
         Field::Mode => "Permissions",
@@ -227,7 +240,8 @@ pub fn write(
             let width = if *field == Field::Modified && entry.metadata.is_some() {
                 time_width(times[row], opts.twelve_hour)
             } else {
-                field.value(entry, opts, &mut owners, None).width()
+                field.value(&mut value, entry, opts, &mut owners, None);
+                value.width()
             };
             widths[i] = widths[i].max(width);
         }
@@ -235,7 +249,8 @@ pub fn write(
     if opts.header {
         for (i, field) in fields.iter().enumerate() {
             widths[i] = widths[i].max(heading(*field).width());
-            let value = format!("{:<width$}", heading(*field), width = widths[i]);
+            value.clear();
+            write!(value, "{:<width$}", heading(*field), width = widths[i]).unwrap();
             style.paint(out, "1;4", &value)?;
             write!(out, " ")?;
         }
@@ -287,7 +302,13 @@ pub fn write(
             out.write_all(b"\r\n\x1b[1A\r")?;
         }
         for (i, field) in fields.iter().enumerate() {
-            let value = field.value(entry, opts, &mut owners, times.get(row).copied().flatten());
+            field.value(
+                &mut value,
+                entry,
+                opts,
+                &mut owners,
+                times.get(row).copied().flatten(),
+            );
             let padding = widths[i] - value.width();
             let right = matches!(field, Field::Links | Field::Uid | Field::Gid | Field::Size);
             if right {
@@ -360,9 +381,10 @@ pub fn write(
     Ok(())
 }
 
-fn size(n: u64, human: bool) -> String {
+fn size(out: &mut String, n: u64, human: bool) {
     if !human || n < 1024 {
-        return n.to_string();
+        write!(out, "{n}").unwrap();
+        return;
     }
     let mut v = n as f64;
     let mut unit = "";
@@ -373,7 +395,7 @@ fn size(n: u64, human: bool) -> String {
             break;
         }
     }
-    format!("{v:.1}{unit}")
+    write!(out, "{v:.1}{unit}").unwrap();
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -411,14 +433,14 @@ fn time_width(time: Option<Timestamp>, twelve_hour: bool) -> usize {
     year + 12 + if twelve_hour { 3 } else { 0 }
 }
 
-fn format_time(time: Option<Timestamp>, twelve_hour: bool) -> String {
+fn format_time(out: &mut String, time: Option<Timestamp>, twelve_hour: bool) {
     let Some(t) = time else {
-        return if twelve_hour {
+        out.push_str(if twelve_hour {
             "????-??-?? ??:?? ??"
         } else {
             "????-??-?? ??:??"
-        }
-        .into();
+        });
+        return;
     };
     let hour = if twelve_hour {
         (t.hour + 11) % 12 + 1
@@ -432,16 +454,17 @@ fn format_time(time: Option<Timestamp>, twelve_hour: bool) -> String {
     } else {
         " PM"
     };
-    format!(
+    write!(
+        out,
         "{:04}-{:02}-{:02} {:02}:{:02}{suffix}",
         t.year, t.month, t.day, hour, t.minute
     )
+    .unwrap();
 }
 
 // mode_t constants are u16 on macOS and u32 on Linux; retain portable casts.
 #[allow(clippy::unnecessary_cast)]
-fn permissions(mode: u32) -> String {
-    let mut out = String::with_capacity(10);
+fn permissions(out: &mut String, mode: u32) {
     out.push_str(match mode & libc::S_IFMT as u32 {
         x if x == libc::S_IFDIR as u32 => "d",
         x if x == libc::S_IFLNK as u32 => "l",
@@ -472,7 +495,6 @@ fn permissions(mode: u32) -> String {
             _ => '-',
         });
     }
-    out
 }
 
 #[cfg(test)]
@@ -480,6 +502,7 @@ mod tests {
     use super::*;
     #[test]
     fn clock_formats_midnight_noon_and_unusual_year_widths() {
+        let mut value = String::new();
         for (hour, expected) in [
             (0, "12:07 AM"),
             (1, "01:07 AM"),
@@ -496,20 +519,20 @@ mod tests {
                     hour,
                     minute: 7,
                 });
-                assert!(format_time(time, true).ends_with(expected));
+                value.clear();
+                format_time(&mut value, time, true);
+                assert!(value.ends_with(expected));
                 for twelve_hour in [false, true] {
-                    assert_eq!(
-                        format_time(time, twelve_hour).len(),
-                        time_width(time, twelve_hour)
-                    );
+                    value.clear();
+                    format_time(&mut value, time, twelve_hour);
+                    assert_eq!(value.len(), time_width(time, twelve_hour));
                 }
             }
         }
         for twelve_hour in [false, true] {
-            assert_eq!(
-                format_time(None, twelve_hour).len(),
-                time_width(None, twelve_hour)
-            );
+            value.clear();
+            format_time(&mut value, None, twelve_hour);
+            assert_eq!(value.len(), time_width(None, twelve_hour));
         }
     }
     #[test]
@@ -533,9 +556,78 @@ mod tests {
     #[test]
     #[allow(clippy::unnecessary_cast)] // mode_t differs between macOS and Linux.
     fn unix_modes_and_sizes() {
-        assert_eq!(permissions(libc::S_IFDIR as u32 | 0o1777), "drwxrwxrwt");
-        assert_eq!(permissions(libc::S_IFREG as u32 | 0o4644), "-rwSr--r--");
-        assert_eq!(size(1536, true), "1.5K");
-        assert_eq!(size(1536, false), "1536");
+        let mut value = String::new();
+        for (mode, expected) in [
+            (libc::S_IFDIR as u32 | 0o1777, "drwxrwxrwt"),
+            (libc::S_IFREG as u32 | 0o4644, "-rwSr--r--"),
+        ] {
+            value.clear();
+            permissions(&mut value, mode);
+            assert_eq!(value, expected);
+        }
+        for (n, human, expected) in [
+            (0, true, "0"),
+            (1023, true, "1023"),
+            (1024, true, "1.0K"),
+            (1536, true, "1.5K"),
+            (1536, false, "1536"),
+            (1024 * 1024 - 1, true, "1024.0K"),
+            (1024 * 1024, true, "1.0M"),
+            (u64::MAX, true, "16.0E"),
+            (u64::MAX, false, "18446744073709551615"),
+        ] {
+            value.clear();
+            size(&mut value, n, human);
+            assert_eq!(value, expected);
+        }
+    }
+
+    #[test]
+    fn account_cache_bound_keeps_names_and_numeric_fallbacks() {
+        let mut owners = FormatCache::default();
+        for id in 0..64 {
+            owners.users.insert(id, "owner".into());
+            owners.groups.insert(id, "group".into());
+        }
+        for group in [false, true] {
+            assert_eq!(
+                owners.name(63, group),
+                Some(if group { "group" } else { "owner" })
+            );
+            assert_eq!(owners.name(u32::MAX, group), None);
+        }
+        let mut entry = Entry {
+            path: "entry".into(),
+            name: "entry".into(),
+            kind: Kind::File,
+            metadata: Some(Box::new(crate::entry::Details {
+                mode: 0,
+                uid: u32::MAX,
+                gid: 63,
+                len: 0,
+                links: u64::MAX,
+                modified: 0,
+                modified_nsec: 0,
+            })),
+            executable: false,
+        };
+        let opts = Options::default();
+        let mut value = String::new();
+        for (field, expected) in [
+            (Field::Links, "18446744073709551615"),
+            (Field::User, "4294967295"),
+            (Field::Group, "group"),
+            (Field::Uid, "4294967295"),
+            (Field::Gid, "63"),
+            (Field::Size, "0"),
+        ] {
+            field.value(&mut value, &entry, &opts, &mut owners, None);
+            assert_eq!(value, expected);
+        }
+        entry.metadata = None;
+        Field::User.value(&mut value, &entry, &opts, &mut owners, None);
+        assert_eq!(value, "?");
+        assert_eq!(owners.users.len(), 64);
+        assert_eq!(owners.groups.len(), 64);
     }
 }

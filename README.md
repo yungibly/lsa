@@ -34,8 +34,10 @@ To try it as `ls` in the current shell, from this checkout:
 alias ls="$PWD/target/release/lsa"
 ```
 
-Version 0.3.0 defaults to long details on terminals while preserving automatic
-image grids and plain piped names. `-C` selects compact text; `--12-hour` adds AM/PM
+Version 0.3.1 reduces temporary formatting allocations and artwork rasterization
+work while preserving output bytes. Version 0.3.0 introduced long details on
+terminals while preserving automatic image grids and plain piped names.
+`-C` selects compact text; `--12-hour` adds AM/PM
 times. Listing improvements reduce metadata memory and repeated formatting work.
 The new defaults have automated coverage; a fresh Ghostty visual pass is pending.
 The user verified v0.2.0 galleries in Ghostty on 2026-09-07; terminal version,
@@ -153,7 +155,9 @@ retain only the executable bit needed for styling. Long output stores only the
 metadata fields used by listing/sorting. Each local timestamp is converted at most
 once across alignment and printing, with compact civil components retained per
 entry only when the modified column is selected. Account/time lookup caches stay
-bounded. Safe filenames are borrowed without an escaped copy. [Measurements](benchmarks/README.md) distinguish application cost
+bounded. Metadata formatting reuses one scratch string, and text icons/names/type
+markers stream without a combined label allocation. Safe filenames are borrowed
+without an escaped copy. [Measurements](benchmarks/README.md) distinguish application cost
 from terminal rendering and warm from empty thumbnail caches.
 
 Raster sources use a bounded buffered reader, avoiding an application copy of the

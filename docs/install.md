@@ -54,7 +54,7 @@ as `ls`, use `alias ls="$PWD/target/release/lsa"` in the current shell.
 
 `CI` runs on main-branch pushes, pull requests and manual dispatch. It is also
 reused by the release workflow. Four native runners run formatting, strict clippy,
-Rust tests, release builds, 195 headless terminal scenarios, and extracted-package
+Rust tests, release builds, 196 headless terminal scenarios, and extracted-package
 checks. Linux uses the native musl linker. A separate job tests all Rust targets
 with Rust 1.88.0 and validates the release tooling. CI archives are downloadable
 from the workflow run for 14 days.

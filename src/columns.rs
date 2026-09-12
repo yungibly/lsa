@@ -1,6 +1,5 @@
 use crate::{entry::Entry, style::Style};
 use std::io::{self, Write};
-use unicode_width::UnicodeWidthStr;
 
 // Maxima for each row-wise column. Search is bounded even on huge reported TTYs.
 // Store widths, not another full copy of every escaped filename.
@@ -35,7 +34,7 @@ pub struct Plan {
 
 impl Plan {
     pub fn new(entries: &[Entry], terminal_cols: usize, style: &Style) -> Self {
-        let widths: Vec<_> = entries.iter().map(|e| style.label(e).width()).collect();
+        let widths: Vec<_> = entries.iter().map(|e| style.label_width(e)).collect();
         let cells = plan(&widths, terminal_cols);
         Self { widths, cells }
     }
@@ -66,6 +65,7 @@ impl Plan {
 mod tests {
     use super::*;
     use crate::entry::Kind;
+    use unicode_width::UnicodeWidthStr;
 
     fn output(names: &[&str], cols: usize) -> String {
         let entries: Vec<_> = names

@@ -1,9 +1,37 @@
 # Roadmap
 
-Updated 2026-09-10. Print into scrollback, return to the shell, keep one mixed
+Updated 2026-09-12. Print into scrollback, return to the shell, keep one mixed
 ordering and complete names. No pager or file browser.
 
-## Current change — everyday defaults and listing efficiency
+## Current change — formatting and artwork efficiency
+
+Metadata alignment and output reuse one scratch string; account names are
+borrowed from the existing bounded caches. Text icons, names and type markers
+stream inside the same color/hyperlink framing without assembling another label.
+Column widths preserve Unicode handling. Artwork computes polygon crossings once
+per scanline using at most six stack values, preserving every source pixel and
+therefore every thumbnail size. No dependencies, workers or retained caches added.
+
+The PTY helper now observes child exit before checking readability, fixing a race
+where closing the last slave could discard queued output on macOS. The unchanged
+v0.3.0 binary reproduced this failure; forcing the timing gap lost output in all
+10 original-helper trials. The fixed helper passed 2,000 concurrent captures and
+all 10 forced trials. A gated regression now runs in CI; no assertion was weakened.
+
+Local validation passes 50 unit tests, 13 macOS CLI tests, two artwork-example
+tests, three release-tooling tests and 196 headless terminal scenarios, plus
+formatting, strict clippy, release build and extracted-package checks.
+Paired equal-output measurements show about 4–7% less CPU for the sampled styled
+and repeated-time/numeric listings, and 4.8–7.5% less artwork CPU. Plain names,
+distinct-time conversion, raster previews and retained memory are essentially
+unchanged. See [measurements](benchmarks/README.md) for conditions and controls.
+Version 0.3.1 is ready for commit, tag, push and hosted release checks.
+Real Ghostty appearance is not newly verified.
+
+**Next:** finish the release checks, then normal use and
+the pending user Ghostty pass for default details and AM/PM alignment.
+
+## Previous change — everyday defaults and listing efficiency
 
 Terminal text now defaults to long details; image-heavy and small mixed listings
 still switch automatically to grids. `-C` / `--columns` selects compact text,

@@ -1,5 +1,67 @@
 # Application measurements
 
+## Formatting and artwork efficiency — 2026-09-12
+
+[Listing report](efficiency-listings.json), [artwork report](efficiency-artwork.json),
+and [image/cache controls](efficiency-images.json). Before: v0.3.0 at `0e91944`,
+saved as `target/lsa-before-efficiency-031`. After: v0.3.1 release binary. All
+reports record exact binary SHA-256 values and assert identical complete output
+in every comparison, including all image bytes and cache states.
+
+Arm64 macOS 26.6.2, Rust 1.98.0, thin-LTO/stripped. Two warmups, then seven
+paired/interleaved fresh processes with alternating version order; OS caches warm,
+not flushed. Builds/tests finished before timing. PTYs are drained at 122×40 cells
+and 8×17 pixels without a renderer; stdin is `/dev/null`. `wait4` records child CPU
+and peak RSS. Fixture/cache preparation stays outside timing.
+
+| Equal-output workload | Elapsed before → after | CPU before → after |
+| --- | ---: | ---: |
+| 10,000 compact styled entries, PTY | 30.23 → 28.31 ms | 25.34 → 23.59 ms |
+| 10,000 long entries, repeated time, pipe | 29.54 → 27.42 ms | 27.03 → 25.22 ms |
+| 10,000 numeric entries without time, pipe | 26.62 → 25.77 ms | 25.04 → 23.98 ms |
+| 10,000 long entries, repeated time, PTY | 51.46 → 47.61 ms | 40.41 → 38.59 ms |
+| 256 folder artwork tiles, PTY | 61.83 → 58.51 ms | 35.47 → 32.83 ms |
+| 256 mixed artwork tiles, PTY | 61.44 → 60.13 ms | 35.45 → 33.76 ms |
+| 256 raster thumbnails, PTY | 98.82 → 98.71 ms | 70.34 → 70.89 ms |
+
+Reusing one metadata scratch string and borrowing cached account names remove
+per-field temporary allocations. Text labels stream their icon, escaped name and
+type marker inside the existing color/link framing; column planning measures
+components without assembling a label. These cases use about **4–7% less CPU**.
+Long-listing peak RSS is only about 0.03–0.08 MiB lower: the gain is reduced
+allocation churn, not a substantial retained-memory reduction.
+
+Artwork calculates polygon edge crossings once per row instead of per pixel,
+using at most six stack floats. The folder/mixed cases use **7.5% / 4.8% less CPU**.
+Scalar-reference tests compare every source pixel, including clipped, reversed,
+degenerate and self-intersecting polygons. No cache or worker was added.
+
+Plain names and distinct-timestamp listings are essentially unchanged. In the
+listing harness plain CPU varies from 8.75 → 9.06 ms; the separate image/control
+harness gives 8.01 → 7.91 ms. Distinct timestamps still spend most CPU converting
+local time: 560.09 → 552.45 ms in pipes and 544.19 → 544.92 ms in PTYs. No general
+speedup is claimed for either path.
+
+Four original images take 84.67 → 83.53 ms with cache off, 80.28 → 81.08 ms with
+an empty cache, and 6.18 → 6.25 ms with a warm cache. Source decoding, gallery and
+long-miniature cost, graphics bytes and peak image memory are essentially
+unchanged. Cache setup is outside timing. The stripped binary is effectively the
+same size (2,289,040 → 2,288,992 bytes). These are application/PTY measurements,
+not Ghostty rendering or terminal image-memory measurements.
+
+```sh
+python3 benchmarks/performance.py --before target/lsa-before-efficiency-031 --same-options --runs=7
+python3 benchmarks/artwork.py --before target/lsa-before-efficiency-031 --runs=7
+python3 benchmarks/inline.py --before target/lsa-before-efficiency-031 --equal-output --runs=7
+```
+
+The PTY check helper also received a separate correctness fix: it now observes
+child exit before testing readability, preventing stale readiness from discarding
+a final queued write on macOS. The old helper lost one of 2,000 normal captures
+with an unchanged v0.3.0 binary, and all ten deliberately delayed trials. The fix
+passed 2,000 normal and ten delayed trials; a gated regression runs in CI. The
+benchmark reader already observed exit before readiness and did not need this fix.
+
 ## Listing efficiency and long defaults — 2026-09-10
 
 [Equal-output report](performance.json) and [image/cache controls](performance-images.json).

@@ -121,28 +121,30 @@ impl Canvas {
             }
         }
     }
-    fn polygon(&mut self, points: &[(i32, i32)], color: [u8; 4]) {
-        // Pixels outside the vertices' bounds cannot be inside the polygon.
-        // Restrict raster work instead of scanning all 8,000 canvas pixels.
-        let x1 = points.iter().map(|p| p.0).min().unwrap_or(0).max(0);
-        let x2 = points.iter().map(|p| p.0).max().unwrap_or(0).min(100);
+    fn polygon<const N: usize>(&mut self, points: &[(i32, i32); N], color: [u8; 4]) {
         let y1 = points.iter().map(|p| p.1).min().unwrap_or(0).max(0);
         let y2 = points.iter().map(|p| p.1).max().unwrap_or(0).min(80);
+        // Edge crossings depend only on the scanline. Compute them once, then
+        // fill alternating spans using the same pixel-center inclusion rule.
+        // All built-in shapes have at most six vertices; scratch stays on stack.
+        let mut crossings = [0.0_f32; N];
         for y in y1..y2 {
-            for x in x1..x2 {
-                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                let mut inside = false;
-                for i in 0..points.len() {
-                    let (ax, ay) = points[i];
-                    let (bx, by) = points[(i + 1) % points.len()];
-                    let (ax, ay, bx, by) = (ax as f32, ay as f32, bx as f32, by as f32);
-                    if (ay > py) != (by > py) && px < (bx - ax) * (py - ay) / (by - ay) + ax {
-                        inside = !inside;
-                    }
+            let py = y as f32 + 0.5;
+            let mut count = 0;
+            for i in 0..N {
+                let (ax, ay) = points[i];
+                let (bx, by) = points[(i + 1) % N];
+                let (ax, ay, bx, by) = (ax as f32, ay as f32, bx as f32, by as f32);
+                if (ay > py) != (by > py) {
+                    crossings[count] = (bx - ax) * (py - ay) / (by - ay) + ax;
+                    count += 1;
                 }
-                if inside {
-                    self.0.put_pixel(x as u32, y as u32, Rgba(color));
-                }
+            }
+            crossings[..count].sort_unstable_by(f32::total_cmp);
+            for pair in crossings[..count].as_chunks::<2>().0 {
+                let x1 = (pair[0] - 0.5).ceil().clamp(0.0, 100.0) as i32;
+                let x2 = (pair[1] - 0.5).ceil().clamp(0.0, 100.0) as i32;
+                self.rect(x1, y, x2, y + 1, color);
             }
         }
     }
@@ -171,6 +173,74 @@ impl Canvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_polygon_matches_reference<const N: usize>(points: [(i32, i32); N]) {
+        let color = [17, 81, 213, 255];
+        let mut actual = Canvas(RgbaImage::new(100, 80));
+        actual.polygon(&points, color);
+        let expected = RgbaImage::from_fn(100, 80, |x, y| {
+            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+            let mut inside = false;
+            for i in 0..N {
+                let (ax, ay) = points[i];
+                let (bx, by) = points[(i + 1) % N];
+                let (ax, ay, bx, by) = (ax as f32, ay as f32, bx as f32, by as f32);
+                if (ay > py) != (by > py) && px < (bx - ax) * (py - ay) / (by - ay) + ax {
+                    inside = !inside;
+                }
+            }
+            Rgba(if inside { color } else { [0; 4] })
+        });
+        assert_eq!(actual.0, expected, "polygon {points:?}");
+    }
+
+    #[test]
+    fn scanline_spans_preserve_every_source_pixel() {
+        // Identical source canvases preserve every downstream thumbnail size.
+        assert_polygon_matches_reference([
+            (6, 17),
+            (37, 17),
+            (46, 26),
+            (94, 26),
+            (94, 69),
+            (6, 69),
+        ]);
+        assert_polygon_matches_reference([(24, 5), (61, 5), (78, 22), (78, 75), (24, 75)]);
+        assert_polygon_matches_reference([(61, 5), (61, 22), (78, 22)]);
+        assert_polygon_matches_reference([(31, 61), (42, 43), (53, 56), (61, 48), (71, 61)]);
+        assert_polygon_matches_reference([(42, 32), (42, 61), (65, 47)]);
+        // Pixel-center diagonal crossings, concavity, reversed winding, clipping,
+        // repeated vertices, self-intersections and zero-area shapes.
+        for points in [
+            [(0, 0), (80, 80), (0, 80), (80, 0)],
+            [(-20, -20), (120, -20), (120, 100), (-20, 100)],
+            [(20, 10), (50, 70), (50, 70), (80, 10)],
+            [(5, 10), (30, 10), (60, 10), (90, 10)],
+            [(10, 10); 4],
+            [(0, 0), (100, 80), (50, 40), (0, 80)],
+        ] {
+            assert_polygon_matches_reference(points);
+            let mut reverse = points;
+            reverse.reverse();
+            assert_polygon_matches_reference(reverse);
+        }
+        // Exercise varying edge slopes and multiple spans without random inputs
+        // or a new test dependency. Coordinates also extend beyond the canvas.
+        let mut state = 17_u32;
+        for _ in 0..128 {
+            let points = std::array::from_fn::<_, 6, _>(|_| {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let x = (state % 141) as i32 - 20;
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (x, (state % 121) as i32 - 20)
+            });
+            assert_polygon_matches_reference(points);
+        }
+        assert_polygon_matches_reference([]);
+        assert_polygon_matches_reference([(20, 30)]);
+        assert_polygon_matches_reference([(10, 10), (80, 70)]);
+    }
+
     #[test]
     fn every_representation_is_visible_at_grid_and_inline_sizes() {
         let icons = [
