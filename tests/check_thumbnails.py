@@ -5,8 +5,8 @@ import shutil
 import subprocess
 import tempfile
 import re
-from check_pty import APC, CSI, ROOT, BIN, capture, images, check_cursor
-from check_layout import SGR, OSC
+from check_pty import APC, CSI, OSC, ROOT, BIN, capture, images, check_cursor
+from check_layout import SGR
 
 
 def run(args, **kwargs):
@@ -69,7 +69,7 @@ def main():
         assert payloads[0]!=payloads[1]!=payloads[5]
         assert payloads[5]!=payloads[6]  # unknown versus unsupported image type
         assert b'[dir]' not in data and b'[no preview]' not in data
-        text=SGR.sub(b'',APC.sub(b'',CSI.sub(b'',data))).decode()
+        text=OSC.sub(b'',SGR.sub(b'',APC.sub(b'',CSI.sub(b'',data)))).decode()
         assert all(not 0xe000<=ord(c)<=0xf8ff for c in text), 'grid label has duplicate font icon'
         for name in [p.name for p in mixed.iterdir()]: assert len(re.findall(r'(?<!\S)'+re.escape(name)+r'(?!\S)',text))==1
         cases+=1

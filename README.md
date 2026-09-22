@@ -34,8 +34,10 @@ To try it as `ls` in the current shell, from this checkout:
 alias ls="$PWD/target/release/lsa"
 ```
 
-Version 0.3.1 reduces temporary formatting allocations and artwork rasterization
-work while preserving output bytes. Version 0.3.0 introduced long details on
+Version 0.4.0 makes filenames clickable by default on local terminals. Pipes,
+redirected files, dumb terminals and detected SSH sessions keep links off in auto
+mode. `--hyperlink=always` forces links; `--hyperlink=never` disables them.
+Version 0.3.0 introduced long details on
 terminals while preserving automatic image grids and plain piped names.
 `-C` selects compact text; `--12-hour` adds AM/PM
 times. Listing improvements reduce metadata memory and repeated formatting work.
@@ -68,7 +70,16 @@ Ghostty 1.3.1. See [compatibility](docs/compatibility.md) and [installation](doc
   themselves. A directory-symlink operand lists its contents, except with `-l` or
   `-d`; links inside a listing retain link identity. `-F` adds type markers.
 - Multiple operands keep argument order; consecutive file operands share a layout.
-  `--hyperlink` makes names clickable with OSC 8. Use `--` before dash-prefixed paths.
+  Names are clickable with OSC 8 on local terminals by default. Use
+  `--hyperlink=auto|always|never` to control links; bare `--hyperlink` means always,
+  and `--no-hyperlink` means never. The last hyperlink option wins.
+  Auto requires terminal stdout and a nonempty `TERM` other than `dumb`, and stays
+  off when `SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` is present. `NO_COLOR`
+  affects color only. Every file URI includes the local hostname, without DNS
+  lookups or resolving symlinks; unavailable hostname/current-directory lookup
+  leaves names as text. Forced remote links require terminal support for remote
+  file URIs; click handling in SSH/multiplexers is unverified.
+  Use `--` before dash-prefixed paths.
 - Pipes default to complete plain names, one per line, with metadata only when
   requested. Explicit color/icons/hyperlink flags can decorate redirected text.
   Previews never go to a pipe. Text stays escaped for safe terminal display,

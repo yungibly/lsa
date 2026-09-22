@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BIN = Path(os.environ.get("LSA_TEST_BINARY", ROOT / "target/release/lsa"))
 APC = re.compile(rb"\x1b_G([^;]*);([^\x1b]*)\x1b\\")
 CSI = re.compile(rb"\x1b\[[0-9]*[ABG]")
+OSC = re.compile(rb"\x1b\]8;;[^\x1b]*\x1b\\")
 
 
 def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, prefix=(), decorated=False, tty_input=False):
@@ -27,15 +28,19 @@ def capture(args, *, cols=80, rows=24, pixels=(640, 384), environment=None, pref
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, *pixels))
     before = termios.tcgetattr(slave)
     env = os.environ.copy()
-    for name in ["TMUX", "STY", "ZELLIJ", "LS_COLORS", "NO_COLOR"]:
+    for name in ["TMUX", "STY", "ZELLIJ", "LS_COLORS", "NO_COLOR", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]:
         env.pop(name, None)
     env.update(TERM="xterm-ghostty", TERM_PROGRAM="ghostty")
-    env.update(environment or {})
+    for name, value in (environment or {}).items():
+        if value is None:
+            env.pop(name, None)
+        else:
+            env[name] = value
     start = time.perf_counter()
     def foreground():
         os.setsid()
         fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
-    flags = [] if decorated else ["--color=never", "--icons=never", "-F"]
+    flags = [] if decorated else ["--color=never", "--icons=never", "--hyperlink=never", "-F"]
     child = subprocess.Popen([*prefix, str(BIN), *flags, *map(str, args)], cwd=ROOT, env=env,
                              stdin=slave if tty_input else subprocess.DEVNULL,
                              stdout=slave, stderr=subprocess.PIPE,
@@ -150,6 +155,7 @@ def check_cursor(data, cols, rows, start_row):
     while offset < len(data):
         apc = APC.match(data, offset)
         csi = CSI.match(data, offset)
+        osc = OSC.match(data, offset)
         if apc:
             control = dict(part.split(b"=", 1) for part in apc[1].split(b","))
             if b"a" in control:
@@ -157,6 +163,8 @@ def check_cursor(data, cols, rows, start_row):
                 assert col + int(control[b"c"]) < cols, (col, control)
                 placements += 1
             offset = apc.end()
+        elif osc:
+            offset = osc.end()  # Hyperlink framing occupies no terminal cells.
         elif csi:
             n, op = int(csi[0][2:-1]), csi[0][-1:]
             if op == b"A":

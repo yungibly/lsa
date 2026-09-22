@@ -63,7 +63,7 @@ pub struct Options {
     pub no_images: bool,
     pub color: When,
     pub icons: When,
-    pub hyperlink: bool,
+    pub hyperlink: When,
     pub protocol: Protocol,
     pub preview_limit: usize,
     pub thumbnail_size: Option<usize>,
@@ -115,7 +115,10 @@ Appearance:
                          Auto: Nerd icons in Ghostty, portable symbols elsewhere
                          Always: Nerd icons (requires font support)
   --no-icons            Disable icons
-  --hyperlink           Make names clickable using OSC 8 links
+  --hyperlink=auto|always|never
+                         Auto: clickable names on local terminals (OSC 8)
+  --hyperlink           Force links, including in pipes and SSH sessions
+  --no-hyperlink        Disable links
 
 Images:
   --grid                Compact thumbnails and folder/file artwork for every tile
@@ -241,7 +244,8 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--color" | "--colour" => opts.color = When::Always,
             "--icons" => opts.icons = When::Always,
             "--no-icons" => opts.icons = When::Never,
-            "--hyperlink" => opts.hyperlink = true,
+            "--hyperlink" => opts.hyperlink = When::Always,
+            "--no-hyperlink" => opts.hyperlink = When::Never,
             "--diagnose" => opts.diagnose = true,
             "--no-cache" => opts.no_cache = true,
             "--clear-cache" => opts.clear_cache = true,
@@ -267,6 +271,9 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                 opts.color = When::parse(s.split_once('=').unwrap().1, "color")?;
             }
             _ if s.starts_with("--icons=") => opts.icons = When::parse(&s[8..], "icons")?,
+            _ if s.starts_with("--hyperlink=") => {
+                opts.hyperlink = When::parse(&s[12..], "hyperlink")?;
+            }
             _ if s.starts_with("--sort=") => {
                 opts.sort = match &s[7..] {
                     "name" => Sort::Name,

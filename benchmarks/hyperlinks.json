@@ -1,0 +1,256 @@
+{
+  "date": "2026-09-22T13:58:30.321614+00:00",
+  "os": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "rust": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "timezone": "(host local timezone)",
+  "conditions": "Two warmups then 21 paired/interleaved fresh release processes; alternating order per pair. OS caches warm, not flushed. stdout is a drained pipe without renderer; stdin /dev/null. wait4 child CPU/RSS. Preparation and output parsing excluded from timing. No concurrent builds/tests. 10,000 files per fixture, repeated timestamp; one quarter have spaces, #, %, and non-ASCII names. Styled long cases force color/icons and disable images. Forced-link versions differ in URI hostname bytes; every case asserts identical complete output after removing OSC 8 framing. Plain before/after output must also match byte-for-byte.",
+  "binaries": {
+    "before": {
+      "version": "lsa 0.3.1",
+      "bytes": 2288992,
+      "sha256": "408386362131b208d3d91d59f8c151f442cd6f2369bcd7b5f88b42976e11bfe0"
+    },
+    "after": {
+      "version": "lsa 0.4.0",
+      "bytes": 2289104,
+      "sha256": "7397267ab43b50b0ae4a4349440a80edf72b9cc1b9257007b9c42484ecfab663"
+    }
+  },
+  "fixtures": {
+    "short": {
+      "path": "target/hyperlink-benchmark/short-10000",
+      "absolute_directory_bytes": 59,
+      "entries": 10000
+    },
+    "deep": {
+      "path": "target/hyperlink-benchmark/deep-10000/project-00-nested-workspace-nested-workspace-nested-workspace-/project-01-nested-workspace-nested-workspace-nested-workspace-/project-02-nested-workspace-nested-workspace-nested-workspace-/project-03-nested-workspace-nested-workspace-nested-workspace-/project-04-nested-workspace-nested-workspace-nested-workspace-/project-05-nested-workspace-nested-workspace-nested-workspace-",
+      "absolute_directory_bytes": 436,
+      "entries": 10000
+    }
+  },
+  "cases": {
+    "plain_short_pipe": {
+      "equal_output": true,
+      "equal_visible_output": true,
+      "visible_output_sha256": "b0dc9ef1bd42b5bb29b5f9ad93d766df3c57c970c5e9b8bc88c0b8337dd02614",
+      "before": {
+        "flags": [],
+        "links": 0,
+        "runs": 21,
+        "median_elapsed_ms": 8.996,
+        "median_cpu_ms": 7.932,
+        "median_rss_bytes": 4243456,
+        "output_bytes": 212500,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "b0dc9ef1bd42b5bb29b5f9ad93d766df3c57c970c5e9b8bc88c0b8337dd02614"
+      },
+      "after": {
+        "flags": [],
+        "links": 0,
+        "runs": 21,
+        "median_elapsed_ms": 8.956,
+        "median_cpu_ms": 7.924,
+        "median_rss_bytes": 4259840,
+        "output_bytes": 212500,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "b0dc9ef1bd42b5bb29b5f9ad93d766df3c57c970c5e9b8bc88c0b8337dd02614"
+      }
+    },
+    "forced_links_short_pipe": {
+      "equal_output": false,
+      "equal_visible_output": true,
+      "visible_output_sha256": "b0f17e131eabcd7003c234d3df167284ebc4a6390e2adc1816a25c9dca6517d1",
+      "before": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink"
+        ],
+        "links": 10000,
+        "runs": 21,
+        "median_elapsed_ms": 32.245,
+        "median_cpu_ms": 30.279,
+        "median_rss_bytes": 5505024,
+        "output_bytes": 2850000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "dd1a3452a735c0557b1be4c994986d3f6950fc6d4d9791db060e68f28f19b769"
+      },
+      "after": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink=always"
+        ],
+        "links": 10000,
+        "runs": 21,
+        "median_elapsed_ms": 30.017,
+        "median_cpu_ms": 27.955,
+        "median_rss_bytes": 5373952,
+        "output_bytes": 3050000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d32a64d7224f760f36d615b26bad9ed3b98f66a2f3840f7a72bcaa6a6f9c5835"
+      }
+    },
+    "link_overhead_short_pipe": {
+      "equal_output": false,
+      "equal_visible_output": true,
+      "visible_output_sha256": "b0f17e131eabcd7003c234d3df167284ebc4a6390e2adc1816a25c9dca6517d1",
+      "off": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink=never"
+        ],
+        "links": 0,
+        "runs": 21,
+        "median_elapsed_ms": 27.083,
+        "median_cpu_ms": 25.09,
+        "median_rss_bytes": 5373952,
+        "output_bytes": 1792500,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "b0f17e131eabcd7003c234d3df167284ebc4a6390e2adc1816a25c9dca6517d1"
+      },
+      "on": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink=always"
+        ],
+        "links": 10000,
+        "runs": 21,
+        "median_elapsed_ms": 28.095,
+        "median_cpu_ms": 26.036,
+        "median_rss_bytes": 5357568,
+        "output_bytes": 3050000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d32a64d7224f760f36d615b26bad9ed3b98f66a2f3840f7a72bcaa6a6f9c5835"
+      }
+    },
+    "plain_deep_pipe": {
+      "equal_output": true,
+      "equal_visible_output": true,
+      "visible_output_sha256": "b0dc9ef1bd42b5bb29b5f9ad93d766df3c57c970c5e9b8bc88c0b8337dd02614",
+      "before": {
+        "flags": [],
+        "links": 0,
+        "runs": 21,
+        "median_elapsed_ms": 10.714,
+        "median_cpu_ms": 9.284,
+        "median_rss_bytes": 12124160,
+        "output_bytes": 212500,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "b0dc9ef1bd42b5bb29b5f9ad93d766df3c57c970c5e9b8bc88c0b8337dd02614"
+      },
+      "after": {
+        "flags": [],
+        "links": 0,
+        "runs": 21,
+        "median_elapsed_ms": 10.561,
+        "median_cpu_ms": 9.286,
+        "median_rss_bytes": 12140544,
+        "output_bytes": 212500,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "b0dc9ef1bd42b5bb29b5f9ad93d766df3c57c970c5e9b8bc88c0b8337dd02614"
+      }
+    },
+    "forced_links_deep_pipe": {
+      "equal_output": false,
+      "equal_visible_output": true,
+      "visible_output_sha256": "b0f17e131eabcd7003c234d3df167284ebc4a6390e2adc1816a25c9dca6517d1",
+      "before": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink"
+        ],
+        "links": 10000,
+        "runs": 21,
+        "median_elapsed_ms": 45.852,
+        "median_cpu_ms": 43.208,
+        "median_rss_bytes": 13434880,
+        "output_bytes": 6620000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "16ffd4e17be0a068e9a2a39bea57bd54348374cc12e056722e2506650c10e159"
+      },
+      "after": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink=always"
+        ],
+        "links": 10000,
+        "runs": 21,
+        "median_elapsed_ms": 42.031,
+        "median_cpu_ms": 39.471,
+        "median_rss_bytes": 13271040,
+        "output_bytes": 6820000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "f8040153dd9113c85b593e3c847185aad18c917cd3009dfd7582b9b0911748f2"
+      }
+    },
+    "link_overhead_deep_pipe": {
+      "equal_output": false,
+      "equal_visible_output": true,
+      "visible_output_sha256": "b0f17e131eabcd7003c234d3df167284ebc4a6390e2adc1816a25c9dca6517d1",
+      "off": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink=never"
+        ],
+        "links": 0,
+        "runs": 21,
+        "median_elapsed_ms": 36.384,
+        "median_cpu_ms": 34.068,
+        "median_rss_bytes": 13271040,
+        "output_bytes": 1792500,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "b0f17e131eabcd7003c234d3df167284ebc4a6390e2adc1816a25c9dca6517d1"
+      },
+      "on": {
+        "flags": [
+          "-l",
+          "--color=always",
+          "--icons=always",
+          "--no-images",
+          "--hyperlink=always"
+        ],
+        "links": 10000,
+        "runs": 21,
+        "median_elapsed_ms": 40.997,
+        "median_cpu_ms": 38.327,
+        "median_rss_bytes": 13271040,
+        "output_bytes": 6820000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "f8040153dd9113c85b593e3c847185aad18c917cd3009dfd7582b9b0911748f2"
+      }
+    }
+  }
+}

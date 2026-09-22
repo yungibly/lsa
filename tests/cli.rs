@@ -81,6 +81,15 @@ fn invalid_utf8_operand_and_entry() {
         .unwrap();
     assert!(out.status.success());
     assert_eq!(out.stdout, b"invalid\\xff\n");
+    let linked = Command::new(env!("CARGO_BIN_EXE_lsa"))
+        .current_dir(&f.0)
+        .arg("--hyperlink=always")
+        .arg(name)
+        .output()
+        .unwrap();
+    assert!(linked.status.success() && linked.stderr.is_empty());
+    let linked = String::from_utf8(linked.stdout).unwrap();
+    assert!(linked.contains("/invalid%FF\x1b\\invalid\\xff\x1b]8;;\x1b\\\n"));
 }
 
 #[test]
@@ -270,6 +279,85 @@ fn defaults_are_plain_and_natural_and_classification_is_explicit() {
     let out = run(&["--color=always", "--icons=always"]);
     assert!(out.status.success());
     assert!(out.stdout.windows(5).any(|w| w == b"\x1b[32m"));
+}
+
+#[test]
+fn hyperlinks_keep_pipes_and_redirected_files_plain_unless_forced() {
+    let f = Fixture::new();
+    f.touch("entry.txt", b"");
+    for (flags, enabled) in [
+        (vec![], false),
+        (vec!["--hyperlink=auto"], false),
+        (vec!["--hyperlink"], true),
+        (vec!["--hyperlink=always"], true),
+        (vec!["--hyperlink", "--hyperlink=auto"], false),
+        (vec!["--hyperlink", "--hyperlink=never"], false),
+        (vec!["--hyperlink", "--no-hyperlink"], false),
+        (vec!["--no-hyperlink", "--hyperlink"], true),
+        (vec!["--hyperlink=auto", "--hyperlink=always"], true),
+    ] {
+        // Each invocation has a real terminal-like environment while stdout is
+        // a pipe or file: stdout, not environment alone, controls automatic links.
+        let command = || {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_lsa"));
+            command
+                .current_dir(&f.0)
+                .env("TERM", "xterm-ghostty")
+                .env("TERM_PROGRAM", "ghostty")
+                .env_remove("SSH_CONNECTION")
+                .env_remove("SSH_CLIENT")
+                .env_remove("SSH_TTY")
+                .args(&flags)
+                .arg("entry.txt");
+            command
+        };
+        let piped = command().output().unwrap();
+        assert!(piped.status.success() && piped.stderr.is_empty());
+        let redirected_path = f.0.join("redirected");
+        let redirected = command()
+            .stdout(fs::File::create(&redirected_path).unwrap())
+            .output()
+            .unwrap();
+        assert!(redirected.status.success() && redirected.stderr.is_empty());
+        assert_eq!(piped.stdout, fs::read(redirected_path).unwrap());
+        if enabled {
+            assert!(piped.stdout.starts_with(b"\x1b]8;;file://"));
+            assert!(piped.stdout.ends_with(b"\x1b\\entry.txt\x1b]8;;\x1b\\\n"));
+        } else {
+            assert_eq!(piped.stdout, b"entry.txt\n", "flags: {flags:?}");
+        }
+    }
+    let invalid = f.run(&["--hyperlink=sometimes"]);
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(invalid.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("auto, always, or never"));
+}
+
+#[test]
+fn forced_hyperlinks_encode_unsafe_paths_and_preserve_symlink_identity() {
+    let f = Fixture::new();
+    let name = "a % # ?\x1b]8;;bad\n桃";
+    f.touch(name, b"");
+    symlink(name, f.0.join("link")).unwrap();
+    let out = f.run(&["--hyperlink=always", name, "link"]);
+    assert!(out.status.success() && out.stderr.is_empty());
+    let out = String::from_utf8(out.stdout).unwrap();
+    let (authority, _) = out
+        .strip_prefix("\x1b]8;;file://")
+        .unwrap()
+        .split_once('/')
+        .unwrap();
+    assert!(!authority.is_empty());
+    assert!(
+        authority
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~%".contains(&byte))
+    );
+    assert!(out.contains("/a%20%25%20%23%20%3F%1B%5D8%3B%3Bbad%0A%E6%A1%83\x1b\\"));
+    assert!(out.contains("a % # ?\\u{1b}]8;;bad\\n桃\x1b]8;;\x1b\\\n"));
+    assert!(out.ends_with("/link\x1b\\link@\x1b]8;;\x1b\\\n"));
+    assert_eq!(out.matches("\x1b]8;;file://").count(), 2);
+    assert_eq!(out.matches("\x1b]8;;\x1b\\").count(), 2);
 }
 
 #[test]

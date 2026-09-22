@@ -1,5 +1,43 @@
 # Session handoff
 
+## 2026-09-22 — automatic hyperlinks and v0.4.0
+
+The user requested automatic clickable filenames, commit/tag/push and watching CI
+until green. All work/access stays in this repository; no computer use, shell
+changes or original-image edits. Recheck Git state. v0.4.0 is prepared locally;
+hosted CI/publication remain pending.
+
+Auto links require stdout TTY, a nonempty/non-dumb TERM, and no SSH_CONNECTION,
+SSH_CLIENT or SSH_TTY. `--hyperlink=auto|always|never` and `--no-hyperlink` follow
+argument order; bare `--hyperlink` retains force behavior. Pipes/files stay plain
+by default, and NO_COLOR affects only color. Hostname-qualified file URIs encode
+raw bytes, preserve symlink identity and avoid DNS/canonicalization/extra stats.
+Hostname and encoded cwd prefixes are cached per invocation; per-label path/URL
+allocations are removed. Hostname/current-directory lookup failures fall back to
+text. Cache, image budgets and image output are unchanged.
+
+Local checks pass 51 unit, 15 macOS CLI, two artwork-example and three release
+tests, 234 PTY scenarios, formatting, strict clippy, release build and extracted
+host-package checks. Unix-socket CLI fixtures used normal sandbox escalation.
+New tests cover redirects, force/disable/order, SSH/TERM/NO_COLOR, unsafe raw names,
+symlinks and full URIs on each wrapped label fragment. PTY parsers treat OSC 8 as
+zero width; undecorated graphics fixtures explicitly disable links.
+
+Baseline: target/lsa-before-hyperlinks, v0.3.1 SHA beginning 408386362131b208.
+Final binary SHA begins 7397267ab43b50b0. benchmarks/hyperlinks.py and
+benchmarks/hyperlinks.json record 21 paired runs after two warmups. Plain output
+and CPU are unchanged; streaming forced links uses about 8% less CPU than v0.3.1.
+Enabling links adds about 0.95–4.26 ms CPU per 10,000 short/deep-path entries, and
+adds 1.26–5.03 MB of output. No terminal renderer or scrollback memory was measured.
+
+Release notes: docs/releases/v0.4.0.md. Current remote was verified as public
+yungibly/lsa with ADMIN access; origin/main matched starting commit 798a999.
+After push, watch both CI and Release through all native/MSRV/Homebrew/tap jobs,
+apply the reviewed release notes, and verify public archive/formula. Record the
+final URLs/results here and in ROADMAP.md. Real Ghostty click/scrollback behavior
+remains for the user, with terminal/version and transport recorded; the previous
+default-details/AM-PM appearance pass is also still pending.
+
 ## 2026-09-12 — formatting/artwork efficiency and v0.3.1
 
 The user requested another performance/resource hunt and authorized commit, tag,

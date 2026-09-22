@@ -1,9 +1,38 @@
 # Roadmap
 
-Updated 2026-09-12. Print into scrollback, return to the shell, keep one mixed
+Updated 2026-09-22. Print into scrollback, return to the shell, keep one mixed
 ordering and complete names. No pager or file browser.
 
-## Current change — formatting and artwork efficiency
+## Current change — automatic clickable filenames
+
+Hyperlinks default to auto: terminal stdout with a nonempty, non-dumb `TERM`,
+outside detected SSH sessions. Pipes and redirected files remain plain unless
+links are forced. `--hyperlink=auto|always|never`, bare `--hyperlink` (always), and
+`--no-hyperlink` (never) follow argument order. `NO_COLOR` affects color only.
+
+File URIs include the local hostname. Hostname and encoded working-directory
+prefixes are built once; raw path bytes stream with percent encoding and no
+per-entry URL allocation, extra stat, canonicalization or DNS lookup. Names and
+symlink identity remain complete; hostname/current-directory lookup failures fall
+back to ordinary text. Auto stays off for `SSH_CONNECTION`, `SSH_CLIENT` or
+`SSH_TTY`; forced remote links depend on terminal handling of hostname-qualified
+file URIs. Cache, images and ordering are unchanged.
+
+Local validation passes 51 unit tests, 15 macOS CLI tests, two artwork-example
+tests, three release-tooling tests and 234 headless terminal scenarios, plus
+formatting, strict clippy, release build and extracted-package checks. Paired
+21-run application measurements preserve plain pipe bytes/cost; enabling links
+adds about 0.95–4.26 ms CPU per 10,000 entries for the sampled short/deep paths.
+Streaming uses about 8% less CPU than the old forced-link implementation.
+See [measurements](benchmarks/README.md); terminal rendering was not measured.
+Release v0.4.0 awaits hosted CI/publication. Real Ghostty click behavior and
+remote/multiplexer handling are not newly verified.
+
+**Next:** push v0.4.0 and watch CI/publication; then user Ghostty click/scrollback
+verification. Keep cache
+opt-in and WebM deferred.
+
+## Previous change — formatting and artwork efficiency
 
 Metadata alignment and output reuse one scratch string; account names are
 borrowed from the existing bounded caches. Text icons, names and type markers

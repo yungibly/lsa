@@ -3,12 +3,14 @@
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import tempfile
-from check_pty import APC, CSI, BIN, ROOT, capture, check_cursor, images
+from urllib.parse import quote_from_bytes
+from check_pty import APC, CSI, OSC, BIN, ROOT, capture, check_cursor, images
 
 SGR = re.compile(rb"\x1b\[[0-9;]*m")
-OSC = re.compile(rb"\x1b\]8;;[^\x1b]*\x1b\\")
+LINK = re.compile(rb"\x1b\]8;;(file://[^\x1b]*)\x1b\\([^\x1b]*)\x1b\]8;;\x1b\\")
 
 
 def plain(data):
@@ -26,10 +28,76 @@ def run(args, *, notice=False, **kwargs):
     return data
 
 
+def file_uri(path):
+    host = quote_from_bytes(os.fsencode(socket.gethostname()), safe="-._~")
+    return ("file://" + host + quote_from_bytes(os.fsencode(path.absolute()), safe="/-._~")).encode()
+
+
+def check_hyperlinks(root):
+    """Exercise terminal defaults separately from undecorated graphics fixtures."""
+    cases = 0
+    folder = root / "hyperlinks"
+    folder.mkdir()
+    entry = folder / "entry.txt"
+    entry.touch()
+    flags = ["-1", "--no-images", "--color=never", "--icons=never"]
+    for options, enabled in [
+        ([], True), (["--hyperlink=auto"], True),
+        (["--hyperlink=never"], False), (["--no-hyperlink"], False),
+        (["--no-hyperlink", "--hyperlink"], True),
+        (["--hyperlink", "--no-hyperlink"], False),
+        (["--hyperlink=never", "--hyperlink=auto"], True),
+        (["--hyperlink=always", "--hyperlink=never"], False),
+    ]:
+        data = run([*flags, *options, folder], decorated=True)
+        assert plain(data) == b"entry.txt\n"
+        assert LINK.findall(data) == ([(file_uri(entry), b"entry.txt")] if enabled else [])
+        assert not OSC.sub(b"", data).count(b"\x1b")
+        assert check_cursor(data, 80, 24, 23) == 0
+        cases += 1
+    environments = [{"TERM": "dumb"}, {"TERM": None}, {"TERM": ""}]
+    environments += [{name: value} for name in ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] for value in ["remote", ""]]
+    for environment in environments:
+        for options, enabled in [([], False), (["--hyperlink=auto"], False), (["--hyperlink=always"], True)]:
+            data = run([*flags, *options, folder], decorated=True, environment=environment)
+            assert plain(data) == b"entry.txt\n"
+            assert LINK.findall(data) == ([(file_uri(entry), b"entry.txt")] if enabled else [])
+            assert b"\x1b" not in OSC.sub(b"", data)
+            cases += 1
+    # NO_COLOR controls SGR only; automatic links remain usable with no color.
+    subdirectory = folder / "subdirectory"
+    subdirectory.mkdir()
+    data = run(["-1", "--no-images", "--icons=never", folder], decorated=True, environment={"NO_COLOR": "1"})
+    assert not SGR.search(data)
+    assert LINK.findall(data) == [(file_uri(entry), b"entry.txt"), (file_uri(subdirectory), b"subdirectory")]
+    cases += 1
+    # The URI names the symlink itself; following it here would change its identity.
+    link = folder / "entry-link"
+    link.symlink_to(entry)
+    data = run([*flags, link], decorated=True)
+    assert LINK.findall(data) == [(file_uri(link), os.fsencode(link))]
+    cases += 1
+    # Each wrapped grid fragment retains the full original filename as its target.
+    name = "long name % # ? that wraps across several lines.txt"
+    wrapped = root / "wrapped hyperlinks"
+    wrapped.mkdir()
+    path = wrapped / name
+    path.touch()
+    data = run(["--grid", "--color=never", "--icons=never", wrapped], decorated=True, cols=12, rows=8)
+    links = LINK.findall(data)
+    assert len(links) > 1 and {uri for uri, _ in links} == {file_uri(path)}
+    assert b"".join(label for _, label in links) == name.encode()
+    assert data.count(b"\x1b]8;;\x1b\\") == len(links)
+    assert check_cursor(data, 12, 8, 7) == len(images(data)) == 1
+    cases += 1
+    return cases
+
+
 def main():
     cases = 0
     with tempfile.TemporaryDirectory(dir=ROOT / "target", prefix="layouts-") as temp:
         root = Path(temp)
+        cases += check_hyperlinks(root)
         text = root / "text"
         text.mkdir()
         for name in ["a", "bb", "ccc", "d", "ee"]:
@@ -159,16 +227,17 @@ def main():
         data = run(["--no-images", styled], decorated=True, environment={"TERM": "dumb"})
         assert b"\x1b" not in data and "\uf07b".encode() not in data
         cases += 1
-        data = run(["--no-images", "--icons=never", "--color=never", styled], decorated=True)
+        data = run(["--no-images", "--icons=never", "--color=never", "--hyperlink=never", styled], decorated=True)
         assert b"\x1b" not in data and b"folder/" not in data
         cases += 1
         data = run(["--no-images", "--icons=never", "-1", styled], decorated=True, environment={"LS_COLORS": "di=31:*.rs=38;5;123:ln=\x1b]bad"})
-        assert b"\x1b[31mfolder\x1b[0m" in data
-        assert b"\x1b[38;5;123mcode.rs\x1b[0m" in data
+        assert b"\x1b[31mfolder\x1b[0m" in OSC.sub(b"", data)
+        assert b"\x1b[38;5;123mcode.rs\x1b[0m" in OSC.sub(b"", data)
         assert b"\x1b]bad" not in data
         cases += 1
         data = run(["--hyperlink", "--no-images", "--icons=never", styled], decorated=True)
-        assert b"\x1b]8;;file:///" in data and b"\x1b]8;;\x1b\\" in data
+        assert b"\x1b]8;;" + file_uri(styled / "notes.txt") + b"\x1b\\" in data
+        assert b"\x1b]8;;\x1b\\" in data
         cases += 1
         data = run(["--no-images", "--header", styled], decorated=True)
         assert b"Permissions" in data and b"Owner" in data and b"Name" in data

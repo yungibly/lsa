@@ -1,5 +1,45 @@
 # Application measurements
 
+## Automatic hyperlinks — 2026-09-22
+
+[Report](hyperlinks.json), [harness](hyperlinks.py). Before: v0.3.1 at `798a999`,
+saved as `target/lsa-before-hyperlinks`. After: v0.4.0; exact binary hashes are in
+the report. Arm64 macOS, thin-LTO release builds, two warmups and 21 paired,
+interleaved fresh processes with alternating order. OS caches warm, not flushed;
+no concurrent builds/tests. Output is a drained pipe without a renderer, stdin
+is `/dev/null`, and `wait4` records child CPU/RSS. Preparation is outside timing.
+
+Each fixture has 10,000 files with repeated timestamps; one quarter of names
+contain spaces, percent/hash characters and non-ASCII text. Absolute directory
+paths are 59 bytes (short) and 436 bytes (deep). Styled cases explicitly request
+long form, color/icons and no images; links are forced to isolate application
+cost from terminal rendering. Every comparison preserves complete visible output
+after stripping OSC 8 framing. Plain before/after bytes also match exactly.
+
+| Workload | Elapsed before/off → after/on | CPU before/off → after/on |
+| --- | ---: | ---: |
+| Plain names, short path, v0.3.1 → v0.4.0 | 9.00 → 8.96 ms | 7.93 → 7.92 ms |
+| Plain names, deep path, v0.3.1 → v0.4.0 | 10.71 → 10.56 ms | 9.28 → 9.29 ms |
+| Forced links, short path, v0.3.1 → v0.4.0 | 32.25 → 30.02 ms | 30.28 → 27.96 ms |
+| Forced links, deep path, v0.3.1 → v0.4.0 | 45.85 → 42.03 ms | 43.21 → 39.47 ms |
+| v0.4.0 links off → on, short path | 27.08 → 28.10 ms | 25.09 → 26.04 ms |
+| v0.4.0 links off → on, deep path | 36.38 → 41.00 ms | 34.07 → 38.33 ms |
+
+Plain pipes are essentially unchanged. Cached hostname/working-directory prefixes
+and streamed percent encoding remove per-label path/URL allocations; forced-link
+CPU falls about 8% versus v0.3.1 despite adding hostname bytes. Enabling links
+still adds work: about 0.95 ms CPU (3.8%) per 10,000 short-path entries and 4.26 ms
+(12.5%) for deep paths in these separate paired comparisons. Peak RSS is
+essentially unchanged with links on/off.
+
+Output grows from 1,792,500 bytes without links to 3,050,000 (short) or 6,820,000
+(deep) with links. These are application/pipe measurements, not Ghostty rendering
+or scrollback-memory measurements. No thumbnail/cache work is involved.
+
+```sh
+python3 benchmarks/hyperlinks.py --before target/lsa-before-hyperlinks --runs=21
+```
+
 ## Formatting and artwork efficiency — 2026-09-12
 
 [Listing report](efficiency-listings.json), [artwork report](efficiency-artwork.json),

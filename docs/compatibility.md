@@ -4,6 +4,7 @@
 
 | Environment | Result |
 | --- | --- |
+| Local v0.4.0 automatic hyperlinks, arm64 macOS | 51 unit tests, 15 CLI tests, two artwork-example tests, three release tests and 234 PTY scenarios pass, plus strict lint and extracted-package checks. Local/SSH/dumb-terminal policy, forced links in pipes/files, hostname URIs, raw-byte encoding and wrapped grid labels are covered. Actual Ghostty clicks and remote-file opening remain pending. |
 | v0.3.0 hosted CI and release, 2026-09-10 local / 2026-09-11 UTC | All four native targets and Rust 1.88 passed; all eleven release jobs completed, including macOS ARM/Intel and Linux x86-64 Homebrew tests and tap update. Published Apple Silicon archive passed checksum, extraction, version, default/compact/AM-PM and pipe checks locally. |
 | Local v0.3.0, arm64 macOS 26.6.2, Rust 1.98.0 | Long default, compact override, 12-hour dates/DST and aligned miniatures pass Rust/PTY checks. Equal-work listings and image output match v0.2.0 bytes. New default/AM-PM appearance has not received a fresh Ghostty user pass. |
 | Ghostty 1.3.1, arm64 macOS 26.6.2, 122×40 cells / 8×17 pixels | Earlier anonymous inline Kitty previews and compact text received user passes. Metadata/cache commands also received a pass at `7050349`; transport/version were not resupplied for that pass. |
@@ -40,9 +41,9 @@ terminal renderer or real SSH/multiplexer session in these jobs.
 The [v0.1.0 release workflow](https://github.com/yungibly/lsa/actions/runs/34011671355)
 also passed every build, Homebrew test and the final tap update.
 
-Automated suite: 47 unit tests, 13 local macOS CLI tests, one artwork-example
-test, three release-tooling tests, 16 protocol/cursor scenarios,
-59 inline layout/style scenarios, 23 cache scenarios, and 22 focused thumbnail
+Automated suite: 51 unit tests, 15 local macOS CLI tests, two artwork-example
+tests, three release-tooling tests, 17 protocol/cursor scenarios,
+97 inline layout/style scenarios, 23 cache scenarios, and 22 focused thumbnail
 scenarios, plus 75 gallery scenarios. Gallery checks exercise all twelve sizes at
 four terminal geometries, the 256 default, 300 explicitly requested previews,
 4,096 placements, shared budgets, option notices and SVG/ICO/cache/error content.
@@ -60,6 +61,15 @@ ten consecutive cache stress runs (160 concurrent captures) passed afterward.
 No PTY test renders the pixels or establishes a visual pass.
 
 ## Ghostty check
+
+For v0.4.0, check that Command-click opens a file and directory from default
+details, `-C` columns and wrapped grid labels. Confirm `--hyperlink=never` removes
+clickability and subsequent listings leave earlier links usable in scrollback.
+Piped/redirected output should contain no links unless `--hyperlink=always` is
+requested. `NO_COLOR=1` keeps links while removing color. Automatic links are
+disabled when any of `SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` is present;
+forcing them emits hostname-qualified URIs, but remote opening is terminal-specific
+and unverified. Record terminal/version and transport for any actual click pass.
 
 For v0.3.0, check default details in an ordinary directory, `-C` compact columns,
 `--12-hour` with and without `--header`, sparse-directory miniatures and automatic
