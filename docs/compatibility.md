@@ -4,6 +4,7 @@
 
 | Environment | Result |
 | --- | --- |
+| v0.4.0 hosted CI/release, 2026-09-22 | All four native targets, Rust 1.88, all three Homebrew installs and the tap update passed without retries. The public Apple Silicon archive passed checksum, version, plain pipe/file output, automatic hostname-link bytes, opt-out and SSH fallback checks. |
 | Local v0.4.0 automatic hyperlinks, arm64 macOS | 51 unit tests, 15 CLI tests, two artwork-example tests, three release tests and 234 PTY scenarios pass, plus strict lint and extracted-package checks. Local/SSH/dumb-terminal policy, forced links in pipes/files, hostname URIs, raw-byte encoding and wrapped grid labels are covered. Actual Ghostty clicks and remote-file opening remain pending. |
 | v0.3.0 hosted CI and release, 2026-09-10 local / 2026-09-11 UTC | All four native targets and Rust 1.88 passed; all eleven release jobs completed, including macOS ARM/Intel and Linux x86-64 Homebrew tests and tap update. Published Apple Silicon archive passed checksum, extraction, version, default/compact/AM-PM and pipe checks locally. |
 | Local v0.3.0, arm64 macOS 26.6.2, Rust 1.98.0 | Long default, compact override, 12-hour dates/DST and aligned miniatures pass Rust/PTY checks. Equal-work listings and image output match v0.2.0 bytes. New default/AM-PM appearance has not received a fresh Ghostty user pass. |
@@ -23,7 +24,13 @@
 | Final artwork optimization | Full offline artwork sheet and paired complete PTY output are byte-identical before/after, including all eleven categories. No new terminal behavior. |
 | Other terminals, multiplexers, SSH | Unverified. Protocol hints or upstream support are not lsa validation. |
 
-Current hosted results: [CI at 96755cd](https://github.com/yungibly/lsa/actions/runs/34544594224)
+Current hosted results: [CI at 317255b](https://github.com/yungibly/lsa/actions/runs/35737546891)
+and the complete [v0.4.0 release](https://github.com/yungibly/lsa/actions/runs/35737550065).
+All five CI and eleven release jobs passed without retries; publication and the
+Homebrew update are complete. PTY checks establish bytes and policy, not actual
+click behavior in Ghostty or remote sessions.
+
+Previous hosted results: [CI at 96755cd](https://github.com/yungibly/lsa/actions/runs/34544594224)
 and the complete [v0.3.0 release](https://github.com/yungibly/lsa/actions/runs/34544595865).
 The first Intel release attempt failed a diagnostic-output assertion; the independent
 Intel CI and an unchanged release retry passed. All 500 consecutive local diagnostic

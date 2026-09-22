@@ -4,8 +4,7 @@
 
 The user requested automatic clickable filenames, commit/tag/push and watching CI
 until green. All work/access stays in this repository; no computer use, shell
-changes or original-image edits. Recheck Git state. v0.4.0 is prepared locally;
-hosted CI/publication remain pending.
+changes or original-image edits. Recheck Git state. v0.4.0 is published.
 
 Auto links require stdout TTY, a nonempty/non-dumb TERM, and no SSH_CONNECTION,
 SSH_CLIENT or SSH_TTY. `--hyperlink=auto|always|never` and `--no-hyperlink` follow
@@ -30,11 +29,20 @@ and CPU are unchanged; streaming forced links uses about 8% less CPU than v0.3.1
 Enabling links adds about 0.95–4.26 ms CPU per 10,000 short/deep-path entries, and
 adds 1.26–5.03 MB of output. No terminal renderer or scrollback memory was measured.
 
-Release notes: docs/releases/v0.4.0.md. Current remote was verified as public
-yungibly/lsa with ADMIN access; origin/main matched starting commit 798a999.
-After push, watch both CI and Release through all native/MSRV/Homebrew/tap jobs,
-apply the reviewed release notes, and verify public archive/formula. Record the
-final URLs/results here and in ROADMAP.md. Real Ghostty click/scrollback behavior
+Commit `317255b94a9e5a04c5750d63746164cd4e94ccd7` and annotated tag `v0.4.0` are
+pushed to the verified public yungibly/lsa remote. Both workflows passed without
+reruns: [CI, five jobs](https://github.com/yungibly/lsa/actions/runs/35737546891),
+[Release, eleven jobs](https://github.com/yungibly/lsa/actions/runs/35737550065).
+Native macOS/Linux builds, Rust 1.88, publication, all three Homebrew installs and
+the tap update are green. The [public release](https://github.com/yungibly/lsa/releases/tag/v0.4.0)
+notes match docs/releases/v0.4.0.md. Its Apple Silicon archive passed checksum,
+extraction, version, plain pipe/file output, automatic hostname-link bytes,
+opt-out and SSH fallback checks. The public formula points to all four v0.4.0
+archives. Workflow snapshots, public package/formula and smoke script are under
+target/automation/v0.4.0/.
+
+This documentation follow-up uses [skip ci]; the tag retains the fully tested
+source commit. No pending publication work. Real Ghostty click/scrollback behavior
 remains for the user, with terminal/version and transport recorded; the previous
 default-details/AM-PM appearance pass is also still pending.
 

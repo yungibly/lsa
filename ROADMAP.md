@@ -25,12 +25,20 @@ formatting, strict clippy, release build and extracted-package checks. Paired
 adds about 0.95–4.26 ms CPU per 10,000 entries for the sampled short/deep paths.
 Streaming uses about 8% less CPU than the old forced-link implementation.
 See [measurements](benchmarks/README.md); terminal rendering was not measured.
-Release v0.4.0 awaits hosted CI/publication. Real Ghostty click behavior and
-remote/multiplexer handling are not newly verified.
+Commit `317255b` and annotated tag `v0.4.0` are pushed.
+[CI](https://github.com/yungibly/lsa/actions/runs/35737546891) passed all five jobs;
+the [release workflow](https://github.com/yungibly/lsa/actions/runs/35737550065)
+passed all eleven, including native builds, Rust 1.88, publication, three Homebrew
+installations and the tap update, without retries. [v0.4.0](https://github.com/yungibly/lsa/releases/tag/v0.4.0)
+is published with reviewed notes and checksummed archives. The public Apple
+Silicon archive passed checksum, extraction, version, plain pipe/file output,
+automatic hostname links, opt-out and SSH fallback checks; the public formula
+points to all four v0.4.0 archives. Real Ghostty click behavior and remote opening
+remain unverified.
 
-**Next:** push v0.4.0 and watch CI/publication; then user Ghostty click/scrollback
-verification. Keep cache
-opt-in and WebM deferred.
+**Next:** normal use and the user Ghostty click/scrollback check, plus the previous
+default-details/AM-PM appearance pass. Publication is complete; keep cache opt-in
+and WebM deferred.
 
 ## Previous change — formatting and artwork efficiency
 
