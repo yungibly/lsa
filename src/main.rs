@@ -175,9 +175,12 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
                     cache: &mut cache,
                 },
             ),
-            layout::Layout::Columns => {
-                columns::Plan::new(entries, term.cols, &style).write(out, dir, entries, &style)
+            layout::Layout::Columns => if opts.across {
+                columns::Plan::across(entries, term.cols, &style)
+            } else {
+                columns::Plan::new(entries, term.cols, &style)
             }
+            .write(out, dir, entries, &style),
             layout::Layout::Long => metadata::write(
                 out,
                 dir,

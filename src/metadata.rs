@@ -1,6 +1,6 @@
 use crate::{
     artwork,
-    cli::Options,
+    cli::{Options, Time},
     display::escape,
     entry::{Entry, Kind},
     kitty,
@@ -23,18 +23,45 @@ pub enum Field {
     Uid,
     Gid,
     Size,
+    Allocated,
+    Inode,
     Modified,
 }
+const FIELD_COUNT: usize = 10;
 
-const DEFAULT_FIELDS: &[Field] = &[Field::Mode, Field::Size, Field::User, Field::Modified];
-const NUMERIC_FIELDS: &[Field] = &[
-    Field::Mode,
-    Field::Links,
-    Field::Uid,
-    Field::Gid,
-    Field::Size,
-    Field::Modified,
-];
+/// Columns for this listing: `--fields`, or a preset shaped by -n, -g and -o,
+/// then -s and -i prepend allocated size and inode (ls order).
+fn selected(opts: &Options) -> Vec<Field> {
+    let mut fields = if !opts.fields.is_empty() {
+        opts.fields.clone()
+    } else if opts.numeric {
+        let mut fields = vec![Field::Mode, Field::Links];
+        if !opts.no_owner {
+            fields.push(Field::Uid);
+        }
+        if !opts.no_group {
+            fields.push(Field::Gid);
+        }
+        fields.extend([Field::Size, Field::Modified]);
+        fields
+    } else {
+        // Readable details omit the group; -g shows it in place of the owner.
+        let mut fields = vec![Field::Mode, Field::Size];
+        match (opts.no_owner, opts.no_group) {
+            (false, _) => fields.push(Field::User),
+            (true, false) => fields.push(Field::Group),
+            (true, true) => {}
+        }
+        fields.push(Field::Modified);
+        fields
+    };
+    for (wanted, field) in [(opts.blocks, Field::Allocated), (opts.inode, Field::Inode)] {
+        if wanted && !fields.contains(&field) {
+            fields.insert(0, field);
+        }
+    }
+    fields
+}
 
 struct FormatCache {
     users: std::collections::HashMap<u32, String>,
@@ -162,6 +189,8 @@ impl Field {
             // A directory's byte count describes its index, not its contents.
             Self::Size if entry.kind == Kind::Directory => out.push('-'),
             Self::Size => size(out, m.len, opts.human),
+            Self::Allocated => size(out, m.blocks.saturating_mul(512), opts.human),
+            Self::Inode => write!(out, "{}", m.inode).unwrap(),
             Self::Modified => format_time(out, time, opts.twelve_hour),
         }
     }
@@ -174,7 +203,8 @@ pub fn parse_fields(list: &str) -> Result<Vec<Field>, String> {
             "mode" => Field::Mode, "links" => Field::Links, "uid" => Field::Uid,
             "user" => Field::User, "group" => Field::Group,
             "gid" => Field::Gid, "size" => Field::Size, "modified" => Field::Modified,
-            _ => return Err("fields must be a comma-separated list of mode, links, user, group, uid, gid, size, or modified; names are always shown".into()),
+            "allocated" => Field::Allocated, "inode" => Field::Inode,
+            _ => return Err("fields must be a comma-separated list of mode, links, user, group, uid, gid, size, allocated, inode, or modified; names are always shown".into()),
         };
         if fields.contains(&field) {
             return Err(format!("duplicate metadata field: {name}"));
@@ -193,18 +223,12 @@ pub fn write(
     mut previews: Option<Previews<'_, '_>>,
 ) -> io::Result<()> {
     use unicode_width::UnicodeWidthStr;
-    let fields = if !opts.fields.is_empty() {
-        &opts.fields
-    } else if opts.numeric {
-        NUMERIC_FIELDS
-    } else {
-        DEFAULT_FIELDS
-    };
+    let fields = &selected(opts);
     let mut owners = FormatCache::default();
     // Reuse field storage across alignment and output; retain no formatted
     // metadata strings per entry, including numeric account-cache fallbacks.
     let mut value = String::with_capacity(32);
-    let mut widths = [0; 8];
+    let mut widths = [0; FIELD_COUNT];
     let heading = |field: Field| match field {
         Field::Mode => "Permissions",
         Field::Links => "Links",
@@ -213,7 +237,13 @@ pub fn write(
         Field::Uid => "UID",
         Field::Gid => "GID",
         Field::Size => "Size",
-        Field::Modified => "Modified",
+        Field::Allocated => "Allocated",
+        Field::Inode => "Inode",
+        Field::Modified => match opts.time {
+            Time::Modified => "Modified",
+            Time::Changed => "Changed",
+            Time::Accessed => "Accessed",
+        },
     };
     // Convert each timestamp at most once across width and output passes. Keep
     // compact civil components (24 bytes including Option), not formatted strings.
@@ -306,7 +336,15 @@ pub fn write(
                 times.get(row).copied().flatten(),
             );
             let padding = widths[i] - value.width();
-            let right = matches!(field, Field::Links | Field::Uid | Field::Gid | Field::Size);
+            let right = matches!(
+                field,
+                Field::Links
+                    | Field::Uid
+                    | Field::Gid
+                    | Field::Size
+                    | Field::Allocated
+                    | Field::Inode
+            );
             if right {
                 write!(out, "{:padding$}", "")?;
             }
@@ -333,7 +371,7 @@ pub fn write(
                 style.paint(
                     out,
                     match field {
-                        Field::Size => "32",
+                        Field::Size | Field::Allocated => "32",
                         Field::Modified => "2",
                         Field::User | Field::Group | Field::Uid | Field::Gid => "33",
                         _ => "2",
@@ -557,6 +595,25 @@ mod tests {
         assert_eq!(out, b"? ? lost\n");
     }
     #[test]
+    fn owner_group_inode_and_allocation_presets() {
+        use Field::*;
+        let fields =
+            |flags: &[&str]| selected(&crate::cli::parse(flags.iter().map(Into::into)).unwrap());
+        assert_eq!(fields(&["-l"]), [Mode, Size, User, Modified]);
+        assert_eq!(fields(&["-o"]), [Mode, Size, User, Modified]);
+        assert_eq!(fields(&["-g"]), [Mode, Size, Group, Modified]);
+        assert_eq!(fields(&["-og"]), [Mode, Size, Modified]);
+        assert_eq!(fields(&["-n"]), [Mode, Links, Uid, Gid, Size, Modified]);
+        assert_eq!(fields(&["-ng"]), [Mode, Links, Gid, Size, Modified]);
+        assert_eq!(fields(&["-no"]), [Mode, Links, Uid, Size, Modified]);
+        assert_eq!(
+            fields(&["-is"]),
+            [Inode, Allocated, Mode, Size, User, Modified]
+        );
+        assert_eq!(fields(&["-i", "--fields=size,inode"]), [Size, Inode]);
+        assert_eq!(fields(&["-s", "--fields=mode"]), [Allocated, Mode]);
+    }
+    #[test]
     fn directories_show_no_byte_size_and_mode_colors_switch_per_run() {
         let details = |mode: u32| {
             Some(Box::new(crate::entry::Details {
@@ -565,6 +622,8 @@ mod tests {
                 gid: 0,
                 len: 736,
                 links: 1,
+                inode: 0,
+                blocks: 0,
                 modified: 0,
                 modified_nsec: 0,
             }))
@@ -653,6 +712,8 @@ mod tests {
             gid: 63,
             len: 0,
             links: u64::MAX,
+            inode: u64::MAX,
+            blocks: u64::MAX,
             modified: 0,
             modified_nsec: 0,
         }));
@@ -665,6 +726,8 @@ mod tests {
             (Field::Uid, "4294967295"),
             (Field::Gid, "63"),
             (Field::Size, "0"),
+            (Field::Inode, "18446744073709551615"),
+            (Field::Allocated, "18446744073709551615"),
         ] {
             field.value(&mut value, &entry, &opts, &mut owners, None);
             assert_eq!(value, expected);

@@ -1,5 +1,5 @@
 use crate::{
-    cli::{Options, Sort},
+    cli::{Options, Sort, Time},
     display::escape,
     filetype::{self, Classification},
 };
@@ -49,19 +49,30 @@ pub struct Details {
     pub gid: u32,
     pub len: u64,
     pub links: u64,
+    pub inode: u64,
+    // 512-byte units, as st_blocks reports on Linux and macOS.
+    pub blocks: u64,
+    /// The selected timestamp (`-c` / `-u`), shown and used by `-t`.
     pub modified: i64,
     pub modified_nsec: i64,
 }
-impl From<Metadata> for Details {
-    fn from(meta: Metadata) -> Self {
+impl Details {
+    pub fn new(meta: &Metadata, time: Time) -> Self {
+        let (modified, modified_nsec) = match time {
+            Time::Modified => (meta.mtime(), meta.mtime_nsec()),
+            Time::Changed => (meta.ctime(), meta.ctime_nsec()),
+            Time::Accessed => (meta.atime(), meta.atime_nsec()),
+        };
         Self {
             mode: meta.mode(),
             uid: meta.uid(),
             gid: meta.gid(),
             len: meta.len(),
             links: meta.nlink(),
-            modified: meta.mtime(),
-            modified_nsec: meta.mtime_nsec(),
+            inode: meta.ino(),
+            blocks: meta.blocks(),
+            modified,
+            modified_nsec,
         }
     }
 }
@@ -164,7 +175,7 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
         let mut entry = Entry::new(path.as_os_str(), Kind::from_type(meta.file_type()));
         entry.executable = meta.is_file() && meta.mode() & 0o111 != 0;
         entry.broken = matches!(target, Some(Err(_)));
-        entry.metadata = Some(Box::new(meta.into()));
+        entry.metadata = Some(Box::new(Details::new(&meta, opts.time)));
         result.entries.push(entry);
         result.valid = true;
         return result;
@@ -232,7 +243,8 @@ pub fn prepare(
             match fs::symlink_metadata(&path) {
                 Ok(meta) => {
                     entry.executable = entry.kind == Kind::File && meta.mode() & 0o111 != 0;
-                    entry.metadata = need_metadata.then(|| Box::new(meta.into()));
+                    entry.metadata =
+                        need_metadata.then(|| Box::new(Details::new(&meta, opts.time)));
                 }
                 Err(error) if need_metadata => listing
                     .errors

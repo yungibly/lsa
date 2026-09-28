@@ -391,6 +391,78 @@ fn readable_long_defaults_and_numeric_escape_hatch() {
 }
 
 #[test]
+fn ls_compatible_flags() {
+    use std::os::unix::fs::MetadataExt;
+    let f = Fixture::new();
+    f.touch("run", b"#!/bin/sh\n");
+    fs::set_permissions(f.0.join("run"), fs::Permissions::from_mode(0o755)).unwrap();
+    f.touch("data", &vec![7; 5000]);
+    fs::create_dir(f.0.join("folder")).unwrap();
+    symlink("folder", f.0.join("link")).unwrap();
+    let plain = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_lsa"))
+            .current_dir(&f.0)
+            .env("TZ", "UTC0")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{args:?}: {out:?}");
+        String::from_utf8(out.stdout).unwrap()
+    };
+    // -p marks only directories, unlike -F.
+    assert_eq!(plain(&["-p"]), "data\nfolder/\nlink\nrun\n");
+    // -i and -s prepend inode numbers and allocated bytes, in ls order.
+    let meta = fs::symlink_metadata(f.0.join("data")).unwrap();
+    let line = plain(&["-is", "--bytes", "--fields=size", "data"]);
+    assert_eq!(
+        line,
+        format!("{} {} 5000 data\n", meta.ino(), meta.blocks() * 512)
+    );
+    // -g replaces the owner with the group; -o matches the readable default.
+    assert_eq!(
+        plain(&["-g"]),
+        plain(&["--fields=mode,size,group,modified"])
+    );
+    assert_eq!(plain(&["-o"]), plain(&["-l"]));
+    // -u and -c select access and status-change times for display and -t.
+    let past = |secs| std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
+    fs::File::options()
+        .write(true)
+        .open(f.0.join("data"))
+        .unwrap()
+        .set_times(
+            fs::FileTimes::new()
+                .set_modified(past(1_700_000_000))
+                .set_accessed(past(1_600_000_000)),
+        )
+        .unwrap();
+    assert_eq!(
+        plain(&["--fields=modified", "data"]),
+        "2023-11-14 22:13 data\n"
+    );
+    assert_eq!(
+        plain(&["-u", "--fields=modified", "data"]),
+        "2020-09-13 12:26 data\n"
+    );
+    assert!(!plain(&["-c", "--fields=modified", "data"]).starts_with("2023-"));
+    assert!(plain(&["-u", "--header", "data"]).contains("Accessed"));
+    assert!(plain(&["-c", "--header", "data"]).contains("Changed"));
+    assert_eq!(plain(&["-tu"]).lines().last(), Some("data"));
+    // Unsupported recursion explains itself; unknown flags name the letter.
+    for (flag, message) in [
+        ("-R", "recursive listings are not supported"),
+        ("-lQ", "unknown option -Q in -lQ"),
+    ] {
+        let out = f.run(&[flag]);
+        assert_eq!(out.status.code(), Some(2));
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(message),
+            "{out:?}"
+        );
+    }
+}
+
+#[test]
 fn no_sort_retains_enumeration_order_and_does_not_require_stats() {
     let f = Fixture::new();
     for i in [20, 1, 13, 4] {

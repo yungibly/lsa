@@ -81,7 +81,8 @@ pub fn write(
             || row.len() > budget.placements_left
         {
             let remaining = &entries[row_index * columns..];
-            return columns::Plan::new(remaining, term.cols, style)
+            // Remaining names continue the gallery's across-the-row order.
+            return columns::Plan::across(remaining, term.cols, style)
                 .write(out, dir, remaining, style);
         }
         // Reserve the image area AND a label line before placing images. This

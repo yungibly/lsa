@@ -33,6 +33,15 @@ impl When {
     }
 }
 
+/// Which timestamp long listings show and `-t` sorts by.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Time {
+    #[default]
+    Modified,
+    Changed,
+    Accessed,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Sort {
     #[default]
@@ -48,9 +57,18 @@ pub struct Options {
     pub all: bool,
     pub long: bool,
     pub columns: bool,
+    /// `-x`: fill compact columns across rows instead of down columns.
+    pub across: bool,
     pub twelve_hour: bool,
     pub human: bool,
     pub numeric: bool,
+    /// `-g` / `-o`: long listing without the owner / group column.
+    pub no_owner: bool,
+    pub no_group: bool,
+    /// `-i` / `-s`: prepend inode / allocated-size columns.
+    pub inode: bool,
+    pub blocks: bool,
+    pub time: Time,
     pub header: bool,
     pub reverse: bool,
     pub sort: Sort,
@@ -85,50 +103,56 @@ Examples:
   lsa                         Automatic details or image grid
   lsa -la --header             Details with column headings
   lsa --grid --thumbnail-size=5 photos
-                              Larger thumbnails (5 terminal rows high)
+                        Larger thumbnails (5 terminal rows high)
   lsa --preview-limit=1024 photos
-                              Preview more images in a large directory
+                        Preview more images in a large directory
 
 Everyday options:
-  -a, -A, --all          Include hidden entries (without . and ..)
+  -a, -A, --all         Include hidden entries (without . and ..)
   -l, --long            Always show details; tiny previews on graphics terminals
-  -C, --columns         Compact text columns; no automatic image grid
-  --12-hour            Show modification times with AM/PM (default: 24-hour)
+  -C, --columns         Compact text columns sorted down; no automatic image grid
+  -x                    Compact text columns sorted across rows
+  --12-hour             Show modification times with AM/PM (default: 24-hour)
   -h                    Human-readable sizes (the default); --bytes uses bytes
   -n                    Long listing with numeric uid/gid and link count
+  -o / -g               Long listing without group / without owner
+  -i / -s               Long listing with inode numbers / allocated size
+  -c / -u               Show and sort (-t) by status change / access time
   -1, --oneline         One entry per line; no images
   -d, --directory       List directory operands themselves
   -F, --classify        Append / @ * | = type indicators
+  -p                    Append / to directories only
   -t / -S               Sort newest / largest first
   -r, --reverse         Reverse the order within directory groups
   -U                    Keep filesystem order (skip sorting)
+  -v                    Natural name order (already the default)
   --sort=name|size|time|none
-                         Natural, case-insensitive name order is the default
+                        Natural, case-insensitive name order is the default
   --dirs-first          Group directories before other entries
   --header              Long output with column headings (implies -l)
-  --fields=LIST         Choose long columns (implies -l):
-                         mode,links,user,group,uid,gid,size,modified
+  --fields=LIST         Choose long columns (implies -l): mode,links,user,
+                        group,uid,gid,size,allocated,inode,modified
 
 Appearance:
   --color=auto|always|never
-                         Auto on terminals; honors NO_COLOR and LS_COLORS
+                        Auto on terminals; honors NO_COLOR and LS_COLORS
   --icons=auto|always|never
-                         Auto: Nerd icons in Ghostty, portable symbols elsewhere
-                         Always: Nerd icons (requires font support)
+                        Auto: Nerd icons in Ghostty, portable symbols elsewhere
+                        Always: Nerd icons (requires font support)
   --no-icons            Disable icons
   --hyperlink=auto|always|never
-                         Auto: clickable names on local terminals (OSC 8)
+                        Auto: clickable names on local terminals (OSC 8)
   --hyperlink           Force links, including in pipes and SSH sessions
   --no-hyperlink        Disable links
 
 Images:
   --grid                Compact thumbnails and folder/file artwork for every tile
   --thumbnail-size=N    Grid height in terminal rows (1..12; default 3)
-                         Width/spacing follow size; shrinks to fit the terminal
-                         Long output keeps its one-row miniatures
+                        Width/spacing follow size; shrinks to fit the terminal
+                        Long output keeps its one-row miniatures
   --no-images           Text only; never open image contents
   --protocol=auto|kitty|none
-                         Auto recognizes direct Ghostty/Kitty sessions
+                        Auto recognizes direct Ghostty/Kitty sessions
   --preview-limit=N     At most N attempts across all paths (0..4096; default 256)
   --cache-dir=PATH      Opt-in, bounded thumbnail cache (also accepts a space)
   --no-cache            Disable caching regardless of option order
@@ -154,6 +178,8 @@ Exit: 0 success (including closed pipes), 1 listing/output/cache-clear error,
 2 invalid options. See README.md for details and resource limits.
 ";
 
+const RECURSIVE: &str = "-R: recursive listings are not supported; lsa lists one directory level";
+
 impl Options {
     /// Explain explicit requests that cannot affect the selected layout once,
     /// without turning familiar text overrides into option errors.
@@ -169,7 +195,7 @@ impl Options {
         } else if self.one {
             Some("-1 / --oneline selects text lines")
         } else if self.columns {
-            Some("-C / --columns selects compact text columns")
+            Some("-C / -x / --columns selects compact text columns")
         } else {
             None
         };
@@ -232,7 +258,11 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--version" => opts.version = true,
             "--grid" => opts.grid = true,
             "--long" => opts.long = true,
-            "--columns" => opts.columns = true,
+            "--columns" => {
+                opts.columns = true;
+                opts.across = false;
+            }
+            "--recursive" => return Err(RECURSIVE.into()),
             "--12-hour" => opts.twelve_hour = true,
             "--all" | "--almost-all" => opts.all = true,
             "--oneline" => opts.one = true,
@@ -333,20 +363,53 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                     match c {
                         'a' | 'A' => opts.all = true,
                         'l' => opts.long = true,
-                        'C' => opts.columns = true,
+                        'C' | 'x' => {
+                            opts.columns = true;
+                            opts.across = c == 'x';
+                        }
                         'h' => opts.human = true,
                         'n' => {
                             opts.long = true;
                             opts.numeric = true;
                         }
+                        'o' => {
+                            opts.long = true;
+                            opts.no_group = true;
+                        }
+                        'g' => {
+                            opts.long = true;
+                            opts.no_owner = true;
+                        }
+                        'i' => {
+                            opts.long = true;
+                            opts.inode = true;
+                        }
+                        's' => {
+                            opts.long = true;
+                            opts.blocks = true;
+                        }
+                        'c' => opts.time = Time::Changed,
+                        'u' => opts.time = Time::Accessed,
                         '1' => opts.one = true,
                         'd' => opts.directory = true,
                         'F' => opts.classify = true,
+                        'p' => opts.slash = true,
                         'G' => opts.color = When::Auto,
                         'r' => opts.reverse = true,
                         't' => opts.sort = Sort::Time,
                         'S' => opts.sort = Sort::Size,
                         'U' => opts.sort = Sort::None,
+                        'v' => opts.sort = Sort::Name,
+                        'R' => return Err(RECURSIVE.into()),
+                        _ if s.len() > 2 => {
+                            return Err(format!(
+                                "unknown option -{} in {}",
+                                crate::display::escape(std::ffi::OsStr::new(
+                                    c.encode_utf8(&mut [0; 4])
+                                )),
+                                crate::display::escape(&arg)
+                            ));
+                        }
                         _ => {
                             return Err(format!(
                                 "unknown option: {}",
@@ -386,6 +449,44 @@ mod tests {
         assert!(args(&["--12-hour"]).unwrap().twelve_hour);
         assert!(args(&["--bytes", "-h"]).unwrap().human);
         assert!(!args(&["-h", "--bytes"]).unwrap().human);
+    }
+    #[test]
+    fn ls_compatibility_flags() {
+        let o = args(&["-x"]).unwrap();
+        assert!(o.columns && o.across);
+        for (flags, across) in [
+            (&["-xC"][..], false),
+            (&["-Cx"], true),
+            (&["-x", "--columns"], false),
+        ] {
+            assert_eq!(args(flags).unwrap().across, across, "{flags:?}");
+        }
+        let o = args(&["-pv"]).unwrap();
+        assert!(o.slash && !o.classify && o.sort == Sort::Name);
+        assert_eq!(args(&["-tv"]).unwrap().sort, Sort::Name);
+        let o = args(&["-is"]).unwrap();
+        assert!(o.long && o.inode && o.blocks);
+        let o = args(&["-o"]).unwrap();
+        assert!(o.long && o.no_group && !o.no_owner);
+        let o = args(&["-g"]).unwrap();
+        assert!(o.long && o.no_owner && !o.no_group);
+        assert_eq!(args(&[]).unwrap().time, Time::Modified);
+        assert_eq!(args(&["-c"]).unwrap().time, Time::Changed);
+        assert_eq!(args(&["-cu"]).unwrap().time, Time::Accessed);
+        assert!(!args(&["-c"]).unwrap().long);
+        for flags in [&["-R"][..], &["-lR"], &["--recursive"]] {
+            assert!(
+                args(flags)
+                    .unwrap_err()
+                    .contains("recursive listings are not supported")
+            );
+        }
+        assert_eq!(args(&["-lZ"]).unwrap_err(), "unknown option -Z in -lZ");
+        assert_eq!(args(&["-Z"]).unwrap_err(), "unknown option: -Z");
+        assert_eq!(
+            args(&["-l\u{1b}"]).unwrap_err(),
+            "unknown option -\\u{1b} in -l\\u{1b}"
+        );
     }
     #[test]
     fn rejects_unknown_and_unbounded_options() {
@@ -458,6 +559,7 @@ mod tests {
         for flag in [
             "--header",
             "-C",
+            "-x",
             "--columns",
             "--fields=size",
             "-l",

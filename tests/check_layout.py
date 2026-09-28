@@ -108,8 +108,10 @@ def main():
         text.mkdir()
         for name in ["a", "bb", "ccc", "d", "ee"]:
             (text / name).touch()
-        for width, expected in [(10, b"a    bb\nccc  d\nee\n"), (11, b"a  bb  ccc\nd  ee\n")]:
-            data = run(["-C", text], cols=width)
+        # -C fills columns top to bottom like ls; -x fills rows across.
+        for flag, width, expected in [("-x", 10, b"a    bb\nccc  d\nee\n"), ("-x", 11, b"a  bb  ccc\nd  ee\n"),
+                                      ("-C", 10, b"a    d\nbb   ee\nccc\n"), ("-C", 13, b"a   ccc  ee\nbb  d\n")]:
+            data = run([flag, text], cols=width)
             assert plain(data) == expected, data
             assert check_cursor(data, width, 24, 23) == 0
             cases += 1
@@ -120,7 +122,9 @@ def main():
             assert automatic == run(["-l", text], environment=environment)
             assert plain(automatic).count(b"-rw") == 5
             cases += 1
-        assert plain(run(["--columns", text], cols=11)) == b"a  bb  ccc\nd  ee\n"
+        assert plain(run(["--columns", text], cols=11)) == b"a    d\nbb   ee\nccc\n"
+        assert plain(run(["-x", "--columns", text], cols=11)) == b"a    d\nbb   ee\nccc\n"
+        assert plain(run(["--columns", "-x", text], cols=11)) == b"a  bb  ccc\nd  ee\n"
         cases += 1
         link = root / "directory-link"; link.symlink_to(text)
         assert run([link]) == run([text])
