@@ -64,9 +64,10 @@ def main():
         for control,pixels in frames:
             assert sum(alpha>64 for alpha in pixels[3::4]) > len(pixels)//40
         payloads=[pixels for _,pixels in frames]
-        assert payloads[0]==payloads[2]  # broken.png, link.png
+        # A corrupt image gets error artwork; a dangling link gets its own
+        # broken-link drawing. Folders share artwork; kinds stay distinct.
+        assert len({payloads[0],payloads[1],payloads[2],payloads[5]})==4
         assert payloads[1]==payloads[3]  # folder, other-folder
-        assert payloads[0]!=payloads[1]!=payloads[5]
         assert payloads[5]!=payloads[6]  # unknown versus unsupported image type
         assert b'[dir]' not in data and b'[no preview]' not in data
         text=OSC.sub(b'',SGR.sub(b'',APC.sub(b'',CSI.sub(b'',data)))).decode()
@@ -79,7 +80,25 @@ def main():
         (mixed/'photo.GIF').chmod(0o755)
         data=run(['-1',mixed],decorated=True,cols=122)
         assert '\uf1c5 photo.GIF'.encode() in data and b'\x1b[35m' in data
-        assert '\uf15b unknown.weird'.encode() in data and b'\x1b[37m' in data
+        # Ordinary files keep the terminal's default foreground (no SGR inside
+        # the link frame), readable on light and dark themes alike.
+        assert b'\x1b\\'+'\uf15b unknown.weird'.encode()+b'\x1b]8;;' in data
+        assert b'\x1b[37m' not in data
+        # Dangling links are red with a broken-link icon.
+        assert b'\x1b[31m'+'\uf127 link.png'.encode() in data
+        cases+=1
+        long=run(['-l',mixed],decorated=True,cols=122)
+        assert b'\x1b[31m -> missing.png\x1b[0m' in long
+        cases+=1
+        # A dangling image link does not spend a preview attempt: with one
+        # attempt, the real image after it still decodes.
+        links=root/'links';links.mkdir()
+        (links/'a-link.png').symlink_to('missing.png')
+        shutil.copyfile(ROOT/'img-test/generated/still.gif',links/'b-photo.gif')
+        geometry=dict(cols=122,rows=40,pixels=(976,680))
+        limited=images(run(['--grid','--preview-limit=1',links],**geometry),pixels=True)
+        alone=images(run(['--grid',links/'b-photo.gif'],**geometry),pixels=True)
+        assert len(limited)==2 and limited[1][1]==alone[0][1]
         cases+=1
 
         entries=root/'long';entries.mkdir()

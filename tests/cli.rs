@@ -136,6 +136,14 @@ fn directories_first_preserves_groups_under_reverse_and_other_sorts() {
         f.run(&["--dirs-first", "-S"]).stdout,
         b"b-dir/\ny-dir/\nz\nc-link@\na\n"
     );
+    // Directories have no displayed size, so they follow every sized entry.
+    assert_eq!(f.run(&["-S"]).stdout, b"z\nc-link@\na\nb-dir/\ny-dir/\n");
+    assert_eq!(f.run(&["-Sr"]).stdout, b"y-dir/\nb-dir/\na\nc-link@\nz\n");
+    let sizes = String::from_utf8(f.run(&["--fields=size", "--bytes"]).stdout).unwrap();
+    assert!(
+        sizes.starts_with("1 a\n") && sizes.contains("- b-dir/\n"),
+        "{sizes}"
+    );
     let earlier = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
     for name in ["b-dir", "z"] {
         fs::File::open(f.0.join(name))

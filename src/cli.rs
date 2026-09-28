@@ -57,6 +57,7 @@ pub struct Options {
     pub dirs_first: bool,
     pub directory: bool,
     pub classify: bool,
+    pub slash: bool,
     pub fields: Vec<crate::metadata::Field>,
     pub grid: bool,
     pub one: bool,
@@ -173,12 +174,7 @@ impl Options {
             None
         };
         if let Some(reason) = reason {
-            let ignored = match (self.grid, self.thumbnail_size.is_some()) {
-                (true, true) => "--grid and --thumbnail-size",
-                (true, false) => "--grid",
-                (false, true) => "--thumbnail-size",
-                (false, false) => return None,
-            };
+            let ignored = self.grid_request()?;
             return Some(format!(
                 "{ignored} ignored: {reason}; omit the long/column/line options to use a grid"
             ));
@@ -196,6 +192,15 @@ impl Options {
             return Some(format!("--grid ignored: {reason}"));
         }
         None
+    }
+    /// Explicit grid options, named for notices when they cannot apply.
+    pub fn grid_request(&self) -> Option<&'static str> {
+        match (self.grid, self.thumbnail_size.is_some()) {
+            (true, true) => Some("--grid and --thumbnail-size"),
+            (true, false) => Some("--grid"),
+            (false, true) => Some("--thumbnail-size"),
+            (false, false) => None,
+        }
     }
     pub fn cache_path(&self) -> Option<&std::path::Path> {
         self.cache_dir.as_deref().filter(|_| !self.no_cache)

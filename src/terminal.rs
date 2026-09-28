@@ -10,6 +10,8 @@ use std::{
 pub struct Terminal {
     pub tty: bool,
     pub kitty: bool,
+    /// SSH_CONNECTION, SSH_CLIENT or SSH_TTY is present.
+    pub ssh: bool,
     pub reason: &'static str,
     pub name: String,
     pub version: String,
@@ -35,10 +37,14 @@ impl Terminal {
                 || name == "kitty"
                 || term == "xterm-kitty"
                 || term == "xterm-ghostty");
-        let (kitty, reason) = select(tty, opts, mux, known);
+        let ssh = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]
+            .iter()
+            .any(|key| env::var_os(key).is_some());
+        let (kitty, reason) = select(tty, opts, mux, ssh, known);
         let mut result = Self {
             tty,
             kitty,
+            ssh,
             reason,
             name: escape(&name),
             version: escape(&env::var_os("TERM_PROGRAM_VERSION").unwrap_or_default()),
@@ -75,7 +81,9 @@ impl Terminal {
     }
 }
 
-fn select(tty: bool, opts: &Options, mux: bool, known: bool) -> (bool, &'static str) {
+// SSH follows the hyperlink policy: a forwarded TERM=xterm-ghostty would
+// otherwise stream up to the whole image budget over the connection unasked.
+fn select(tty: bool, opts: &Options, mux: bool, ssh: bool, known: bool) -> (bool, &'static str) {
     if !tty {
         (false, "stdout is not a terminal")
     } else if opts.no_images || opts.one || opts.protocol == Protocol::None {
@@ -84,6 +92,8 @@ fn select(tty: bool, opts: &Options, mux: bool, known: bool) -> (bool, &'static 
         (true, "explicit Kitty override")
     } else if mux {
         (false, "multiplexer: graphics not auto-enabled")
+    } else if ssh {
+        (false, "SSH session: graphics not auto-enabled")
     } else if known {
         (true, "Kitty/Ghostty environment hint")
     } else {
@@ -97,14 +107,20 @@ mod tests {
     #[test]
     fn conservative_detection() {
         let mut opts = Options::default();
-        assert!(!select(false, &opts, false, true).0);
-        assert!(!select(true, &opts, true, true).0);
-        assert!(!select(true, &opts, false, false).0);
-        assert!(select(true, &opts, false, true).0);
+        assert!(!select(false, &opts, false, false, true).0);
+        assert!(!select(true, &opts, true, false, true).0);
+        assert!(!select(true, &opts, false, false, false).0);
+        assert!(select(true, &opts, false, false, true).0);
+        // A forwarded Ghostty TERM over SSH stays text unless forced.
+        assert_eq!(
+            select(true, &opts, false, true, true),
+            (false, "SSH session: graphics not auto-enabled")
+        );
         opts.protocol = Protocol::Kitty;
-        assert!(select(true, &opts, true, false).0);
-        assert!(!select(false, &opts, false, true).0);
+        assert!(select(true, &opts, true, false, false).0);
+        assert!(select(true, &opts, false, true, false).0);
+        assert!(!select(false, &opts, false, false, true).0);
         opts.no_images = true;
-        assert!(!select(true, &opts, false, true).0);
+        assert!(!select(true, &opts, false, false, true).0);
     }
 }

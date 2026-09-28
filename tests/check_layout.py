@@ -64,6 +64,12 @@ def check_hyperlinks(root):
             assert LINK.findall(data) == ([(file_uri(entry), b"entry.txt")] if enabled else [])
             assert b"\x1b" not in OSC.sub(b"", data)
             cases += 1
+    # `.` components never reach a URI; `..` and symlinks keep their meaning.
+    relative = "./" + str(folder.relative_to(ROOT)) + "/./"
+    data = run([*flags, relative], decorated=True)
+    assert LINK.findall(data) == [(file_uri(entry), b"entry.txt")]
+    assert b"/./" not in data
+    cases += 1
     # NO_COLOR controls SGR only; automatic links remain usable with no color.
     subdirectory = folder / "subdirectory"
     subdirectory.mkdir()

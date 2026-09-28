@@ -159,6 +159,8 @@ impl Field {
             }
             Self::Uid => write!(out, "{}", m.uid).unwrap(),
             Self::Gid => write!(out, "{}", m.gid).unwrap(),
+            // A directory's byte count describes its index, not its contents.
+            Self::Size if entry.kind == Kind::Directory => out.push('-'),
             Self::Size => size(out, m.len, opts.human),
             Self::Modified => format_time(out, time, opts.twelve_hour),
         }
@@ -309,19 +311,24 @@ pub fn write(
                 write!(out, "{:padding$}", "")?;
             }
             if *field == Field::Mode && style.color {
+                // One SGR per run of equally colored characters, then a single
+                // reset: each switch resets first, so dim never carries over.
+                let mut current = "";
                 for c in value.chars() {
-                    style.paint(
-                        out,
-                        match c {
-                            'r' => "33",
-                            'w' => "31",
-                            'x' | 's' | 't' => "32",
-                            '-' => "2",
-                            _ => "36",
-                        },
-                        c.encode_utf8(&mut [0; 4]),
-                    )?;
+                    let code = match c {
+                        'r' => "33",
+                        'w' => "31",
+                        'x' | 's' | 't' => "32",
+                        '-' => "2",
+                        _ => "36",
+                    };
+                    if code != current {
+                        write!(out, "\x1b[0;{code}m")?;
+                        current = code;
+                    }
+                    out.write_all(c.encode_utf8(&mut [0; 4]).as_bytes())?;
                 }
+                out.write_all(b"\x1b[0m")?;
             } else {
                 style.paint(
                     out,
@@ -368,7 +375,7 @@ pub fn write(
             let target = fs::read_link(entry.path(dir))
                 .map(|p| escape(p.as_os_str()))
                 .unwrap_or_else(|_| "?".into());
-            style.paint(out, "2", &format!(" -> {target}"))?;
+            style.paint(out, style.target_code(entry), &format!(" -> {target}"))?;
         }
         writeln!(out)?;
     }
@@ -548,6 +555,53 @@ mod tests {
         )
         .unwrap();
         assert_eq!(out, b"? ? lost\n");
+    }
+    #[test]
+    fn directories_show_no_byte_size_and_mode_colors_switch_per_run() {
+        let details = |mode: u32| {
+            Some(Box::new(crate::entry::Details {
+                mode,
+                uid: 0,
+                gid: 0,
+                len: 736,
+                links: 1,
+                modified: 0,
+                modified_nsec: 0,
+            }))
+        };
+        let mut folder = Entry::new("folder", Kind::Directory);
+        folder.metadata = details(0o040755);
+        let mut file = Entry::new("file", Kind::File);
+        file.metadata = details(0o100644);
+        let opts = Options {
+            long: true,
+            human: true,
+            fields: vec![Field::Size, Field::Mode],
+            ..Options::default()
+        };
+        let mut out = Vec::new();
+        write(
+            &mut out,
+            Path::new(""),
+            &[folder, file],
+            &opts,
+            &Style::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(out, b"  - drwxr-xr-x folder\n736 -rw-r--r-- file\n");
+        let mut style = Style::default();
+        style.color = true;
+        let mut file = Entry::new("file", Kind::File);
+        file.metadata = details(0o100644);
+        let opts = Options {
+            fields: vec![Field::Mode],
+            ..opts
+        };
+        let mut out = Vec::new();
+        write(&mut out, Path::new(""), &[file], &opts, &style, None).unwrap();
+        let expected = "\x1b[0;2m-\x1b[0;33mr\x1b[0;31mw\x1b[0;2m-\x1b[0;33mr\x1b[0;2m--\x1b[0;33mr\x1b[0;2m--\x1b[0m file\n";
+        assert_eq!(String::from_utf8(out).unwrap(), expected);
     }
     #[test]
     #[allow(clippy::unnecessary_cast)] // mode_t differs between macOS and Linux.

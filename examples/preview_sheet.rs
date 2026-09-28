@@ -14,6 +14,7 @@ fn main() {
         Icon::Code,
         Icon::Config,
         Icon::Link,
+        Icon::BrokenLink,
         Icon::Special,
         Icon::Error,
     ];
@@ -25,7 +26,7 @@ fn main() {
         let y = row as i64 * 112;
         imageops::overlay(
             &mut sheet,
-            &RgbaImage::from_pixel(1320, 112, Rgba(bg)),
+            &RgbaImage::from_pixel(icons.len() as u32 * 120, 112, Rgba(bg)),
             0,
             y,
         );

@@ -215,11 +215,12 @@ def main():
     assert code == 0 and len(images(data)) == 40 and not err
     assert 8 * 1024 * 1024 < sum(len(m[0]) for m in APC.finditer(data)) <= 128 * 1024 * 1024
     runs += 1
-    for args, env, cols, rows in [
-        (["--no-images"], {}, 80, 24), (["-1"], {}, 80, 24), (["-l", "--no-images"], {}, 80, 24),
-        (["--protocol=none"], {}, 80, 24), ([], {"TMUX": "test"}, 80, 24),
-        ([], {"TERM": "dumb", "TERM_PROGRAM": "unknown"}, 80, 24),
-        ([], {}, 11, 24), ([], {}, 80, 5),
+    for args, env, cols, rows, reason in [
+        (["--no-images"], {}, 80, 24, b"--no-images"), (["-1"], {}, 80, 24, b"text lines"),
+        (["-l", "--no-images"], {}, 80, 24, b"long output"), (["--protocol=none"], {}, 80, 24, b"--protocol=none"),
+        ([], {"TMUX": "test"}, 80, 24, b"multiplexer"), ([], {"SSH_CONNECTION": "remote"}, 80, 24, b"SSH session"),
+        ([], {"TERM": "dumb", "TERM_PROGRAM": "unknown"}, 80, 24, b"unknown terminal"),
+        ([], {}, 11, 24, b"too small"), ([], {}, 80, 5, b"too small"),
     ]:
         code, data, err, _ = capture(["--grid", *args, many], environment=env, cols=cols, rows=rows)
         assert code == 0
@@ -227,10 +228,18 @@ def main():
             assert len(images(data)) == 40  # Long fallback miniatures still fit.
         else:
             assert b"\x1b" not in data
-        if args:
-            assert err.startswith(b'lsa: --grid ignored:') and err.count(b'\n') == 1, err
-        else:
-            assert not err, err
+        # Every explicit grid request that cannot apply explains itself once;
+        # detection limits also name the explicit override.
+        assert err.startswith(b'lsa: --grid ignored:') and err.count(b'\n') == 1 and reason in err, err
+        assert (b"--protocol=kitty" in err) == bool(env), err
+        runs += 1
+    # SSH sessions keep text by default, like links; an explicit protocol forces
+    # graphics, and ordinary listings print no notice.
+    for name in ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]:
+        code, data, err, _ = capture([many], environment={name: "remote"})
+        assert code == 0 and not err and not images(data) and b"image-00.png" in data
+        code, data, err, _ = capture(["--protocol=kitty", "--grid", many], environment={name: "remote"})
+        assert code == 0 and not err and len(images(data)) == 40
         runs += 1
     code, data, err, _ = capture(["--grid", ROOT / "img-test/generated"])
     assert code == 0 and len(images(data)) == 15 and not err, err

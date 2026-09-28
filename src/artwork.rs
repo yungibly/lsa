@@ -13,6 +13,7 @@ pub enum Icon {
     Code,
     Config,
     Link,
+    BrokenLink,
     Special,
     Error,
 }
@@ -24,7 +25,7 @@ pub fn render(icon: Icon, width: u32, height: u32, color: bool) -> RgbaImage {
     } else {
         match icon {
             Icon::Folder => [235, 182, 77, 255],
-            Icon::Error => [220, 79, 85, 255],
+            Icon::Error | Icon::BrokenLink => [220, 79, 85, 255],
             Icon::Image | Icon::Video | Icon::Audio => [160, 128, 213, 255],
             Icon::Archive => [209, 142, 77, 255],
             Icon::Code | Icon::Link => [84, 164, 205, 255],
@@ -76,10 +77,14 @@ pub fn render(icon: Icon, width: u32, height: u32, color: bool) -> RgbaImage {
                 art.rect(48, 29, 54, 51, ink);
                 art.circle(51, 61, 4, ink);
             }
-            Icon::Link => {
+            Icon::Link | Icon::BrokenLink => {
                 art.line((35, 59), (64, 34), 4, ink);
                 art.line((49, 34), (64, 34), 4, ink);
                 art.line((64, 34), (64, 49), 4, ink);
+                if icon == Icon::BrokenLink {
+                    // Cut the shaft: distinct from a working link without color.
+                    art.line((42, 39), (56, 55), 4, fill);
+                }
             }
             Icon::Special | Icon::Config => {
                 art.circle(51, 47, 15, ink);
@@ -253,6 +258,7 @@ mod tests {
             Icon::Code,
             Icon::Config,
             Icon::Link,
+            Icon::BrokenLink,
             Icon::Special,
             Icon::Error,
         ];
@@ -269,6 +275,13 @@ mod tests {
                 render(Icon::Error, w, h, true),
                 render(Icon::File, w, h, true)
             );
+            // Dangling links differ from working links even without color.
+            for color in [false, true] {
+                assert_ne!(
+                    render(Icon::BrokenLink, w, h, color),
+                    render(Icon::Link, w, h, color)
+                );
+            }
         }
     }
 }

@@ -25,6 +25,9 @@ impl Layout {
 pub struct Choice {
     pub layout: Layout,
     pub reason: &'static str,
+    /// This terminal cannot show a grid (no graphics, or too small), as
+    /// opposed to options or listing contents selecting text.
+    pub unavailable: bool,
 }
 
 pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
@@ -35,11 +38,13 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
             Layout::Long
         },
         reason,
+        unavailable: false,
     };
     if opts.long {
         return Choice {
             layout: Layout::Long,
             reason: "long listing requested",
+            unavailable: false,
         };
     }
     if !term.tty || opts.one {
@@ -50,6 +55,7 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
             } else {
                 "stdout is not a terminal"
             },
+            unavailable: false,
         };
     }
     if opts.columns {
@@ -59,19 +65,26 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
         return text("images disabled");
     }
     if !term.kitty {
-        return text(term.reason);
+        return Choice {
+            unavailable: true,
+            ..text(term.reason)
+        };
     }
     if opts.preview_limit == 0 {
         return text("preview budget disabled");
     }
     let Some(geometry) = Geometry::new(term, opts.thumbnail_size.unwrap_or(3)) else {
-        return text("terminal too small for grid");
+        return Choice {
+            unavailable: true,
+            ..text("terminal too small for grid")
+        };
     };
     let candidates = entries.iter().filter(|e| e.candidate()).count();
     if opts.grid {
         return Choice {
             layout: Layout::Grid(geometry),
             reason: "grid requested",
+            unavailable: false,
         };
     }
     if candidates == 0 {
@@ -81,6 +94,7 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
         Choice {
             layout: Layout::Grid(geometry),
             reason: "image-heavy or small mixed listing; bounded inline previews",
+            unavailable: false,
         }
     } else {
         text("sparse images in a mixed listing")
@@ -95,6 +109,7 @@ mod tests {
         Terminal {
             tty: true,
             kitty: true,
+            ssh: false,
             reason: "test",
             name: "ghostty".into(),
             version: "".into(),
@@ -153,6 +168,18 @@ mod tests {
         assert_eq!(choose(&entries(4, 0), &term, &opts).layout, Layout::Lines);
         term.tty = true;
         term.kitty = false;
-        assert_eq!(choose(&entries(4, 0), &term, &opts).layout, Layout::Long);
+        let choice = choose(&entries(4, 0), &term, &opts);
+        assert!(choice.layout == Layout::Long && choice.unavailable);
+        term.kitty = true;
+        term.cols = 11;
+        assert!(choose(&entries(4, 0), &term, &opts).unavailable);
+        // Explicit text choices and listing contents are not terminal limits.
+        term.cols = 122;
+        for args in [&["-C"][..], &["--no-images"], &["--preview-limit=0"]] {
+            let opts = cli::parse(args.iter().map(Into::into)).unwrap();
+            assert!(!choose(&entries(4, 0), &term, &opts).unavailable);
+        }
+        let opts = cli::parse(std::iter::empty()).unwrap();
+        assert!(!choose(&entries(1, 1000), &term, &opts).unavailable);
     }
 }

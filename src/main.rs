@@ -115,6 +115,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     let mut budget = preview::Budget::new(opts.preview_limit);
     let mut cache = cache::Cache::new(opts.cache_path());
     let mut operands = Vec::new();
+    let mut explained = opts.layout_notice().is_some();
     // `dir` holds the entries (empty for file operands); `path` names the
     // listing in diagnostics.
     let mut render = |out: &mut W,
@@ -123,6 +124,24 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
                       path: &std::ffi::OsStr|
      -> io::Result<()> {
         let choice = layout::choose(entries, &term, opts);
+        // An explicit grid request this terminal cannot show gets one notice.
+        if choice.unavailable
+            && !opts.diagnose
+            && !explained
+            && let Some(request) = opts.grid_request()
+        {
+            explained = true;
+            let hint = if term.kitty {
+                ""
+            } else {
+                "; --protocol=kitty forces Kitty graphics"
+            };
+            let _ = writeln!(
+                io::stderr().lock(),
+                "lsa: {request} ignored: {}{hint}",
+                choice.reason
+            );
+        }
         if opts.diagnose {
             if let layout::Layout::Grid(g) = choice.layout {
                 writeln!(
@@ -178,11 +197,13 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
         let mut listing = entry::list(path, opts);
         if listing.directory {
             let long = layout::choose(&listing.entries, &term, opts).layout == layout::Layout::Long;
+            // Dangling links matter where they are styled or could be previewed.
             entry::prepare(
                 &mut listing,
                 opts,
                 long,
                 !opts.diagnose && style.needs_mode(),
+                style.needs_mode() || term.kitty,
             );
         }
         for error in &listing.errors {

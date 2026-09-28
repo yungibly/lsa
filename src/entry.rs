@@ -77,6 +77,9 @@ pub struct Entry {
     pub metadata: Option<Box<Details>>,
     // Styling retains only the executable bit, not a stat structure per entry.
     pub executable: bool,
+    // A symlink whose target cannot be resolved; checked when styling, long
+    // details or grids need it, never for plain names.
+    pub broken: bool,
 }
 impl Entry {
     pub fn new(name: impl Into<OsString>, kind: Kind) -> Self {
@@ -87,15 +90,19 @@ impl Entry {
             kind,
             metadata: None,
             executable: false,
+            broken: false,
         }
     }
+    /// A dangling link is not a failed image: it keeps link artwork and does
+    /// not spend a preview attempt.
     pub fn candidate(&self) -> bool {
-        matches!(self.kind, Kind::File | Kind::Link) && self.class.preview
+        matches!(self.kind, Kind::File | Kind::Link) && self.class.preview && !self.broken
     }
     pub fn artwork(&self) -> crate::artwork::Icon {
         use crate::{artwork::Icon, filetype::Category};
         match self.kind {
             Kind::Directory => Icon::Folder,
+            Kind::Link if self.broken => Icon::BrokenLink,
             Kind::Link => Icon::Link,
             Kind::Pipe | Kind::Socket | Kind::Device => Icon::Special,
             Kind::Unknown => Icon::Error,
@@ -147,15 +154,16 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
     };
     // Match everyday ls behavior: a directory-link operand lists its contents,
     // while -l/-d and links inside a directory retain the link itself.
+    let target = meta.is_symlink().then(|| fs::metadata(path));
     result.directory = meta.is_dir()
-        || (meta.is_symlink()
-            && !opts.long
+        || (!opts.long
             && !opts.directory
-            && fs::metadata(path).is_ok_and(|target| target.is_dir()));
+            && matches!(&target, Some(Ok(target)) if target.is_dir()));
     if !result.directory || opts.directory {
         result.directory = false;
         let mut entry = Entry::new(path.as_os_str(), Kind::from_type(meta.file_type()));
         entry.executable = meta.is_file() && meta.mode() & 0o111 != 0;
+        entry.broken = matches!(target, Some(Err(_)));
         entry.metadata = Some(Box::new(meta.into()));
         result.entries.push(entry);
         result.valid = true;
@@ -202,11 +210,23 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
 
 // Select the layout before reading per-entry metadata. Automatic grids and plain
 // pipes do not pay for long details, and styling never causes a second stat.
-pub fn prepare(listing: &mut Listing, opts: &Options, long: bool, need_mode: bool) {
+// `resolve_links` adds one target check per symlink so dangling links stand out.
+pub fn prepare(
+    listing: &mut Listing,
+    opts: &Options,
+    long: bool,
+    need_mode: bool,
+    resolve_links: bool,
+) {
     let need_metadata = long || opts.needs_metadata();
     // One reusable path buffer: no per-entry path allocation for stats.
     let mut path = listing.dir.clone();
     for entry in &mut listing.entries {
+        if resolve_links && entry.kind == Kind::Link {
+            path.push(&entry.name);
+            entry.broken = fs::metadata(&path).is_err();
+            path.pop();
+        }
         if need_metadata || (need_mode && entry.kind == Kind::File) {
             path.push(&entry.name);
             match fs::symlink_metadata(&path) {
@@ -234,11 +254,16 @@ pub fn prepare(listing: &mut Listing, opts: &Options, long: bool, need_mode: boo
     listing.entries.sort_unstable_by(|a, b| {
         let primary = match opts.sort {
             Sort::Name | Sort::None => std::cmp::Ordering::Equal,
-            Sort::Size => b
-                .metadata
-                .as_ref()
-                .map(|m| m.len)
-                .cmp(&a.metadata.as_ref().map(|m| m.len)),
+            // Directories have no displayed size; they follow sized entries.
+            Sort::Size => {
+                let size = |e: &Entry| {
+                    e.metadata
+                        .as_ref()
+                        .filter(|_| e.kind != Kind::Directory)
+                        .map(|m| m.len)
+                };
+                size(b).cmp(&size(a))
+            }
             Sort::Time => b
                 .metadata
                 .as_ref()
