@@ -1,8 +1,9 @@
 use crate::{
-    artwork, columns,
+    artwork::Icon,
+    columns,
     display::wrap,
     entry::Entry,
-    kitty,
+    kitty::{self, Payload},
     preview::{self, Previews},
     style::Style,
     terminal::Terminal,
@@ -65,6 +66,7 @@ pub fn write(
         term,
         budget,
         cache,
+        art,
     } = previews;
     let Geometry {
         columns,
@@ -94,16 +96,21 @@ pub fn write(
         for (column, entry) in row.iter().enumerate() {
             // Stay below the row during decoding, so interrupting a slow input
             // leaves the cursor clear of images already emitted.
+            let decoded;
             let image = if entry.candidate() && budget.begin(bytes) {
-                preview::load(&entry.path(dir), width, height, cache).unwrap_or_else(|_| {
-                    artwork::render(artwork::Icon::Error, width, height, style.color)
-                })
+                match preview::load(&entry.path(dir), width, height, cache) {
+                    Ok(image) => {
+                        decoded = Payload::new(image);
+                        &decoded
+                    }
+                    Err(_) => art.get(Icon::Error, width, height, style.color),
+                }
             } else {
-                artwork::render(entry.artwork(), width, height, style.color)
+                art.get(entry.artwork(), width, height, style.color)
             };
             let left = column * tile + (tile - image_cols) / 2 + 1;
             write!(out, "\x1b[{}A\x1b[{}G", image_rows + 1, left)?;
-            kitty::write(out, &image, image_cols, image_rows)?;
+            image.write(out, image_cols, image_rows)?;
             budget.placed(bytes);
             write!(out, "\r\x1b[{}B", image_rows + 1)?;
             out.flush()?;

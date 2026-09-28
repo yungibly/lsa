@@ -1,4 +1,8 @@
-use crate::cache::{Cache, Key};
+use crate::{
+    artwork::Icon,
+    cache::{Cache, Key},
+    kitty::Payload,
+};
 use image::{
     DynamicImage, ImageDecoder, ImageReader, Limits, Rgba, RgbaImage, metadata::Orientation,
 };
@@ -20,6 +24,27 @@ pub struct Previews<'a, 'cache> {
     pub term: &'a crate::terminal::Terminal,
     pub budget: &'a mut Budget,
     pub cache: &'a mut Cache<'cache>,
+    pub art: &'a mut Artwork,
+}
+
+/// Built-in drawings, rendered and compressed once per icon, size and color
+/// for the whole invocation rather than once per tile. At most a few dozen.
+#[derive(Default)]
+pub struct Artwork(Vec<((Icon, u32, u32, bool), Payload)>);
+
+impl Artwork {
+    pub fn get(&mut self, icon: Icon, width: u32, height: u32, color: bool) -> &Payload {
+        let key = (icon, width, height, color);
+        let index = match self.0.iter().position(|(k, _)| *k == key) {
+            Some(index) => index,
+            None => {
+                let payload = Payload::new(crate::artwork::render(icon, width, height, color));
+                self.0.push((key, payload));
+                self.0.len() - 1
+            }
+        };
+        &self.0[index].1
+    }
 }
 
 pub struct Budget {

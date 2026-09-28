@@ -14,6 +14,7 @@ import sys
 import termios
 import tempfile
 import time
+import zlib
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,6 +126,7 @@ def check_exit_readiness_gap():
 
 
 def images(data, *, pixels=False):
+    """Placements in order; with pixels, their RGBA bytes (inflating o=z)."""
     decoded = []
     pending = bytearray()
     first = None
@@ -138,11 +140,13 @@ def images(data, *, pixels=False):
             assert control[b"a"] == b"T" and control[b"C"] == b"1"
             assert control[b"t"] == b"d" and control[b"f"] == b"32"
             assert b"i" not in control and b"p" not in control
+            assert control.get(b"o", b"z") == b"z"
         assert first is not None
         pending.extend(base64.b64decode(match[2], validate=True))
         if control[b"m"] == b"0":
-            assert len(pending) == int(first[b"s"]) * int(first[b"v"]) * 4
-            decoded.append((first, bytes(pending)) if pixels else first)
+            raw = zlib.decompress(bytes(pending)) if b"o" in first else bytes(pending)
+            assert len(raw) == int(first[b"s"]) * int(first[b"v"]) * 4
+            decoded.append((first, raw) if pixels else first)
             first = None
             pending.clear()
     assert first is None
@@ -211,9 +215,12 @@ def main():
         assert f"image-{i:02}.png@".encode() in text
     runs += 1
     # Large cell pixels no longer hit the former 8 MiB cap at forty entries.
+    # Pixels are counted uncompressed; flat fixtures compress far below that.
     code, data, err, _ = capture(["--grid", "--preview-limit=64", many], pixels=(2560, 1920))
-    assert code == 0 and len(images(data)) == 40 and not err
-    assert 8 * 1024 * 1024 < sum(len(m[0]) for m in APC.finditer(data)) <= 128 * 1024 * 1024
+    frames = images(data, pixels=True)
+    assert code == 0 and len(frames) == 40 and not err
+    assert sum(len(raw) for _, raw in frames) > 8 * 1024 * 1024
+    assert sum(len(m[0]) for m in APC.finditer(data)) <= 128 * 1024 * 1024
     runs += 1
     for args, env, cols, rows, reason in [
         (["--no-images"], {}, 80, 24, b"--no-images"), (["-1"], {}, 80, 24, b"text lines"),

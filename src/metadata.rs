@@ -1,9 +1,9 @@
 use crate::{
-    artwork,
+    artwork::Icon,
     cli::{Options, Time},
     display::escape,
     entry::{Entry, Kind},
-    kitty,
+    kitty::{self, Payload},
     preview::{self, Previews},
     style::Style,
 };
@@ -305,20 +305,17 @@ pub fn write(
             )
         });
     for (row, entry) in entries.iter().enumerate() {
-        let image = if let Some((w, h)) = mini
+        // Some(Err) marks a failed preview, drawn with shared error artwork.
+        let image: Option<Result<Payload, ()>> = if let Some((w, h)) = mini
             && entry.candidate()
         {
             let p = previews.as_mut().unwrap();
             let bytes = kitty::byte_len(w, h, 3, 1);
-            if p.budget.begin(bytes) {
-                Some(
-                    preview::load(&entry.path(dir), w, h, p.cache).unwrap_or_else(|_| {
-                        artwork::render(artwork::Icon::Error, w, h, style.color)
-                    }),
-                )
-            } else {
-                None
-            }
+            p.budget.begin(bytes).then(|| {
+                preview::load(&entry.path(dir), w, h, p.cache)
+                    .map(Payload::new)
+                    .map_err(|_| ())
+            })
         } else {
             None
         };
@@ -384,15 +381,14 @@ pub fn write(
             }
             write!(out, " ")?;
         }
-        if mini.is_some() {
+        if let Some((w, h)) = mini {
             if let Some(image) = image {
-                kitty::write(out, &image, 3, 1)?;
-                previews.as_mut().unwrap().budget.placed(kitty::byte_len(
-                    image.width(),
-                    image.height(),
-                    3,
-                    1,
-                ));
+                let p = previews.as_mut().unwrap();
+                match &image {
+                    Ok(payload) => payload.write(out, 3, 1)?,
+                    Err(()) => p.art.get(Icon::Error, w, h, style.color).write(out, 3, 1)?,
+                }
+                p.budget.placed(kitty::byte_len(w, h, 3, 1));
                 write!(out, "\x1b[{}G", metadata_width + 5)?;
             } else if style.icons != crate::style::Icons::None {
                 style.write_label(out, dir, entry, style.icon(entry))?;

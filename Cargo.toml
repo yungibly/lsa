@@ -11,6 +11,8 @@ base64 = "0.22.1"
 crc32fast = "1.5.1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico"] }
 libc = "0.2"
+# Already built for PNG support; compresses Kitty payloads (o=z).
+miniz_oxide = { version = "0.9.1", default-features = false, features = ["with-alloc"] }
 resvg = { version = "0.48.1", default-features = false }
 roxmltree = { version = "0.21.1", default-features = false, features = ["std"] }
 unicode-segmentation = "1.12"

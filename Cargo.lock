@@ -189,6 +189,7 @@ dependencies = [
  "gif",
  "image",
  "libc",
+ "miniz_oxide 0.9.1",
  "resvg",
  "roxmltree",
  "unicode-segmentation",

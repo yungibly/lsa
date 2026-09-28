@@ -114,6 +114,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     let mut printed = false;
     let mut budget = preview::Budget::new(opts.preview_limit);
     let mut cache = cache::Cache::new(opts.cache_path());
+    let mut art = preview::Artwork::default();
     let mut operands = Vec::new();
     let mut explained = opts.layout_notice().is_some();
     // `dir` holds the entries (empty for file operands); `path` names the
@@ -173,6 +174,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
                     term: &term,
                     budget: &mut budget,
                     cache: &mut cache,
+                    art: &mut art,
                 },
             ),
             layout::Layout::Columns => if opts.across {
@@ -191,6 +193,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
                     term: &term,
                     budget: &mut budget,
                     cache: &mut cache,
+                    art: &mut art,
                 }),
             ),
             layout::Layout::Lines => entry::write_text(out, dir, entries, &style),
