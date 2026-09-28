@@ -12,6 +12,7 @@ pub enum Category {
     File,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Classification {
     pub category: Category,
     pub preview: bool,

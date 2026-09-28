@@ -15,7 +15,10 @@ mod style;
 mod svg;
 mod terminal;
 
-use std::io::{self, BufWriter, Write};
+use std::{
+    io::{self, BufWriter, Write},
+    path::Path,
+};
 
 fn main() -> std::process::ExitCode {
     let opts = match cli::parse(std::env::args_os().skip(1)) {
@@ -112,7 +115,10 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     let mut budget = preview::Budget::new(opts.preview_limit);
     let mut cache = cache::Cache::new(opts.cache_path());
     let mut operands = Vec::new();
+    // `dir` holds the entries (empty for file operands); `path` names the
+    // listing in diagnostics.
     let mut render = |out: &mut W,
+                      dir: &Path,
                       entries: &[entry::Entry],
                       path: &std::ffi::OsStr|
      -> io::Result<()> {
@@ -140,28 +146,32 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
         match choice.layout {
             layout::Layout::Grid(geometry) => grid::write(
                 out,
+                dir,
                 entries,
                 geometry,
-                &term,
                 &style,
-                &mut budget,
-                &mut cache,
+                preview::Previews {
+                    term: &term,
+                    budget: &mut budget,
+                    cache: &mut cache,
+                },
             ),
             layout::Layout::Columns => {
-                columns::Plan::new(entries, term.cols, &style).write(out, entries, &style)
+                columns::Plan::new(entries, term.cols, &style).write(out, dir, entries, &style)
             }
             layout::Layout::Long => metadata::write(
                 out,
+                dir,
                 entries,
                 opts,
                 &style,
-                Some(metadata::Previews {
+                Some(preview::Previews {
                     term: &term,
                     budget: &mut budget,
                     cache: &mut cache,
                 }),
             ),
-            layout::Layout::Lines => entry::write_text(out, entries, &style),
+            layout::Layout::Lines => entry::write_text(out, dir, entries, &style),
         }
     };
     for path in &opts.paths {
@@ -189,6 +199,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
         if !operands.is_empty() {
             render(
                 out,
+                Path::new(""),
                 &operands,
                 if operands.len() == 1 {
                     &operands[0].name
@@ -206,12 +217,13 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
             style.paint(out, "1;34", &display::escape(path.as_os_str()))?;
             writeln!(out, ":")?;
         }
-        render(out, &listing.entries, path.as_os_str())?;
+        render(out, &listing.dir, &listing.entries, path.as_os_str())?;
         printed = true;
     }
     if !operands.is_empty() {
         render(
             out,
+            Path::new(""),
             &operands,
             if operands.len() == 1 {
                 &operands[0].name

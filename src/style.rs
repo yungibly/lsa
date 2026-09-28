@@ -2,13 +2,14 @@ use crate::{
     cli::{Options, When},
     display::escaped,
     entry::{Entry, Kind},
-    filetype::{self, Category},
+    filetype::Category,
     terminal::Terminal,
 };
 use std::{
     borrow::Cow,
     collections::HashMap,
     env,
+    ffi::OsStr,
     io::{self, Write},
     path::Path,
 };
@@ -134,17 +135,14 @@ impl Style {
                 }
             }
             Kind::Unknown => "?",
-            Kind::File
-                if entry.executable
-                    && filetype::classify(&entry.path).category == Category::File =>
-            {
+            Kind::File if entry.executable && entry.class.category == Category::File => {
                 if nerd {
                     "\u{f489}"
                 } else {
                     "*"
                 }
             }
-            Kind::File => match (filetype::classify(&entry.path).category, nerd) {
+            Kind::File => match (entry.class.category, nerd) {
                 (Category::Image, true) => "\u{f1c5}",
                 (Category::Image, false) => "▧",
                 (Category::Video, true) => "\u{f1c8}",
@@ -212,10 +210,7 @@ impl Style {
             Kind::Socket => ("so", "35"),
             Kind::Device => ("bd", "33"),
             Kind::Unknown => ("fi", "31"),
-            Kind::File
-                if entry.executable
-                    && filetype::classify(&entry.path).category == Category::File =>
-            {
+            Kind::File if entry.executable && entry.class.category == Category::File => {
                 ("ex", "32")
             }
             Kind::File => {
@@ -228,7 +223,7 @@ impl Style {
                 }
                 (
                     "fi",
-                    match filetype::classify(&entry.path).category {
+                    match entry.class.category {
                         Category::Image | Category::Video | Category::Audio => "35",
                         Category::Archive => "31",
                         Category::Code => "36",
@@ -241,30 +236,44 @@ impl Style {
         self.types.get(key).map(String::as_str).unwrap_or(default)
     }
 
-    pub fn write_name(&self, out: &mut impl Write, entry: &Entry) -> io::Result<()> {
+    /// Write a complete label. `dir` is the listing directory (empty for file
+    /// operands); it locates the entry for clickable links.
+    pub fn write_name(&self, out: &mut impl Write, dir: &Path, entry: &Entry) -> io::Result<()> {
         let name = escaped(&entry.name);
         let (icon, space) = if self.icons == Icons::None {
             ("", "")
         } else {
             (self.icon(entry), " ")
         };
-        self.write_parts(out, entry, &[icon, space, &name, self.suffix(entry)])
+        self.write_parts(out, dir, entry, &[icon, space, &name, self.suffix(entry)])
     }
 
     // Width calculation and wrapping always operate on plain text, before SGR
     // or OSC framing. Wrapping calls this separately for each label fragment.
-    pub fn write_label(&self, out: &mut impl Write, entry: &Entry, text: &str) -> io::Result<()> {
-        self.write_parts(out, entry, &[text])
+    pub fn write_label(
+        &self,
+        out: &mut impl Write,
+        dir: &Path,
+        entry: &Entry,
+        text: &str,
+    ) -> io::Result<()> {
+        self.write_parts(out, dir, entry, &[text])
     }
 
     // Keep one SGR/OSC frame around the complete label while writing borrowed
     // components. Safe names with icons or classification need no label buffer.
-    fn write_parts(&self, out: &mut impl Write, entry: &Entry, parts: &[&str]) -> io::Result<()> {
+    fn write_parts(
+        &self,
+        out: &mut impl Write,
+        dir: &Path,
+        entry: &Entry,
+        parts: &[&str],
+    ) -> io::Result<()> {
         if parts.iter().all(|part| part.is_empty()) {
             return Ok(());
         }
         if let Some(links) = &self.hyperlinks {
-            links.open(out, &entry.path)?;
+            links.open(out, dir, &entry.name)?;
         }
         let code = if self.color { self.code(entry) } else { "" };
         if !code.is_empty() {
@@ -323,14 +332,27 @@ impl Hyperlinks {
         }
     }
 
-    fn open(&self, out: &mut impl Write, path: &Path) -> io::Result<()> {
+    // `dir` is empty for a file operand, whose name is then its whole path.
+    fn open(&self, out: &mut impl Write, dir: &Path, name: &OsStr) -> io::Result<()> {
+        let absolute = if dir.as_os_str().is_empty() {
+            Path::new(name).is_absolute()
+        } else {
+            dir.is_absolute()
+        };
         out.write_all(&self.prefix)?;
-        if !path.is_absolute() {
+        if !absolute {
             out.write_all(&self.root)?;
         }
         // Preserve symlink and .. semantics; no canonicalization or per-entry
         // path/URL allocation. Common ASCII runs are written in one piece.
-        write_uri_bytes(out, path.as_os_str().as_encoded_bytes(), true)?;
+        let dir = dir.as_os_str().as_encoded_bytes();
+        if !dir.is_empty() {
+            write_uri_bytes(out, dir, true)?;
+            if !dir.ends_with(b"/") {
+                out.write_all(b"/")?;
+            }
+        }
+        write_uri_bytes(out, name.as_encoded_bytes(), true)?;
         out.write_all(b"\x1b\\")
     }
 }
@@ -368,13 +390,7 @@ mod tests {
         url
     }
     fn entry(name: &str, kind: Kind) -> Entry {
-        Entry {
-            path: name.into(),
-            name: name.into(),
-            kind,
-            metadata: None,
-            executable: false,
-        }
+        Entry::new(name, kind)
     }
 
     fn label(style: &Style, entry: &Entry) -> String {
@@ -398,7 +414,7 @@ mod tests {
                 assert_eq!(style.icon(&entry).width(), 1);
                 assert_eq!(style.label_width(&entry), name.width() + 2);
                 let mut out = Vec::new();
-                style.write_name(&mut out, &entry).unwrap();
+                style.write_name(&mut out, Path::new(""), &entry).unwrap();
                 assert!(
                     String::from_utf8(out)
                         .unwrap()
@@ -444,13 +460,8 @@ mod tests {
                             Kind::Unknown,
                         ] {
                             for name in names {
-                                let entry = Entry {
-                                    path: name.into(),
-                                    name: name.into(),
-                                    kind,
-                                    metadata: None,
-                                    executable: true,
-                                };
+                                let mut entry = Entry::new(name, kind);
+                                entry.executable = true;
                                 let text = label(&style, &entry);
                                 assert_eq!(style.label_width(&entry), text.width());
                                 let mut expected = Vec::new();
@@ -460,7 +471,7 @@ mod tests {
                                             expected,
                                             "\x1b]8;;{}\x1b\\",
                                             file_url(
-                                                &PathBuf::from("/lsa fixtures").join(&entry.path)
+                                                &PathBuf::from("/lsa fixtures").join(&entry.name)
                                             )
                                         )
                                         .unwrap();
@@ -473,7 +484,9 @@ mod tests {
                                     }
                                 }
                                 let mut actual = Vec::new();
-                                style.write_name(&mut actual, &entry).unwrap();
+                                style
+                                    .write_name(&mut actual, Path::new(""), &entry)
+                                    .unwrap();
                                 assert_eq!(actual, expected);
                             }
                         }
@@ -505,7 +518,7 @@ mod tests {
         ] {
             let mut out = Vec::new();
             links
-                .open(&mut out, Path::new(std::ffi::OsStr::from_bytes(path)))
+                .open(&mut out, Path::new(""), std::ffi::OsStr::from_bytes(path))
                 .unwrap();
             assert_eq!(
                 out,
@@ -521,7 +534,9 @@ mod tests {
         let bytes: Vec<u8> = (1..=255).collect();
         let path = Path::new(std::ffi::OsStr::from_bytes(&bytes));
         let mut out = Vec::new();
-        links.open(&mut out, path).unwrap();
+        links
+            .open(&mut out, Path::new(""), path.as_os_str())
+            .unwrap();
         assert_eq!(
             out,
             format!("\x1b]8;;{}\x1b\\", file_url(&Path::new("/").join(path))).as_bytes()

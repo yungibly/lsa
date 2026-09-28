@@ -15,6 +15,13 @@ pub const ALLOC_LIMIT: u64 = 64 * 1024 * 1024;
 pub const OUTPUT_LIMIT: usize = 128 * 1024 * 1024;
 pub const PLACEMENT_LIMIT: usize = 4096;
 
+/// Shared preview state for one invocation's grids and long-view miniatures.
+pub struct Previews<'a, 'cache> {
+    pub term: &'a crate::terminal::Terminal,
+    pub budget: &'a mut Budget,
+    pub cache: &'a mut Cache<'cache>,
+}
+
 pub struct Budget {
     pub attempts_left: usize,
     pub bytes_left: usize,

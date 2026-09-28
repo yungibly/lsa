@@ -1,15 +1,16 @@
 use crate::{
-    artwork,
-    cache::Cache,
-    columns,
+    artwork, columns,
     display::wrap,
     entry::Entry,
     kitty,
-    preview::{self, Budget},
+    preview::{self, Previews},
     style::Style,
     terminal::Terminal,
 };
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    path::Path,
+};
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,13 +55,17 @@ impl Geometry {
 
 pub fn write(
     out: &mut impl Write,
+    dir: &Path,
     entries: &[Entry],
     geometry: Geometry,
-    term: &Terminal,
     style: &Style,
-    budget: &mut Budget,
-    cache: &mut Cache<'_>,
+    previews: Previews<'_, '_>,
 ) -> io::Result<()> {
+    let Previews {
+        term,
+        budget,
+        cache,
+    } = previews;
     let Geometry {
         columns,
         tile,
@@ -76,7 +81,8 @@ pub fn write(
             || row.len() > budget.placements_left
         {
             let remaining = &entries[row_index * columns..];
-            return columns::Plan::new(remaining, term.cols, style).write(out, remaining, style);
+            return columns::Plan::new(remaining, term.cols, style)
+                .write(out, dir, remaining, style);
         }
         // Reserve the image area AND a label line before placing images. This
         // scrolls first, so a placement never extends below the visible screen.
@@ -88,7 +94,7 @@ pub fn write(
             // Stay below the row during decoding, so interrupting a slow input
             // leaves the cursor clear of images already emitted.
             let image = if entry.candidate() && budget.begin(bytes) {
-                preview::load(&entry.path, width, height, cache).unwrap_or_else(|_| {
+                preview::load(&entry.path(dir), width, height, cache).unwrap_or_else(|_| {
                     artwork::render(artwork::Icon::Error, width, height, style.color)
                 })
             } else {
@@ -109,7 +115,7 @@ pub fn write(
                 let text = label.get(line).map(String::as_str).unwrap_or("");
                 let left = (tile - text.width()) / 2;
                 write!(out, "{:left$}", "")?;
-                style.write_label(out, entry, text)?;
+                style.write_label(out, dir, entry, text)?;
                 write!(out, "{:padding$}", "", padding = tile - text.width() - left)?;
             }
             out.write_all(b"\r\n")?;

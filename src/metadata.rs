@@ -1,18 +1,17 @@
 use crate::{
     artwork,
-    cache::Cache,
     cli::Options,
     display::escape,
     entry::{Entry, Kind},
     kitty,
-    preview::{self, Budget},
+    preview::{self, Previews},
     style::Style,
-    terminal::Terminal,
 };
 use std::{
     fmt::Write as _,
     fs,
     io::{self, Write},
+    path::Path,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,14 +182,9 @@ pub fn parse_fields(list: &str) -> Result<Vec<Field>, String> {
     Ok(fields)
 }
 
-pub struct Previews<'a, 'cache> {
-    pub term: &'a Terminal,
-    pub budget: &'a mut Budget,
-    pub cache: &'a mut Cache<'cache>,
-}
-
 pub fn write(
     out: &mut impl Write,
+    dir: &Path,
     entries: &[Entry],
     opts: &Options,
     style: &Style,
@@ -286,7 +280,7 @@ pub fn write(
             let bytes = kitty::byte_len(w, h, 3, 1);
             if p.budget.begin(bytes) {
                 Some(
-                    preview::load(&entry.path, w, h, p.cache).unwrap_or_else(|_| {
+                    preview::load(&entry.path(dir), w, h, p.cache).unwrap_or_else(|_| {
                         artwork::render(artwork::Icon::Error, w, h, style.color)
                     }),
                 )
@@ -356,7 +350,7 @@ pub fn write(
                 ));
                 write!(out, "\x1b[{}G", metadata_width + 5)?;
             } else if style.icons != crate::style::Icons::None {
-                style.write_label(out, entry, style.icon(entry))?;
+                style.write_label(out, dir, entry, style.icon(entry))?;
                 write!(
                     out,
                     "{:padding$}",
@@ -366,12 +360,12 @@ pub fn write(
             } else {
                 write!(out, "    ")?;
             }
-            style.write_label(out, entry, &style.name(entry))?;
+            style.write_label(out, dir, entry, &style.name(entry))?;
         } else {
-            style.write_name(out, entry)?;
+            style.write_name(out, dir, entry)?;
         }
         if entry.kind == Kind::Link {
-            let target = fs::read_link(&entry.path)
+            let target = fs::read_link(entry.path(dir))
                 .map(|p| escape(p.as_os_str()))
                 .unwrap_or_else(|_| "?".into());
             style.paint(out, "2", &format!(" -> {target}"))?;
@@ -537,20 +531,22 @@ mod tests {
     }
     #[test]
     fn missing_metadata_keeps_the_entry_and_fields() {
-        let entry = Entry {
-            path: "lost".into(),
-            name: "lost".into(),
-            kind: Kind::File,
-            metadata: None,
-            executable: false,
-        };
+        let entry = Entry::new("lost", Kind::File);
         let opts = Options {
             long: true,
             fields: vec![Field::Size, Field::Mode],
             ..Options::default()
         };
         let mut out = Vec::new();
-        write(&mut out, &[entry], &opts, &Style::default(), None).unwrap();
+        write(
+            &mut out,
+            Path::new(""),
+            &[entry],
+            &opts,
+            &Style::default(),
+            None,
+        )
+        .unwrap();
         assert_eq!(out, b"? ? lost\n");
     }
     #[test]
@@ -596,21 +592,16 @@ mod tests {
             );
             assert_eq!(owners.name(u32::MAX, group), None);
         }
-        let mut entry = Entry {
-            path: "entry".into(),
-            name: "entry".into(),
-            kind: Kind::File,
-            metadata: Some(Box::new(crate::entry::Details {
-                mode: 0,
-                uid: u32::MAX,
-                gid: 63,
-                len: 0,
-                links: u64::MAX,
-                modified: 0,
-                modified_nsec: 0,
-            })),
-            executable: false,
-        };
+        let mut entry = Entry::new("entry", Kind::File);
+        entry.metadata = Some(Box::new(crate::entry::Details {
+            mode: 0,
+            uid: u32::MAX,
+            gid: 63,
+            len: 0,
+            links: u64::MAX,
+            modified: 0,
+            modified_nsec: 0,
+        }));
         let opts = Options::default();
         let mut value = String::new();
         for (field, expected) in [

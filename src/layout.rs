@@ -109,13 +109,7 @@ mod tests {
         (0..images + files)
             .map(|i| {
                 let name = format!("{i:03}.{}", if i < images { "png" } else { "txt" });
-                Entry {
-                    path: (&name).into(),
-                    name: name.into(),
-                    kind: Kind::File,
-                    metadata: None,
-                    executable: false,
-                }
+                Entry::new(name, Kind::File)
             })
             .collect()
     }

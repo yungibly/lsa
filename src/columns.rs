@@ -1,5 +1,8 @@
 use crate::{entry::Entry, style::Style};
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    path::Path,
+};
 
 // Maxima for each row-wise column. Search is bounded even on huge reported TTYs.
 // Store widths, not another full copy of every escaped filename.
@@ -39,13 +42,19 @@ impl Plan {
         Self { widths, cells }
     }
 
-    pub fn write(&self, out: &mut impl Write, entries: &[Entry], style: &Style) -> io::Result<()> {
+    pub fn write(
+        &self,
+        out: &mut impl Write,
+        dir: &Path,
+        entries: &[Entry],
+        style: &Style,
+    ) -> io::Result<()> {
         for (row, row_widths) in entries
             .chunks(self.cells.len())
             .zip(self.widths.chunks(self.cells.len()))
         {
             for (i, entry) in row.iter().enumerate() {
-                style.write_name(out, entry)?;
+                style.write_name(out, dir, entry)?;
                 if i + 1 < row.len() {
                     write!(
                         out,
@@ -70,17 +79,11 @@ mod tests {
     fn output(names: &[&str], cols: usize) -> String {
         let entries: Vec<_> = names
             .iter()
-            .map(|name| Entry {
-                path: name.into(),
-                name: (*name).into(),
-                kind: Kind::File,
-                metadata: None,
-                executable: false,
-            })
+            .map(|name| Entry::new(name, Kind::File))
             .collect();
         let mut out = Vec::new();
         Plan::new(&entries, cols, &Style::default())
-            .write(&mut out, &entries, &Style::default())
+            .write(&mut out, Path::new(""), &entries, &Style::default())
             .unwrap();
         String::from_utf8(out).unwrap()
     }
