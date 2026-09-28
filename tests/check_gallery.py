@@ -48,6 +48,55 @@ def peak_memory(args):
     return usage.ru_maxrss * (1 if sys.platform == 'darwin' else 1024), data.count(b'\x1b_Ga=T')
 
 
+def check_system_formats(root):
+    """macOS previews HEIC/AVIF/TIFF/PSD and large JPEGs through ImageIO;
+    other platforms keep those formats as image artwork."""
+    formats = root / 'system'; formats.mkdir()
+    source = ROOT / 'img-test/generated/landscape.png'  # 320x160: red | blue
+    if sys.platform != 'darwin':
+        for name in ['photo.heic', 'photo.avif', 'scan.tiff', 'layers.psd', 'camera.CR3']:
+            (formats / name).write_bytes(b'not decoded here')
+        data = run(['--diagnose', formats])
+        assert b'preview_candidates=0' in data, data
+        return 1
+    convert = lambda fmt, src, name, *extra: subprocess.run(
+        ['sips', *extra, '-s', 'format', fmt, str(src), '--out', str(formats / name)],
+        check=True, capture_output=True)
+    for fmt, name in [('heic', 'a.heic'), ('avif', 'b.avif'), ('tiff', 'c.tiff'), ('psd', 'd.psd')]:
+        convert(fmt, source, name)
+    convert('tiff', ROOT / 'img-test/generated/transparent.png', 'e-alpha.tiff')
+    # 6000x3000 = 18 MP: beyond the Rust decoders' 16 MP limit, but ImageIO
+    # decodes JPEG at reduced resolution.
+    convert('jpeg', source, 'f-large.jpg', '-z', '3000', '6000')
+    (formats / 'g-empty.heic').write_bytes(b'')
+    geometry = dict(cols=122, rows=40, pixels=(976, 680))
+    data = run(['--grid', formats], **geometry)
+    frames = images(data, pixels=True)
+    assert len(frames) == 7, len(frames)
+    def pixel(frame, fx, fy):
+        control, raw = frame
+        w, h = int(control[b's']), int(control[b'v'])
+        i = (int(fy * h) * w + int(fx * w)) * 4
+        return raw[i:i + 4]
+    for frame in frames[:4] + frames[5:6]:
+        left, right = pixel(frame, 0.35, 0.5), pixel(frame, 0.65, 0.5)
+        assert left[0] > 180 and left[2] < 90, left     # red half
+        assert right[2] > 180 and right[0] < 90, right  # blue half
+    # Straight alpha survives premultiplied drawing: green disc over checker.
+    center = pixel(frames[4], 0.5, 0.5)
+    assert center[1] > 150 and center[1] > center[0] + 60 and center[3] == 255, center
+    # An empty HEIC is a failed preview: shared error artwork, name intact.
+    error = images(run(['--grid', ROOT / 'img-test/generated/broken.png'], **geometry), pixels=True)
+    assert frames[6][1] == error[0][1] and b'g-empty.heic' in plain(data)
+    # Long view miniatures and the opt-in cache use the same backend.
+    data = run(['-l', formats], **geometry)
+    assert len(images(data)) == 7
+    cache = root / 'system-cache'
+    flags = [f'--cache-dir={cache}', '--grid', formats]
+    assert run(flags, **geometry) == run(flags, **geometry) == run(['--grid', formats], **geometry)
+    return 4
+
+
 def check_decoder_memory(root):
     """Decoding more images must not retain memory per image. Sources over
     4 MiB exposed macOS allocator retention before whole reads were reserved."""
@@ -79,6 +128,7 @@ def main():
     with tempfile.TemporaryDirectory(dir=ROOT / 'target', prefix='gallery-') as temp:
         root = Path(temp)
         cases += check_decoder_memory(root)
+        cases += check_system_formats(root)
         source = root / 'source.png'; source.write_bytes(png())
         many = root / 'many'; many.mkdir()
         for i in range(300): (many / f'image-{i:03}.png').symlink_to(source)

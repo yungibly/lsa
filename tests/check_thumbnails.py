@@ -51,7 +51,7 @@ def main():
         for name in ['folder','other-folder']: (mixed/name).mkdir()
         (mixed/'broken.png').write_text('not an image')
         (mixed/'unknown.weird').touch()
-        (mixed/'unsupported.HEIC').touch()
+        (mixed/'unsupported.RAW').touch()
         shutil.copyfile(ROOT/'img-test/generated/still.gif',mixed/'photo.GIF')
         (mixed/'link.png').symlink_to('missing.png')
         data=run(['--grid',mixed],decorated=True,cols=122,rows=40,pixels=(976,680))

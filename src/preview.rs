@@ -15,6 +15,9 @@ use std::{
 };
 
 pub const INPUT_LIMIT: u64 = 32 * 1024 * 1024;
+/// ImageIO reads only what it needs through callbacks (a RAW file's embedded
+/// preview, for example), so its sources may be larger.
+pub const SYSTEM_INPUT_LIMIT: u64 = 256 * 1024 * 1024;
 pub const PIXEL_LIMIT: u64 = 16_000_000;
 pub const ALLOC_LIMIT: u64 = 64 * 1024 * 1024;
 pub const OUTPUT_LIMIT: usize = 128 * 1024 * 1024;
@@ -128,7 +131,13 @@ pub fn load_shared(
         .custom_flags(libc::O_NONBLOCK)
         .open(path)?;
     let meta = file.metadata()?;
-    if !meta.is_file() || meta.len() > INPUT_LIMIT {
+    let system = crate::filetype::system_decoder(path);
+    let limit = if system {
+        SYSTEM_INPUT_LIMIT
+    } else {
+        INPUT_LIMIT
+    };
+    if !meta.is_file() || meta.len() > limit {
         return Err(invalid("not a bounded regular file").into());
     }
     // Open/validate the source even on hits: unreadable, replaced, oversized, or
@@ -141,18 +150,40 @@ pub fn load_shared(
         }
         return Ok(image);
     }
-    let source = Bounded {
-        reader: &mut file,
-        len: meta.len(),
-        position: 0,
-    };
-    let image = decode_reader(BufReader::new(source), width, height)?;
+    let image = decode_file(&mut file, meta.len(), width, height, system)?;
     if let Some(key) = key
         && key == Key::new(&file.metadata()?, width, height)
     {
         cache().put(&key, &image);
     }
     Ok(image)
+}
+
+fn decode_file(
+    file: &mut fs::File,
+    len: u64,
+    width: u32,
+    height: u32,
+    system: bool,
+) -> Result<RgbaImage, Box<dyn std::error::Error>> {
+    #[cfg(target_os = "macos")]
+    if system {
+        match crate::imageio::thumbnail(file, len, width, height, PIXEL_LIMIT) {
+            Ok(thumb) => return Ok(canvas(&thumb, width, height)),
+            // A JPEG ImageIO rejects, or a misnamed file, may still suit the
+            // Rust decoders; ImageIO-only sizes cannot.
+            Err(error) if len > INPUT_LIMIT => return Err(invalid(error).into()),
+            Err(_) => {}
+        }
+    }
+    let _ = system;
+    // ImageIO reads with pread, leaving this descriptor's offset at the start.
+    let source = Bounded {
+        reader: file,
+        len,
+        position: 0,
+    };
+    decode_reader(BufReader::new(source), width, height)
 }
 
 /// Snapshot-length reader: a growing source cannot make a decoder read or
@@ -418,6 +449,22 @@ mod tests {
         bytes.clear();
         source.read_to_end(&mut bytes).unwrap();
         assert_eq!(bytes, b"45");
+    }
+    #[test]
+    fn misnamed_sources_still_decode_by_content() {
+        // A PNG named .jpg: ImageIO (macOS) refuses the content type and the
+        // Rust decoders sniff it; elsewhere the Rust decoders read it directly.
+        let directory =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/preview-tests");
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join(format!("{}-misnamed.jpg", std::process::id()));
+        RgbaImage::from_pixel(30, 20, Rgba([200, 30, 30, 255]))
+            .save_with_format(&path, image::ImageFormat::Png)
+            .unwrap();
+        let mut cache = Cache::new(None);
+        let image = load(&path, 30, 20, &mut cache);
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(image.unwrap().get_pixel(15, 10), &Rgba([200, 30, 30, 255]));
     }
     #[test]
     fn whole_source_reads_allocate_the_validated_length_once() {

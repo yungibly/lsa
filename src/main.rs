@@ -6,6 +6,8 @@ mod display;
 mod entry;
 mod filetype;
 mod grid;
+#[cfg(target_os = "macos")]
+mod imageio;
 mod kitty;
 mod layout;
 mod metadata;
@@ -81,7 +83,7 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     if opts.diagnose {
         writeln!(
             out,
-            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\npreview_attempts={}\nimage_output_limit={}\nimage_placement_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ncache={}\nterminal_validation=see docs/compatibility.md",
+            "stdout_tty={}\nterminal={}\nversion={}\ngeometry={}x{}\ncell_pixels={}x{}{}\nkitty={}\nreason={}\npreview_attempts={}\nimage_output_limit={}\nimage_placement_limit={}\ninput_limit={}\npixel_limit={}\ndecoder_alloc_limit={} (best effort)\ndecode_workers={}\nsystem_decoder={}\ncache={}\nterminal_validation=see docs/compatibility.md",
             term.tty,
             term.name,
             term.version,
@@ -102,6 +104,12 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
             preview::INPUT_LIMIT,
             preview::PIXEL_LIMIT,
             preview::ALLOC_LIMIT,
+            pool::workers(),
+            if cfg!(target_os = "macos") {
+                "ImageIO for JPEG, HEIF, AVIF, TIFF, JPEG XL, PSD and camera RAW"
+            } else {
+                "none"
+            },
             if opts.cache_path().is_some() {
                 "opt-in (not accessed by diagnose)"
             } else {

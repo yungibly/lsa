@@ -15,9 +15,14 @@ use std::{
 };
 
 // Bump BOTH for changes to the record, source limits, decoder, orientation,
-// resize filter, transparency checker, or other pixel transforms.
-pub const NAMESPACE: &str = "lsa-thumbnails-v2";
-const MAGIC: &[u8; 8] = b"LSATHM02";
+// resize filter, transparency checker, or other pixel transforms. Pixels
+// depend on the platform decoder (ImageIO on macOS), so the magic does too.
+pub const NAMESPACE: &str = "lsa-thumbnails-v3";
+const MAGIC: &[u8; 8] = if cfg!(target_os = "macos") {
+    b"LSATHM3M"
+} else {
+    b"LSATHM03"
+};
 pub const SLOTS: usize = 64;
 const WAYS: usize = 8;
 const KEY_LEN: usize = 80;

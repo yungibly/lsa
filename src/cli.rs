@@ -110,8 +110,8 @@ Examples:
 Everyday options:
   -a, -A, --all         Include hidden entries (without . and ..)
   -l, --long            Always show details; tiny previews on graphics terminals
-  -C, --columns         Compact text columns sorted down; no automatic image grid
-  -x                    Compact text columns sorted across rows
+  -C, --columns         Compact columns sorted down; no automatic image grid
+  -x                    Compact columns sorted across rows
   --12-hour             Show modification times with AM/PM (default: 24-hour)
   -h                    Human-readable sizes (the default); --bytes uses bytes
   -n                    Long listing with numeric uid/gid and link count
@@ -146,14 +146,14 @@ Appearance:
   --no-hyperlink        Disable links
 
 Images:
-  --grid                Compact thumbnails and folder/file artwork for every tile
+  --grid                Thumbnail grid; built-in artwork for other entries
   --thumbnail-size=N    Grid height in terminal rows (1..12; default 3)
                         Width/spacing follow size; shrinks to fit the terminal
                         Long output keeps its one-row miniatures
   --no-images           Text only; never open image contents
   --protocol=auto|kitty|none
                         Auto recognizes direct Ghostty/Kitty sessions
-  --preview-limit=N     At most N attempts across all paths (0..4096; default 256)
+  --preview-limit=N     Preview attempts across all paths (0..4096; default 256)
   --cache-dir=PATH      Opt-in, bounded thumbnail cache (also accepts a space)
   --no-cache            Disable caching regardless of option order
   --clear-cache         Clear the selected cache and exit; requires --cache-dir
@@ -165,14 +165,15 @@ Images:
 Output always stays in terminal scrollback and returns to the shell. Image-heavy
 listings (at least half image candidates), small mixed listings, and individual
 images preview automatically. Up to four decoders work ahead in listing order.
-Output is capped at 128 MiB of image commands / 4096 placements, including artwork;
-remaining names print as compact text.
-Terminal text defaults to long details; automatic image grids remain enabled.
-No pager or input handling. -l uses one-row thumbnails; -1 and --no-images keep text.
-Long options (-l, -n, --header, --fields) select details over --grid; -C, -1 and image
-disabling flags also override --grid, regardless of order. A notice explains this.
-Pipes default to plain names, one per line; --grid never sends images to pipes.
-Unknown terminals and multiplexers use text. Preview failures are quiet and never
+Output is capped at 128 MiB of image commands / 4096 placements, including
+artwork; remaining names print as compact text. Terminal text defaults to long
+details; -l uses one-row thumbnails; -1 and --no-images keep text. No pager or
+input handling. Long options (-l, -n, --header, --fields) select details over
+--grid; -C, -x, -1 and image-disabling flags also override --grid, regardless of
+order. A notice explains this. Pipes default to plain names, one per line;
+--grid never sends images to pipes. Unknown terminals, multiplexers and SSH
+sessions use text. On macOS, HEIC/HEIF, AVIF, TIFF, JPEG XL, PSD and camera RAW
+previews use the system image decoders. Preview failures are quiet and never
 hide names. Filenames are complete, with terminal controls escaped.
 
 Exit: 0 success (including closed pipes), 1 listing/output/cache-clear error,

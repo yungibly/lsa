@@ -12,7 +12,7 @@ import tempfile
 from check_pty import APC, BIN, ROOT, capture, images
 
 STATS = re.compile(rb"lsa: cache: (\d+) hits, (\d+) misses, (\d+) writes, (\d+) errors\n")
-NAMESPACE = "lsa-thumbnails-v2"
+NAMESPACE = "lsa-thumbnails-v3"
 
 
 def run(args, **kwargs):
