@@ -171,8 +171,10 @@ markers stream without a combined label allocation. Safe filenames are borrowed
 without an escaped copy. [Measurements](benchmarks/README.md) distinguish application cost
 from terminal rendering and warm from empty thumbnail caches.
 
-Raster sources use a bounded buffered reader, avoiding an application copy of the
-entire compressed file (some codecs still buffer internally). JPEG orientation is
+Raster sources use a length-bounded buffered reader. The JPEG decoder still holds the
+whole compressed file; whole-file reads reserve the validated length once, so repeated
+decodes no longer accumulate memory (a 64-photo gallery peaked at 561 MB before this
+fix and 24 MB after on macOS). JPEG orientation is
 applied to the thumbnail, avoiding full-resolution rotation. Kitty encoding uses
 4 KiB of reusable scratch space. Raising the output allowance does not preallocate
 it; bytes stream as each entry finishes. The allowance fits all 256 default source

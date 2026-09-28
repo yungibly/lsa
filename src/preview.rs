@@ -110,6 +110,18 @@ impl<R: Read> Read for Bounded<R> {
         self.position += read as u64;
         Ok(read)
     }
+    // Decoders that consume the whole source (the JPEG decoder does) otherwise
+    // grow their buffer by repeated reallocation: this wrapper hides the file
+    // length from std. On macOS that retained ~8 MiB per decoded photo. Reserve
+    // the validated remainder once; a source that grows is still cut off.
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let remaining = self.len - self.position;
+        buf.try_reserve_exact(remaining as usize)
+            .map_err(|_| io::Error::from(io::ErrorKind::OutOfMemory))?;
+        let read = (&mut self.reader).take(remaining).read_to_end(buf)?;
+        self.position += read as u64;
+        Ok(read)
+    }
 }
 impl<R: Seek> Seek for Bounded<R> {
     fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
@@ -347,6 +359,40 @@ mod tests {
         bytes.clear();
         source.read_to_end(&mut bytes).unwrap();
         assert_eq!(bytes, b"45");
+    }
+    #[test]
+    fn whole_source_reads_allocate_the_validated_length_once() {
+        let data = vec![7_u8; 100_000];
+        // Directly, and through the BufReader that decoders receive after format
+        // sniffing has already buffered the first bytes.
+        let mut direct = Bounded {
+            reader: Cursor::new(&data),
+            len: 60_000,
+            position: 0,
+        };
+        let mut bytes = Vec::new();
+        assert_eq!(direct.read_to_end(&mut bytes).unwrap(), 60_000);
+        assert_eq!((bytes.len(), bytes.capacity()), (60_000, 60_000));
+        assert_eq!(direct.position, 60_000);
+        let mut buffered = BufReader::new(Bounded {
+            reader: Cursor::new(&data),
+            len: 60_000,
+            position: 0,
+        });
+        buffered.fill_buf().unwrap();
+        let mut bytes = Vec::new();
+        buffered.read_to_end(&mut bytes).unwrap();
+        assert_eq!((bytes.len(), bytes.capacity()), (60_000, 60_000));
+        // A partially consumed source reserves only its remainder.
+        let mut partial = Bounded {
+            reader: Cursor::new(&data),
+            len: 60_000,
+            position: 0,
+        };
+        partial.read_exact(&mut [0; 10_000]).unwrap();
+        let mut bytes = Vec::new();
+        partial.read_to_end(&mut bytes).unwrap();
+        assert_eq!((bytes.len(), bytes.capacity()), (50_000, 50_000));
     }
     #[test]
     fn every_exif_orientation_preserves_asymmetric_thumbnail_content() {

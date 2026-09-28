@@ -1,14 +1,68 @@
 #!/usr/bin/env python3
 """Larger galleries, adjustable frames, option notices and vector previews."""
 from pathlib import Path
+import fcntl
 import os
+import pty
+import select
 import struct
 import subprocess
+import sys
 import tempfile
+import termios
 import zlib
 from check_pty import APC, BIN, ROOT, capture, check_cursor, images
 from check_layout import plain, run
 from check_thumbnails import replay
+
+
+def peak_memory(args):
+    """Peak resident memory of one PTY listing, and its placement count."""
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 122, 976, 680))
+    env = os.environ.copy()
+    for name in ['TMUX', 'STY', 'ZELLIJ', 'SSH_CONNECTION', 'SSH_CLIENT', 'SSH_TTY']:
+        env.pop(name, None)
+    env.update(TERM='xterm-ghostty', TERM_PROGRAM='ghostty')
+    child = subprocess.Popen([str(BIN), *map(str, args)], env=env, stdin=subprocess.DEVNULL,
+                             stdout=slave, stderr=subprocess.DEVNULL)
+    os.close(slave)
+    data = bytearray()
+    try:
+        while True:
+            if not select.select([master], [], [], 15)[0]:
+                raise TimeoutError('memory fixture listing stalled')
+            try:
+                chunk = os.read(master, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            data.extend(chunk)
+        _, status, usage = os.wait4(child.pid, 0)
+    finally:
+        os.close(master)
+    assert os.waitstatus_to_exitcode(status) == 0
+    # ru_maxrss is bytes on macOS and KiB on Linux.
+    return usage.ru_maxrss * (1 if sys.platform == 'darwin' else 1024), data.count(b'\x1b_Ga=T')
+
+
+def check_decoder_memory(root):
+    """Decoding more images must not retain memory per image. Sources over
+    4 MiB exposed macOS allocator retention before whole reads were reserved."""
+    fixture = BIN.parent / 'examples/jpeg_fixture'
+    assert fixture.exists(), 'Build the jpeg_fixture example (cargo build --release --examples)'
+    source = root / 'noise.jpg'
+    subprocess.run([str(fixture), str(source), '2000', '1400'], check=True)
+    assert source.stat().st_size > 4 * 1024 * 1024
+    photos = root / 'noise'; photos.mkdir()
+    for i in range(24): (photos / f'noise-{i:02}.jpg').symlink_to(source)
+    few, placed = peak_memory(['--grid', '--preview-limit=8', photos])
+    assert placed == 10  # Five tiles per row: 8 previews, artwork ends row two.
+    many, placed = peak_memory(['--grid', '--preview-limit=24', photos])
+    assert placed == 24
+    assert many - few < 24 * 1024 * 1024, (few, many)
+    return 1
 
 
 def png():
@@ -23,6 +77,7 @@ def main():
     cases = 0
     with tempfile.TemporaryDirectory(dir=ROOT / 'target', prefix='gallery-') as temp:
         root = Path(temp)
+        cases += check_decoder_memory(root)
         source = root / 'source.png'; source.write_bytes(png())
         many = root / 'many'; many.mkdir()
         for i in range(300): (many / f'image-{i:03}.png').symlink_to(source)
