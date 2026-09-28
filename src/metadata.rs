@@ -3,7 +3,7 @@ use crate::{
     cli::{Options, Time},
     display::escape,
     entry::{Entry, Kind},
-    kitty::{self, Payload},
+    kitty, pool,
     preview::{self, Previews},
     style::Style,
 };
@@ -12,6 +12,7 @@ use std::{
     fs,
     io::{self, Write},
     path::Path,
+    sync::Mutex,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -220,7 +221,7 @@ pub fn write(
     entries: &[Entry],
     opts: &Options,
     style: &Style,
-    mut previews: Option<Previews<'_, '_>>,
+    previews: Option<Previews<'_, '_>>,
 ) -> io::Result<()> {
     use unicode_width::UnicodeWidthStr;
     let fields = &selected(opts);
@@ -286,134 +287,166 @@ pub fn write(
     let metadata_width = widths[..fields.len()].iter().sum::<usize>() + fields.len();
     // One-row miniatures add no height. Each occupies the name's icon gutter,
     // and narrow terminals retain the ordinary complete text listing.
-    let mini = previews
-        .as_ref()
-        .filter(|p| {
-            p.term.kitty
-                && p.term.rows >= 3
-                && p.term.cols >= metadata_width + 4 + 12
-                && p.budget.attempts_left > 0
+    let mut mini = None;
+    let mut jobs = Vec::new();
+    let mut attempts = vec![false; entries.len()];
+    let mut none = crate::cache::Cache::new(None);
+    let (cache, mut art) = match previews {
+        Some(Previews {
+            term,
+            budget,
+            cache,
+            art,
+        }) => {
+            if term.kitty
+                && term.rows >= 3
+                && term.cols >= metadata_width + 4 + 12
+                && budget.attempts_left > 0
                 && entries.iter().any(Entry::candidate)
-        })
-        .map(|p| {
-            let w = f64::from(p.term.cell_width) * 3.0;
-            let h = f64::from(p.term.cell_height);
-            let scale = (96.0 / w).min(64.0 / h).min(1.0);
-            (
-                (w * scale).round().max(1.0) as u32,
-                (h * scale).round().max(1.0) as u32,
-            )
-        });
-    for (row, entry) in entries.iter().enumerate() {
-        // Some(Err) marks a failed preview, drawn with shared error artwork.
-        let image: Option<Result<Payload, ()>> = if let Some((w, h)) = mini
-            && entry.candidate()
-        {
-            let p = previews.as_mut().unwrap();
-            let bytes = kitty::byte_len(w, h, 3, 1);
-            p.budget.begin(bytes).then(|| {
-                preview::load(&entry.path(dir), w, h, p.cache)
-                    .map(Payload::new)
-                    .map_err(|_| ())
-            })
-        } else {
-            None
-        };
-        if image.is_some() {
-            // Scroll before placement, then write this entry into the reserved
-            // line. Do not print spaces over the image cells after placing it.
-            out.write_all(b"\r\n\x1b[1A\r")?;
-        }
-        for (i, field) in fields.iter().enumerate() {
-            field.value(
-                &mut value,
-                entry,
-                opts,
-                &mut owners,
-                times.get(row).copied().flatten(),
-            );
-            let padding = widths[i] - value.width();
-            let right = matches!(
-                field,
-                Field::Links
-                    | Field::Uid
-                    | Field::Gid
-                    | Field::Size
-                    | Field::Allocated
-                    | Field::Inode
-            );
-            if right {
-                write!(out, "{:padding$}", "")?;
-            }
-            if *field == Field::Mode && style.color {
-                // One SGR per run of equally colored characters, then a single
-                // reset: each switch resets first, so dim never carries over.
-                let mut current = "";
-                for c in value.chars() {
-                    let code = match c {
-                        'r' => "33",
-                        'w' => "31",
-                        'x' | 's' | 't' => "32",
-                        '-' => "2",
-                        _ => "36",
-                    };
-                    if code != current {
-                        write!(out, "\x1b[0;{code}m")?;
-                        current = code;
+            {
+                let w = f64::from(term.cell_width) * 3.0;
+                let h = f64::from(term.cell_height);
+                let scale = (96.0 / w).min(64.0 / h).min(1.0);
+                let (w, h) = (
+                    (w * scale).round().max(1.0) as u32,
+                    (h * scale).round().max(1.0) as u32,
+                );
+                // Settle attempts in listing order first, exactly as drawing
+                // would, so workers can decode ahead without changing output.
+                let bytes = kitty::byte_len(w, h, 3, 1);
+                for (attempt, entry) in attempts.iter_mut().zip(entries) {
+                    if entry.candidate() && budget.begin(bytes) {
+                        budget.placed(bytes);
+                        *attempt = true;
+                        jobs.push(preview::Job {
+                            path: entry.path(dir),
+                            width: w,
+                            height: h,
+                        });
                     }
-                    out.write_all(c.encode_utf8(&mut [0; 4]).as_bytes())?;
                 }
-                out.write_all(b"\x1b[0m")?;
-            } else {
-                style.paint(
-                    out,
-                    match field {
-                        Field::Size | Field::Allocated => "32",
-                        Field::Modified => "2",
-                        Field::User | Field::Group | Field::Uid | Field::Gid => "33",
-                        _ => "2",
-                    },
-                    &value,
-                )?;
+                mini = Some((w, h));
             }
-            if !right {
-                write!(out, "{:padding$}", "")?;
-            }
-            write!(out, " ")?;
+            (cache, Some(art))
         }
-        if let Some((w, h)) = mini {
-            if let Some(image) = image {
-                let p = previews.as_mut().unwrap();
-                match &image {
-                    Ok(payload) => payload.write(out, 3, 1)?,
-                    Err(()) => p.art.get(Icon::Error, w, h, style.color).write(out, 3, 1)?,
+        None => (&mut none, None),
+    };
+    let cache = Mutex::new(cache);
+    pool::ordered(
+        &jobs,
+        pool::workers(),
+        |job| preview::decode(job, &cache),
+        |results| -> io::Result<()> {
+            for (row, entry) in entries.iter().enumerate() {
+                // Some(Err) marks a failed preview, drawn with shared error art.
+                let image = if attempts[row] {
+                    // Show finished lines while a slow source decodes.
+                    if !results.is_ready() {
+                        out.flush()?;
+                    }
+                    Some(results.next().unwrap_or(Err(())))
+                } else {
+                    None
+                };
+                if image.is_some() {
+                    // Scroll before placement, then write this entry into the
+                    // reserved line. Do not print spaces over the image cells.
+                    out.write_all(b"\r\n\x1b[1A\r")?;
                 }
-                p.budget.placed(kitty::byte_len(w, h, 3, 1));
-                write!(out, "\x1b[{}G", metadata_width + 5)?;
-            } else if style.icons != crate::style::Icons::None {
-                style.write_label(out, dir, entry, style.icon(entry))?;
-                write!(
-                    out,
-                    "{:padding$}",
-                    "",
-                    padding = 4 - style.icon(entry).width()
-                )?;
-            } else {
-                write!(out, "    ")?;
+                for (i, field) in fields.iter().enumerate() {
+                    field.value(
+                        &mut value,
+                        entry,
+                        opts,
+                        &mut owners,
+                        times.get(row).copied().flatten(),
+                    );
+                    let padding = widths[i] - value.width();
+                    let right = matches!(
+                        field,
+                        Field::Links
+                            | Field::Uid
+                            | Field::Gid
+                            | Field::Size
+                            | Field::Allocated
+                            | Field::Inode
+                    );
+                    if right {
+                        write!(out, "{:padding$}", "")?;
+                    }
+                    if *field == Field::Mode && style.color {
+                        // One SGR per run of equally colored characters, then a
+                        // single reset: each switch resets, so dim never carries.
+                        let mut current = "";
+                        for c in value.chars() {
+                            let code = match c {
+                                'r' => "33",
+                                'w' => "31",
+                                'x' | 's' | 't' => "32",
+                                '-' => "2",
+                                _ => "36",
+                            };
+                            if code != current {
+                                write!(out, "\x1b[0;{code}m")?;
+                                current = code;
+                            }
+                            out.write_all(c.encode_utf8(&mut [0; 4]).as_bytes())?;
+                        }
+                        out.write_all(b"\x1b[0m")?;
+                    } else {
+                        style.paint(
+                            out,
+                            match field {
+                                Field::Size | Field::Allocated => "32",
+                                Field::Modified => "2",
+                                Field::User | Field::Group | Field::Uid | Field::Gid => "33",
+                                _ => "2",
+                            },
+                            &value,
+                        )?;
+                    }
+                    if !right {
+                        write!(out, "{:padding$}", "")?;
+                    }
+                    write!(out, " ")?;
+                }
+                if let Some((w, h)) = mini {
+                    if let Some(image) = image {
+                        match &image {
+                            Ok(payload) => payload.write(out, 3, 1)?,
+                            Err(()) => art
+                                .as_deref_mut()
+                                .expect("previews supply artwork")
+                                .get(Icon::Error, w, h, style.color)
+                                .write(out, 3, 1)?,
+                        }
+                        write!(out, "\x1b[{}G", metadata_width + 5)?;
+                    } else if style.icons != crate::style::Icons::None {
+                        style.write_label(out, dir, entry, style.icon(entry))?;
+                        write!(
+                            out,
+                            "{:padding$}",
+                            "",
+                            padding = 4 - style.icon(entry).width()
+                        )?;
+                    } else {
+                        write!(out, "    ")?;
+                    }
+                    style.write_label(out, dir, entry, &style.name(entry))?;
+                } else {
+                    style.write_name(out, dir, entry)?;
+                }
+                if entry.kind == Kind::Link {
+                    let target = fs::read_link(entry.path(dir))
+                        .map(|p| escape(p.as_os_str()))
+                        .unwrap_or_else(|_| "?".into());
+                    style.paint(out, style.target_code(entry), &format!(" -> {target}"))?;
+                }
+                writeln!(out)?;
             }
-            style.write_label(out, dir, entry, &style.name(entry))?;
-        } else {
-            style.write_name(out, dir, entry)?;
-        }
-        if entry.kind == Kind::Link {
-            let target = fs::read_link(entry.path(dir))
-                .map(|p| escape(p.as_os_str()))
-                .unwrap_or_else(|_| "?".into());
-            style.paint(out, style.target_code(entry), &format!(" -> {target}"))?;
-        }
-        writeln!(out)?;
-    }
-    Ok(())
+            Ok(())
+        },
+    )
 }
 
 fn size(out: &mut String, n: u64, human: bool) {

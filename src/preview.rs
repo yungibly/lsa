@@ -10,7 +10,8 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, BufRead, BufReader, Read, Seek, SeekFrom},
     os::unix::fs::OpenOptionsExt,
-    path::Path,
+    path::{Path, PathBuf},
+    sync::{Mutex, PoisonError},
 };
 
 pub const INPUT_LIMIT: u64 = 32 * 1024 * 1024;
@@ -81,12 +82,39 @@ fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
+/// One source preview to decode on a worker, in listing order.
+pub struct Job {
+    pub path: PathBuf,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Decode and compress a job's thumbnail. Failures become error artwork.
+pub fn decode(job: &Job, cache: &Mutex<&mut Cache<'_>>) -> Result<Payload, ()> {
+    load_shared(&job.path, job.width, job.height, cache)
+        .map(Payload::new)
+        .map_err(|_| ())
+}
+
+#[cfg(test)]
 pub fn load(
     path: &Path,
     width: u32,
     height: u32,
     cache: &mut Cache<'_>,
 ) -> Result<RgbaImage, Box<dyn std::error::Error>> {
+    load_shared(path, width, height, &Mutex::new(cache))
+}
+
+/// As [`load`], for workers sharing one invocation cache. The lock covers only
+/// cache lookups and insertions, never source reads or decoding.
+pub fn load_shared(
+    path: &Path,
+    width: u32,
+    height: u32,
+    cache: &Mutex<&mut Cache<'_>>,
+) -> Result<RgbaImage, Box<dyn std::error::Error>> {
+    let cache = || cache.lock().unwrap_or_else(PoisonError::into_inner);
     if width == 0 || height == 0 || width > 320 || height > 240 {
         return Err(invalid("invalid thumbnail size").into());
     }
@@ -105,10 +133,9 @@ pub fn load(
     }
     // Open/validate the source even on hits: unreadable, replaced, oversized, or
     // special files must not acquire a preview merely because storage is warm.
-    let key = cache.enabled().then(|| Key::new(&meta, width, height));
-    if let Some(key) = &key
-        && let Some(image) = cache.get(key)
-    {
+    let key = cache().enabled().then(|| Key::new(&meta, width, height));
+    let hit = key.as_ref().and_then(|key| cache().get(key));
+    if let (Some(key), Some(image)) = (&key, hit) {
         if *key != Key::new(&file.metadata()?, width, height) {
             return Err(invalid("source changed during cache lookup").into());
         }
@@ -123,7 +150,7 @@ pub fn load(
     if let Some(key) = key
         && key == Key::new(&file.metadata()?, width, height)
     {
-        cache.put(&key, &image);
+        cache().put(&key, &image);
     }
     Ok(image)
 }

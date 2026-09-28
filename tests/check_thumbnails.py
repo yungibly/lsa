@@ -162,7 +162,10 @@ def main():
             return data,err
         cold,cold_stats=cached();warm,warm_stats=cached()
         assert cold==warm==run(['--fields=size',entries],**geometry)
-        assert b'1 hits, 3 misses, 2 writes, 0 errors' in cold_stats, cold_stats
+        # e-link.png shares c-photo.png's identity: a hit unless both decode
+        # concurrently. The broken source never writes.
+        assert cold_stats in (b'lsa: cache: 1 hits, 3 misses, 2 writes, 0 errors\n',
+                              b'lsa: cache: 0 hits, 4 misses, 3 writes, 0 errors\n'), cold_stats
         assert b'3 hits, 1 misses, 0 writes, 0 errors' in warm_stats, warm_stats
         cases+=1
         # A directory made entirely of ordinary files still has artwork with

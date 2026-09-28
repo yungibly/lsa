@@ -164,8 +164,9 @@ Images:
 
 Output always stays in terminal scrollback and returns to the shell. Image-heavy
 listings (at least half image candidates), small mixed listings, and individual
-images preview automatically. Work is sequential and capped at 128 MiB of image
-commands / 4096 placements, including artwork; remaining names print as compact text.
+images preview automatically. Up to four decoders work ahead in listing order.
+Output is capped at 128 MiB of image commands / 4096 placements, including artwork;
+remaining names print as compact text.
 Terminal text defaults to long details; automatic image grids remain enabled.
 No pager or input handling. -l uses one-row thumbnails; -1 and --no-images keep text.
 Long options (-l, -n, --header, --fields) select details over --grid; -C, -1 and image

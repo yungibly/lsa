@@ -4,6 +4,7 @@ from pathlib import Path
 import fcntl
 import os
 import pty
+import re
 import select
 import struct
 import subprocess
@@ -83,7 +84,10 @@ def main():
         for i in range(300): (many / f'image-{i:03}.png').symlink_to(source)
         cache = root / 'cache'
         code, data, err, _ = capture([f'--cache-dir={cache}', '--cache-stats', many], cols=122)
-        assert code == 0 and b'255 hits, 1 misses, 1 writes, 0 errors' in err, err
+        hits, misses, writes, errors = map(int, re.findall(rb'\d+', err))
+        # One shared source: only workers racing the first write can miss.
+        assert code == 0 and hits + misses == 256 and 1 <= misses <= 8, err
+        assert writes == misses and errors == 0, err
         assert len(images(data)) == 260  # 256 previews plus four tiles finishing a row
         for i in range(300): assert plain(data).count(f'image-{i:03}.png@'.encode()) == 1
         cases += 1

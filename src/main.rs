@@ -9,6 +9,7 @@ mod grid;
 mod kitty;
 mod layout;
 mod metadata;
+mod pool;
 mod preview;
 mod sort;
 mod style;
@@ -21,6 +22,14 @@ use std::{
 };
 
 fn main() -> std::process::ExitCode {
+    // A decoder panic on a preview worker becomes error artwork, like any
+    // failed preview; keep it quiet. Other panics still report normally.
+    let report = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if std::thread::current().name() != Some(pool::THREAD_NAME) {
+            report(info);
+        }
+    }));
     let opts = match cli::parse(std::env::args_os().skip(1)) {
         Ok(opts) => opts,
         Err(e) => {

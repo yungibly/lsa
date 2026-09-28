@@ -61,10 +61,14 @@ def main():
             assert not err and stats == (0, 0, 0, 0) and not cache.exists()
             cases += 1
 
-        # All forty symlinks share one source identity and size.
+        # All forty symlinks share one source identity and size. Parallel
+        # workers may each miss before the first write lands, but never more
+        # than the decode lookahead; every miss decodes and writes.
         uncached, _, _ = run(["--grid", many])
         cold, stats, err = run([flag, "--grid", many])
-        assert cold == uncached and not err and stats == (39, 1, 1, 0), stats
+        hits, misses, writes, errors = stats
+        assert cold == uncached and not err and hits + misses == 40, stats
+        assert 1 <= misses <= 8 and writes == misses and errors == 0, stats
         namespace = cache / NAMESPACE
         before = snapshot(namespace)
         warm, stats, err = run([flag, "--grid", many])
