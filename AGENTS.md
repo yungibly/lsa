@@ -22,6 +22,7 @@ Ghostty is the current target/test terminal. I can do visual verification for yo
 - Implementation language, libraries, numeric performance targets, and exact CLI details are provisional. Make routine implementation decisions from prototype evidence and record the reasons.
 - Preserve inline output and prior image placements in terminal history. Do not introduce input handling or an alternate-screen lifecycle.
 - Verify graphics in real terminals. Report terminal/version, protocol, mode, and transport conditions; upstream library support is not lsa validation.
+- Optional: `tests/check_ghostty_vt.py` checks the text layer in Ghostty's terminal core via microsoft/tui-test (release binary at `target/tools/tui-test/tui-test`, state kept under `target/`). It does not draw images.
 - Use meaningful tests and measurements for the change at hand. Separate application cost from terminal cost and cache-warm from cache-cold results.
 - Update the roadmap's status and next task after implementation work. Keep intended behavior, implemented behavior, and verified behavior distinguishable.
 - Avoid expanding into a general file manager, background service, or plugin system without a concrete need. Prioritize the complete mixed-directory experience and resource efficiency.

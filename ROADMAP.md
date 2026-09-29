@@ -1,218 +1,49 @@
 # Roadmap
 
-Updated 2026-09-22. Print into scrollback, return to the shell, keep one mixed
-ordering and complete names. No pager or file browser.
+Updated 2026-09-28, after v0.5.0. lsa prints into scrollback, returns to the
+shell and keeps one mixed ordering with complete names. History lives in the
+[changelog](CHANGELOG.md); evidence in [compatibility](docs/compatibility.md)
+and [measurements](benchmarks/README.md).
 
-## Current change — automatic clickable filenames
+## Status
 
-Hyperlinks default to auto: terminal stdout with a nonempty, non-dumb `TERM`,
-outside detected SSH sessions. Pipes and redirected files remain plain unless
-links are forced. `--hyperlink=auto|always|never`, bare `--hyperlink` (always), and
-`--no-hyperlink` (never) follow argument order. `NO_COLOR` affects color only.
+v0.5.0 is implemented and covered by automated checks on four native targets:
+unit, CLI and headless PTY tests, plus a text-layer check in Ghostty's terminal
+core (libghostty-vt). No real Ghostty visual pass has been recorded since v0.2.0.
 
-File URIs include the local hostname. Hostname and encoded working-directory
-prefixes are built once; raw path bytes stream with percent encoding and no
-per-entry URL allocation, extra stat, canonicalization or DNS lookup. Names and
-symlink identity remain complete; hostname/current-directory lookup failures fall
-back to ordinary text. Auto stays off for `SSH_CONNECTION`, `SSH_CLIENT` or
-`SSH_TTY`; forced remote links depend on terminal handling of hostname-qualified
-file URIs. Cache, images and ordering are unchanged.
+## Next
 
-Local validation passes 51 unit tests, 15 macOS CLI tests, two artwork-example
-tests, three release-tooling tests and 234 headless terminal scenarios, plus
-formatting, strict clippy, release build and extracted-package checks. Paired
-21-run application measurements preserve plain pipe bytes/cost; enabling links
-adds about 0.95–4.26 ms CPU per 10,000 entries for the sampled short/deep paths.
-Streaming uses about 8% less CPU than the old forced-link implementation.
-See [measurements](benchmarks/README.md); terminal rendering was not measured.
-Commit `317255b` and annotated tag `v0.4.0` are pushed.
-[CI](https://github.com/yungibly/lsa/actions/runs/35737546891) passed all five jobs;
-the [release workflow](https://github.com/yungibly/lsa/actions/runs/35737550065)
-passed all eleven, including native builds, Rust 1.88, publication, three Homebrew
-installations and the tap update, without retries. [v0.4.0](https://github.com/yungibly/lsa/releases/tag/v0.4.0)
-is published with reviewed notes and checksummed archives. The public Apple
-Silicon archive passed checksum, extraction, version, plain pipe/file output,
-automatic hostname links, opt-out and SSH fallback checks; the public formula
-points to all four v0.4.0 archives. Real Ghostty click behavior and remote opening
-remain unverified.
+1. **Ghostty pass for v0.5.0.** Record Ghostty version, geometry and transport,
+   and check:
+   - HEIC/AVIF/TIFF/RAW thumbnails;
+   - progressive rows in a large photo gallery;
+   - compressed images, including older placements after scrolling back;
+   - `-C` versus `-x`;
+   - red dangling links and `-` directory sizes;
+   - plain files on a light theme;
+   - the `--grid` notices.
 
-**Next:** normal use and the user Ghostty click/scrollback check, plus the previous
-default-details/AM-PM appearance pass. Publication is complete; keep cache opt-in
-and WebM deferred.
+   The steps are in [compatibility](docs/compatibility.md).
+2. **README screenshot** from a real Ghostty session showing a mixed long view
+   and a gallery.
+3. **Carried over:** the v0.4.0 link click and scrollback check, and the v0.3.0
+   default-details and AM/PM appearance.
 
-## Previous change — formatting and artwork efficiency
+## Open questions
 
-Metadata alignment and output reuse one scratch string; account names are
-borrowed from the existing bounded caches. Text icons, names and type markers
-stream inside the same color/hyperlink framing without assembling another label.
-Column widths preserve Unicode handling. Artwork computes polygon crossings once
-per scanline using at most six stack values, preserving every source pixel and
-therefore every thumbnail size. No dependencies, workers or retained caches added.
+- **Automatic grid threshold.** Grids start when at least half the entries are
+  images. Now that long view carries miniatures, a higher threshold might suit
+  mixed folders better. Decide from daily use.
+- **Linux JPEG speed.** Linux decodes full-size JPEGs (parallel since v0.5.0).
+  Reduced-size decoding (DCT scaling) or EXIF thumbnails would help photo
+  folders there, and would lift the 16 MP limit for JPEG.
+- **Other terminals.** WezTerm and Konsole implement Kitty graphics; iTerm2 has
+  its own protocol; Sixel is widespread. Add any of them only with real-terminal
+  evidence.
+- **Video frames.** WebM/MP4 thumbnails remain deferred: they need a codec stack
+  or an external process.
 
-The PTY helper now observes child exit before checking readability, fixing a race
-where closing the last slave could discard queued output on macOS. The unchanged
-v0.3.0 binary reproduced this failure; forcing the timing gap lost output in all
-10 original-helper trials. The fixed helper passed 2,000 concurrent captures and
-all 10 forced trials. A gated regression now runs in CI; no assertion was weakened.
+## Not planned
 
-Local validation passes 50 unit tests, 13 macOS CLI tests, two artwork-example
-tests, three release-tooling tests and 196 headless terminal scenarios, plus
-formatting, strict clippy, release build and extracted-package checks.
-Paired equal-output measurements show about 4–7% less CPU for the sampled styled
-and repeated-time/numeric listings, and 4.8–7.5% less artwork CPU. Plain names,
-distinct-time conversion, raster previews and retained memory are essentially
-unchanged. See [measurements](benchmarks/README.md) for conditions and controls.
-Commit `564388f` and annotated tag `v0.3.1` are pushed.
-[CI](https://github.com/yungibly/lsa/actions/runs/34678732155) passed all five jobs;
-the [release workflow](https://github.com/yungibly/lsa/actions/runs/34678732395)
-passed all eleven, including native builds, Rust 1.88, publication, three Homebrew
-installations and the tap update. [v0.3.1](https://github.com/yungibly/lsa/releases/tag/v0.3.1)
-is published with reviewed notes and checksummed archives. The public Apple Silicon
-archive passed checksum, extraction, version, plain listing and AM/PM long checks;
-the public formula points to all four v0.3.1 archives. Real Ghostty appearance is
-not newly verified.
-
-**Next:** normal use and the pending user Ghostty pass for default details and
-AM/PM alignment. Publication is complete; keep cache opt-in and WebM deferred.
-
-## Previous change — everyday defaults and listing efficiency
-
-Terminal text now defaults to long details; image-heavy and small mixed listings
-still switch automatically to grids. `-C` / `--columns` selects compact text,
-`-1` keeps lines, and pipes still default to plain names. Explicit `-l`, `-n`,
-`--header` and `--fields` retain their precedence. Default directory-symlink
-operands continue to list contents; explicit `-l` / `-d` still show the link itself.
-
-`--12-hour` uses zero-padded 12-hour local times with AM/PM. The default remains
-24-hour, and the flag alone does not add metadata to pipes. Dates, timezone/DST
-conversion and complete alignment are preserved.
-
-Listing metadata retains only required stat fields. Layout selection precedes
-metadata reads, so automatic grids and plain pipes do not acquire long-form cost.
-Local timestamps convert once per entry across alignment/output; compact civil
-components supplement the existing bounded lookup cache only for the modified
-column. Safe filenames avoid an escaped copy and permission characters no longer
-allocate individually. No new dependencies, workers, cache policy or image changes.
-
-Local validation: 47 unit tests, 13 macOS CLI tests, one artwork-example test,
-three release-tooling tests, and 195 headless terminal scenarios. Formatting,
-strict clippy, release build and extracted-package smoke checks pass. Paired
-measurements show materially less time for distinct-timestamp long listings and
-less metadata memory; image decoding/output is unchanged. See
-[measurements](benchmarks/README.md). These are application/PTY measurements,
-not Ghostty rendering measurements.
-
-Commit `96755cd` and tag `v0.3.0` are pushed. [CI](https://github.com/yungibly/lsa/actions/runs/34544594224)
-passed all five jobs; the [release workflow](https://github.com/yungibly/lsa/actions/runs/34544595865)
-passed all eleven, including native builds, Rust 1.88, publication, three Homebrew
-installations and the tap update. [v0.3.0](https://github.com/yungibly/lsa/releases/tag/v0.3.0)
-is published with reviewed notes and checksummed archives. The public Apple Silicon
-archive passed local checksum, extraction, version, pipe and new-option checks.
-
-One Intel release attempt failed a diagnostic-output assertion. The independent
-Intel CI run and the unchanged release retry passed, as did 500 consecutive local
-diagnostic captures. The original output was not logged, so the cause is unconfirmed;
-record another occurrence before attributing it to the PTY helper or application.
-
-**Next:** normal use and a user Ghostty pass for default details and AM/PM alignment.
-No new real-terminal visual pass has been claimed. Publication is complete; keep
-cache opt-in and WebM deferred.
-
-## Previous change — larger galleries and simpler preview controls
-
-Personal use showed that the 16-preview cutoff hurts the experience. The local
-implementation now defaults to 256 source attempts, with `--preview-limit=0..4096`.
-The shared graphics limits increase to 128 MiB / 4,096 placements, enough for 256
-maximum-resolution thumbnails. Output still streams sequentially to scrollback;
-every name survives exhaustion or failure. No pager was added.
-
-`--thumbnail-size=1..12` chooses grid height in single terminal-row steps, default
-3. Width/spacing follow, frames shrink to fit, pixel dimensions remain capped at
-320×240, and labels wrap completely. Long previews stay one row. `--header` and
-`--fields` are documented as long-implying options, help has examples, and explicit
-grid/size requests overridden by other flags get one explanatory stderr notice.
-
-SVG vector artwork and ICO have content previews. SVG rendering is restricted to
-self-contained shapes, paths, gradients and clipping, with source/node/depth bounds
-and no fonts/external resources. Text, embedded images, filters and expansion-heavy
-features fall back as a whole preview. WebM frame decoding is deferred because it
-would add a video codec stack or external process management.
-
-Efficiency changes: buffered bounded source reads, fixed 4 KiB base64 scratch,
-JPEG rotation after thumbnailing, and artwork rasterization restricted to each
-shape's bounds. The last pass preserves exact pixels while reducing artwork CPU.
-Cache namespace/magic advance to v2 because
-fractional resize-edge pixels can change; storage stays opt-in and bounded.
-
-## Previous change — GitHub builds and Homebrew distribution
-
-The name remains **lsa — ls, augmented**. CI and tagged-release workflows now
-target native Apple Silicon/Intel macOS and ARM64/x86-64 Linux. Every target runs
-Rust tests, headless terminal checks and extracted-package smoke tests. Linux
-packages use musl; a separate job checks the declared Rust 1.88 minimum.
-
-Stable version tags must match Cargo.toml. The release job verifies checksums and
-generates the binary Homebrew formula; installation tests on both macOS
-architectures and x86-64 Linux gate the automatic tap commit. The tap token is an
-Actions secret, never a tracked file. [v0.1.0](https://github.com/yungibly/lsa/releases/tag/v0.1.0)
-is published and the tap installs it with `brew install yungibly/tap/lsa`.
-The complete [release workflow](https://github.com/yungibly/lsa/actions/runs/34011671355)
-passed, including every native build, Rust 1.88, Homebrew installations on both
-macOS architectures and x86-64 Linux, and the automatic tap update. ARM64 Linux
-has native package tests; a Homebrew installation check there remains future work.
-
-## Previous change — thumbnail presentation
-
-The user passed the inline-only direction and supplied a Ghostty screenshot showing
-oversized image tiles, nearly empty folder tiles and redundant/unhelpful filename
-icons. This change addresses that feedback:
-
-- Grid image frames shrink from 22×5 to at most 14×3 cells at the reported geometry.
-  Wider label columns remain; names center beneath frames and wrap completely.
-- Every grid entry gets pixels: source thumbnail or built-in folder/file/media/link/
-  error artwork. Grid labels no longer repeat font icons. Unknown types get a generic
-  file icon/color; case-insensitive image classification is shared with the decoder.
-- Long view uses one-row, 3-cell-wide miniatures in an aligned name gutter. Ordinary
-  entries retain icons, failures get error artwork, and exhausted budgets retain the
-  same alignment. Narrow/short terminals, pipes, -1 and --no-images use text.
-- Built-in drawings are code-native and font-independent. All graphics count against
-  8 MiB and 256 placements across operands; source attempts still default to 16.
-  Artwork never uses decoder/cache work. All names survive every fallback.
-- Tests cover visible artwork, tiny preview pixels, actual cursor/row replay, mixed
-  alignment, GIF/unknown types, budget sharing and cache geometry. Offline light/dark
-  artwork inspection supplements byte tests; it is not a real-terminal pass.
-
-## Previous v0.2.0 verification
-
-The gallery change has 46 unit tests, 12 local macOS CLI tests, one artwork-example
-test, three release-tooling tests, and 183 headless terminal scenarios (75 new),
-including all sizes at four geometries, 256/300-image galleries, 4,096 placements,
-full names, SVG/ICO pixels, special-file fallback, shared budgets and cache geometry.
-Formatting, strict clippy, release build and local extracted-package smoke checks
-pass. The [v0.2.0 commit's CI](https://github.com/yungibly/lsa/actions/runs/34106546519)
-also passed every native macOS/Linux job and Rust 1.88 compatibility.
-
-Paired measurements separate equal work from more previews and application cost
-from rendering. Plain output/cost and equal-work gallery speed are essentially
-unchanged; source buffering lowers memory and thumbnail-first rotation saves both
-time and memory. See [benchmarks](benchmarks/README.md),
-[compatibility](docs/compatibility.md) and [handoff](HANDOFF.md).
-
-The user reported all requested Ghostty checks working perfectly on 2026-09-07.
-Version, geometry and transport were not resupplied. The final artwork optimization
-is byte-identical in the full artwork sheet and paired end-to-end galleries.
-
-Commit `ba4a882` and tag `v0.2.0` are pushed; the
-[release workflow](https://github.com/yungibly/lsa/actions/runs/34107070950) passed
-all eleven jobs, including every native build, Rust 1.88, publication, Homebrew
-installations on both macOS architectures and x86-64 Linux, and the tap update.
-[v0.2.0](https://github.com/yungibly/lsa/releases/tag/v0.2.0) is published with
-release notes and checksummed binaries. The public Apple Silicon archive also
-passed checksum, extraction, version and mixed-listing checks locally.
-
-**At v0.2.0:** normal personal use and any concrete regressions. WebM remains deferred;
-no additional visual check is needed for the identical artwork output. No pending
-release work. Use `brew update && brew upgrade lsa` for an existing installation.
-
-Keep cache policy opt-in. No recursive trees, Git scans, file operations, services or
-plugin system are planned. Add formats/concurrency only from demonstrated needs.
+Recursive trees, Git status, file operations, a configuration file, a pager or
+browser, a plugin system, or background services.

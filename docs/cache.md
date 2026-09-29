@@ -1,13 +1,13 @@
-# Thumbnail cache experiment
+# Thumbnail cache
 
-Implemented and automated-tested on arm64 macOS 26.6.2 with Rust 1.98.0.
-Caching remains opt-in. The user passed all supplied Ghostty commands at `7050349`;
-the subsequent replacement-policy change has automated coverage. Linux is unverified.
+Opt-in and bounded. Automated tests cover macOS and Linux CI targets. The user
+passed the supplied Ghostty commands at `7050349`; later changes (replacement
+policy, v3 records, parallel workers) have automated coverage.
 
 ## Controls and lazy behavior
 
 - `--cache-dir=PATH` (or `--cache-dir PATH`) enables storage in
-  `PATH/lsa-thumbnails-v2/`. No environment variable or default user cache path.
+  `PATH/lsa-thumbnails-v3/`. No environment variable or default user cache path.
 - `--no-cache` wins regardless of option order and disables reads and writes.
 - `--clear-cache --cache-dir=PATH` clears known thumbnail slots and staging, then
   exits. Paths, `--diagnose`, and `--no-cache` cannot accompany clear. It returns
@@ -23,7 +23,12 @@ the subsequent replacement-policy change has automated coverage. Linux is unveri
   without opening storage. Text-only layouts, pipes, entries without preview candidates,
   and exhausted attempt/byte budgets do not initialize or access the cache.
 
-The cache object is invocation-local and shared across operands. Storage opens
+The cache object is invocation-local and shared across operands and decode
+workers. Workers take a process-local lock only around lookups and insertions,
+never while reading sources or decoding; `flock` then serializes processes.
+Two workers decoding the same source identity at once can both miss before the
+first write lands (bounded by the lookahead window); warm listings are exact.
+Storage opens
 lazily on the first eligible, budgeted preview with a readable bounded source.
 Long-view miniatures use their own pixel geometry in the same cache keys. Built-in
 artwork never opens the cache. Initialization failure is remembered for the invocation. Ordinary cache failures
@@ -76,12 +81,14 @@ does not promise a particular hit rate or outperform every policy in every workl
 Old source/geometry versions can occupy slots until replaced or cleared, and even
 64 total slots do not guarantee 64 simultaneously useful hits.
 
-The current namespace and magic are v2 because thumbnail-before-rotation changes
-fractional edge pixels and SVG/ICO decoders were added. The key shape and 64-slot
-policy are unchanged. Existing v1 storage is left alone; there is no migration scan.
-`--clear-cache` affects the current namespace only. Old v1 files may be removed
-separately when no older lsa process uses them. The storage bound below is per
-namespace; retaining an old version's cache adds to total disk usage.
+The namespace is v3 because macOS now decodes JPEG and the system formats with
+ImageIO, whose pixels differ from the Rust decoders. The record magic also names
+the platform (`LSATHM3M` on macOS, `LSATHM03` elsewhere), so a cache directory
+shared between machines never serves another decoder's pixels. The key shape and
+64-slot policy are unchanged. Older v1/v2 storage is left alone; there is no
+migration scan. `--clear-cache` affects the current namespace only; old
+namespaces may be removed by hand when no older lsa uses them. The storage bound
+below is per namespace.
 
 At most 64 records plus one staging file contain lsa-written data. Each is at most
 307,284 bytes (84-byte header plus 320×240×4 pixels), for **19,973,460 bytes** total,

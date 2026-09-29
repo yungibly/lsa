@@ -1,215 +1,112 @@
 # lsa
 
-**ls, augmented.**
+**ls, augmented.** An everyday `ls` replacement with colors, icons, readable
+details, clickable names and inline image thumbnails. It prints into your
+terminal's scrollback and returns to the shell: no pager, browser, configuration
+file or background process. Rust, one binary, macOS and Linux.
 
-An everyday `ls` replacement with colors, icons, readable details, and inline image
-thumbnails. Print the directory, get the prompt back, keep the output in scrollback.
-Rust, Unix, one binary. No pager, browser, configuration file, or background process.
-
-Install the latest release from the Homebrew tap:
+## Install
 
 ```sh
 brew install yungibly/tap/lsa
 ```
 
-Or download a checksummed binary from [GitHub Releases](https://github.com/yungibly/lsa/releases).
-Packages cover Apple Silicon/Intel macOS 14+ and ARM64/x86-64 Linux.
-See [installation and releases](docs/install.md) for details. To build locally:
+Or download a checksummed binary from [GitHub Releases](https://github.com/yungibly/lsa/releases)
+for Apple Silicon/Intel macOS 14+ or ARM64/x86-64 Linux. See
+[installation](docs/install.md). To use it as `ls`, add `alias ls=lsa` to your
+shell configuration.
+
+## Everyday use
 
 ```sh
-export CARGO_HOME="$PWD/.cargo-home"
-cargo build --release --locked
-./target/release/lsa                # automatic details or image grid
-./target/release/lsa -la            # hidden files and readable details
-./target/release/lsa img-test       # automatic inline thumbnails
-./target/release/lsa --no-images .  # long text
-./target/release/lsa -C .           # compact text columns
-./target/release/lsa --12-hour .    # AM/PM modification times
-./target/release/lsa -1 . | head    # plain names; closed pipes succeed
+lsa                        # details, or a thumbnail grid where images dominate
+lsa -la                    # include hidden files
+lsa -C                     # compact columns filled downward (-x: across)
+lsa -lt                    # newest first
+lsa photos                 # thumbnails in Ghostty or Kitty
+lsa --grid --thumbnail-size=6 photos   # larger thumbnails
+lsa | head                 # plain names in pipes
 ```
 
-To try it as `ls` in the current shell, from this checkout:
+`lsa --help` lists every option.
 
-```sh
-alias ls="$PWD/target/release/lsa"
-```
+## Listings
 
-Version 0.4.0 makes filenames clickable by default on local terminals. Pipes,
-redirected files, dumb terminals and detected SSH sessions keep links off in auto
-mode. `--hyperlink=always` forces links; `--hyperlink=never` disables them.
-Version 0.3.0 introduced long details on
-terminals while preserving automatic image grids and plain piped names.
-`-C` selects compact text; `--12-hour` adds AM/PM
-times. Listing improvements reduce metadata memory and repeated formatting work.
-The new defaults have automated coverage; a fresh Ghostty visual pass is pending.
-The user verified v0.2.0 galleries in Ghostty on 2026-09-07; terminal version,
-geometry and transport were not resupplied. Earlier inline output was verified in
-Ghostty 1.3.1. See [compatibility](docs/compatibility.md) and [installation](docs/install.md).
+- Terminals default to long details: permissions, readable size, owner and local
+  modification time. Directories show `-` for size. `-C`/`-x` give compact
+  columns, `-1` plain lines; `--header`, `--fields=LIST`, `--12-hour`, `--bytes`
+  adjust details.
+- Familiar flags work: `-a -A -l -C -x -1 -d -F -p -h -n -o -g -i -s -t -S -r -U
+  -v -c -u`, plus `--sort`, `--dirs-first` and `--`. Recursive listing (`-R`) is
+  deliberately not supported.
+- Names sort naturally (`photo2` before `photo10`), ignoring ASCII case.
+- Colors use your terminal's palette; ordinary files keep its default
+  foreground. `LS_COLORS` type keys (including `or`/`mi`) and `*suffix` rules
+  apply, with a case-insensitive fallback. Dangling symlinks are red. `NO_COLOR`
+  and `--color=auto|always|never` are honored.
+- Icons: Nerd Font glyphs in Ghostty, portable symbols elsewhere (`--icons`,
+  `--no-icons`).
+- Names are clickable (OSC 8) on local terminals; `--hyperlink=auto|always|never`.
+- Pipes get complete plain names, one per line. Control characters and invalid
+  UTF-8 are escaped everywhere; no name is shortened.
 
-## Everyday behavior
+## Thumbnails
 
-- Terminal text defaults to long details, colors from the terminal palette, and icons.
-  `-C` / `--columns` selects compact text columns; `-1` selects plain lines.
-  Ghostty gets Nerd Font icons; other terminals get portable Unicode symbols.
-  `--icons=always` selects Nerd Font icons elsewhere; `--no-icons` disables them.
-- `--color=auto|always|never` controls color. Auto respects nonempty `NO_COLOR`.
-  Common `LS_COLORS` file-type and literal `*suffix` rules customize the palette;
-  values are bounded and validated as SGR codes. `TERM=dumb` disables auto styling.
-- Long form shows permissions, human-readable size, owner and local modification time.
-  `-l` always selects it, including in image-heavy directories and pipes.
-  `--12-hour` shows times such as `01:05 PM`; the default is `13:05`.
-  Dates and local timezone rules stay the same.
-  On graphics terminals, images get one-row miniatures beside their names without
-  making entries taller. `--no-images` keeps ordinary icons. `--header` labels the columns. `--bytes` uses exact sizes; `-n` adds numeric uid/gid
-  and link count. `--fields=mode,size,modified` chooses a smaller set of details.
-- Names sort naturally: `photo2` before `photo10`, ignoring ASCII case with raw-byte
-  tie breaks. Non-ASCII names retain byte ordering; this is not locale collation.
-  `-t` / `-S` sort newest/largest first, `-r` reverses, `--dirs-first` groups actual
-  directories, and `-U` keeps filesystem order.
-- `-a` / `-A` include hidden names without `.` or `..`. `-d` lists directory operands
-  themselves. A directory-symlink operand lists its contents, except with `-l` or
-  `-d`; links inside a listing retain link identity. `-F` adds type markers.
-- Multiple operands keep argument order; consecutive file operands share a layout.
-  Names are clickable with OSC 8 on local terminals by default. Use
-  `--hyperlink=auto|always|never` to control links; bare `--hyperlink` means always,
-  and `--no-hyperlink` means never. The last hyperlink option wins.
-  Auto requires terminal stdout and a nonempty `TERM` other than `dumb`, and stays
-  off when `SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` is present. `NO_COLOR`
-  affects color only. Every file URI includes the local hostname, without DNS
-  lookups or resolving symlinks; unavailable hostname/current-directory lookup
-  leaves names as text. Forced remote links require terminal support for remote
-  file URIs; click handling in SSH/multiplexers is unverified.
-  Use `--` before dash-prefixed paths.
-- Pipes default to complete plain names, one per line, with metadata only when
-  requested. Explicit color/icons/hyperlink flags can decorate redirected text.
-  Previews never go to a pipe. Text stays escaped for safe terminal display,
-  including control characters and invalid UTF-8. No filename is shortened.
+Images, files, folders and links share one ordering: a thumbnail represents its
+entry, and a failed preview never hides a name.
 
-Full option reference: `lsa --help`. This is a human-oriented tool; it deliberately
-omits recursive trees, Git queries, file operations, and exact GNU/BSD scripting parity.
-
-## Images that fit the task
-
-Images, files, folders, and links share one ordering. A thumbnail is a representation
-of an entry, and a failed preview never removes its name.
-
-On a direct Ghostty/Kitty terminal, previews are automatic when at least half the
-entries are image candidates, or when a mixed listing fits a single thumbnail row.
-A single image also previews automatically. `--grid` requests previews in a sparse
-mixed directory, including ones containing only folders or ordinary files.
-`-C`, `-1`, `--no-images`, and `--protocol=none` keep text.
-
-Grid frames default to **14 columns × 3 rows** at most. Set
-`--thumbnail-size=N` to choose any height from **1 to 12 terminal rows**;
-width and spacing follow the size, and frames shrink to fit short/narrow terminals.
-Labels wrap completely and have no duplicate font icon. For example:
-
-```sh
-./target/release/lsa --grid --thumbnail-size=1 img-test  # dense gallery
-./target/release/lsa --grid --thumbnail-size=6 img-test  # larger previews
-./target/release/lsa --preview-limit=1024 img-test       # more source previews
-```
-
-Both size and preview limit accept `=N` or a separate argument. `--header`,
-`--fields`, `-l` and `-n` select long output; combining these with `--grid` now
-prints a brief explanation to stderr. Explicit `-C`/`-1` and image-disabling options also
-take precedence over grid, regardless of order. Thumbnail size affects grids;
-long output retains its one-row miniatures and reports an ignored size request.
-
-Every tile has a thumbnail or
-built-in folder, file, media, link or error drawing. GIFs share the image category
-with PNG/JPEG; unsupported image formats get image artwork, and unknown extensions
-get a generic file icon/color. Artwork is generated from code and needs no font.
-
-Long view uses **3-column × 1-row** miniatures in a fixed gutter beside filenames.
-Ordinary entries retain their icons, and failures get error artwork. When the
-terminal is too narrow/short, output is redirected, or images are disabled, long
-view stays text. Long filenames can still wrap normally. Small thumbnails have
-smaller output payloads, but still require decoding the source image.
-
-Tall galleries print into scrollback. At most **256 previews are attempted by default**,
-shared across every operand. `--preview-limit=N` adjusts that from 0 to **4,096**. Once the
-attempt, byte or placement budget is spent, the remaining entries print as compact
-text in the same order. A partially previewed grid row uses artwork for its remaining
-tiles; the next row becomes compact text. In long view, remaining entries keep the
-same aligned name gutter. Unsupported terminals and multiplexers fall back to long text. Small terminals
-use long form, with miniatures only when they fit; `--protocol=kitty` is an explicit
-protocol override, not a compatibility guarantee. No terminal queries or input reads.
-
-Static PNG/JPEG/GIF/WebP/BMP/ICO are supported, including JPEG EXIF orientation, aspect
-ratio preservation, transparency checkerboarding, and GIF's first canvas frame.
-SVG previews support self-contained shapes, paths, gradients and clipping, rasterized
-directly at thumbnail size. Fonts/text, embedded or external images, filters, masks,
-patterns, markers and `use` expansion currently fall back to error artwork for the
-whole preview. SVG input is limited to 256 KiB, 4,096 XML nodes and 32 nesting levels;
-DTDs/entities are rejected. No external resources or fonts are loaded.
-
-Image symlinks can preview after verifying a bounded regular-file target. HEIC/AVIF
-retain image artwork. WebM and other videos retain media artwork; video frame
-decoding is deferred to avoid a native codec stack or external process dependency.
+- In a direct Ghostty or Kitty session, listings where at least half the entries
+  are images, or that fit one row, become a thumbnail grid. Other listings show
+  one-row miniatures beside names in the long view. Multiplexers, SSH sessions
+  and unknown terminals use text unless `--protocol=kitty` forces graphics.
+- Every tile has pixels: a thumbnail, or built-in folder, file, media, link,
+  broken-link or error artwork.
+- Formats: PNG, JPEG (with EXIF orientation), GIF (first frame), WebP, BMP, ICO
+  and a restricted, self-contained SVG subset. On macOS, HEIC/HEIF, AVIF, TIFF,
+  JPEG XL, Photoshop and camera RAW files also preview, using the system's
+  ImageIO decoders (loaded only when previewing). Video frames are not decoded.
+- Up to four decoders work ahead in parallel; output keeps listing order.
+- `--thumbnail-size=1..12` sets grid height in rows (default 3).
+  `--preview-limit=0..4096` sets attempts across all paths (default 256).
+- Tall galleries print into scrollback. Once a budget is spent, remaining names
+  continue as compact text.
+- An opt-in thumbnail cache (`--cache-dir=PATH`) is bounded to 64 records and
+  about 19 MiB; see [cache design](docs/cache.md). `--diagnose PATH` explains the
+  chosen layout, limits and decoders without decoding anything.
 
 | Resource | Bound |
 | --- | --- |
-| Preview attempts | 256 default, 4,096 maximum; failures and cache hits count |
-| Image commands | 128 MiB and 4,096 placements per invocation, including built-in artwork |
-| Raster source | 32 MiB, 16 million pixels, 16,384 pixels per axis |
-| Raster decoded image / decoder allocation | 64 MiB; decoder allocation bound is best effort |
-| SVG source | 256 KiB, 4,096 XML nodes, 32 nesting levels; restricted features as above |
-| Thumbnail | Grid at most 320×240 pixels; long view at most 96×64 pixels |
-| Work in flight | One sequential decoder and thumbnail; no worker or queue |
-| Optional cache | 64 slots, under 20 MiB of file contents; no scans or hit writes |
+| Preview attempts | 256 by default, 4,096 at most; failures and cache hits count |
+| Image commands | 128 MiB (counted uncompressed) and 4,096 placements per invocation |
+| Decoding | Up to four sources at once, at most eight results ahead of output |
+| Source file | 32 MiB for the Rust decoders; 256 MiB for macOS ImageIO, which reads only what it needs |
+| Decoded image | 16 million pixels at full size, 64 MiB decoder allocations. JPEG, HEIF and AVIF decode at reduced resolution on macOS, up to 64× larger; bigger TIFF/PSD/JPEG XL/RAW use embedded previews |
+| SVG | 256 KiB, 4,096 XML nodes, 32 levels; no text, external or embedded images, filters, masks, patterns, markers or `use` |
+| Thumbnail | Grid at most 320×240 pixels; long view at most 96×64 |
+| Cache | Opt-in; 64 records, under 20 MiB of file contents |
 
-Text output and the entry vector scale with directory size. Filesystem, account-name
-lookup, decoder and terminal writes have no hard timeout. Layout is chosen before
-per-entry metadata reads: plain name-only output avoids those stats, and grids
-retain only the executable bit needed for styling. Long output stores only the
-metadata fields used by listing/sorting. Each local timestamp is converted at most
-once across alignment and printing, with compact civil components retained per
-entry only when the modified column is selected. Account/time lookup caches stay
-bounded. Metadata formatting reuses one scratch string, and text icons/names/type
-markers stream without a combined label allocation. Safe filenames are borrowed
-without an escaped copy. [Measurements](benchmarks/README.md) distinguish application cost
-from terminal rendering and warm from empty thumbnail caches.
-
-Raster sources use a length-bounded buffered reader. The JPEG decoder still holds the
-whole compressed file; whole-file reads reserve the validated length once, so repeated
-decodes no longer accumulate memory (a 64-photo gallery peaked at 561 MB before this
-fix and 24 MB after on macOS). JPEG orientation is
-applied to the thumbnail, avoiding full-resolution rotation. Kitty encoding uses
-4 KiB of reusable scratch space. Raising the output allowance does not preallocate
-it; bytes stream as each entry finishes. The allowance fits all 256 default source
-previews even at maximum thumbnail resolution, with room for artwork in the last row.
-
-Caching stays **off by default**. Enable explicitly with `--cache-dir=PATH`; use
-`--no-cache` to bypass it or `--clear-cache --cache-dir=PATH` to clear known records.
-`--cache-stats` reports counters. Text, diagnostics, and zero budgets never open the
-cache. See [cache design](docs/cache.md). `--diagnose PATH` explains layout and limits
-without decoding or accessing cache storage.
-
-Exit codes: 0 success (including closed pipes), 1 listing/output/cache-clear error,
-2 invalid options. Preview/cache failures are quiet unless cache statistics are requested.
+Exit codes: 0 success (including closed pipes), 1 listing, output or cache-clear
+error, 2 invalid options.
 
 ## Development
 
 ```sh
+export CARGO_HOME="$PWD/.cargo-home"
 cargo fmt --check
-cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked --all-targets
 cargo build --release --locked --examples --bins
-./target/release/examples/fixtures  # creates ignored fixtures once
-python3 tests/check_pty.py
-python3 tests/check_layout.py
-python3 tests/check_cache.py
-python3 tests/check_thumbnails.py
-python3 tests/check_gallery.py
-python3 benchmarks/inline.py
-./target/release/examples/gallery_fixtures  # once: SVG/ICO/EXIF visual fixtures
-python3 benchmarks/gallery.py --before target/lsa-before-gallery-options
-./target/release/examples/preview_sheet  # offline artwork QA PNG under target/
+./target/release/examples/fixtures          # once: creates img-test/generated
+for check in pty layout cache thumbnails gallery; do python3 tests/check_$check.py; done
+python3 -m unittest discover -s tests -p 'test_release.py'
 python3 scripts/package.py
-python3 -m unittest discover -s tests -p 'test_release.py' -v
 ```
 
-Keep Cargo storage and test artifacts in this repo. The user handles real-terminal
-visual verification; PTY tests model bytes and cursor positions, not a renderer.
-See [roadmap](ROADMAP.md), [decisions](docs/decisions.md), and [handoff](HANDOFF.md).
+`tests/check_ghostty_vt.py` optionally checks the text layer in Ghostty's own
+terminal core. It uses the [tui-test](https://github.com/microsoft/tui-test)
+release binary placed at `target/tools/tui-test/tui-test`. Headless checks model
+terminal bytes and cursor movement; images still need a real-terminal look.
+
+Keep Cargo storage and test artifacts inside the repository. More detail:
+[changelog](CHANGELOG.md), [roadmap](ROADMAP.md), [decisions](docs/decisions.md),
+[compatibility](docs/compatibility.md), [measurements](benchmarks/README.md).

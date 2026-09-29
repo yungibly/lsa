@@ -1,0 +1,202 @@
+{
+  "date": "2026-09-29T00:12:18.863394+00:00",
+  "os": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "conditions": "Two warmups, then 9 paired/interleaved fresh processes per case. OS caches warm. 122x40 PTY, 8x17 cell pixels, drained without a renderer; stdin /dev/null. wait4 child CPU and peak RSS; elapsed ends at child exit. Thumbnail cache off. No concurrent builds/tests.",
+  "binaries": {
+    "before": {
+      "bytes": 2289104,
+      "sha256": "7397267ab43b50b0ae4a4349440a80edf72b9cc1b9257007b9c42484ecfab663"
+    },
+    "after": {
+      "bytes": 2373808,
+      "sha256": "f20f3bf1fed048b3df46eb3229d9a7abe7accc8f7bb2538946c5ec4f1a3ac70a"
+    }
+  },
+  "cases": {
+    "plain_names_pipe_10000": {
+      "equal_output": true,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 9.577,
+        "median_cpu_ms": 8.245,
+        "median_rss_bytes": 4440064,
+        "output_bytes": 160000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d2aecb6e05ab6b19cbb3eb5141de8f7edfa0af59909ee4233200b27657b4a87d"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 9.002,
+        "median_cpu_ms": 7.624,
+        "median_rss_bytes": 2981888,
+        "output_bytes": 160000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "d2aecb6e05ab6b19cbb3eb5141de8f7edfa0af59909ee4233200b27657b4a87d"
+      }
+    },
+    "long_pipe_10000": {
+      "equal_output": true,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 23.607,
+        "median_cpu_ms": 21.431,
+        "median_rss_bytes": 5537792,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "7243a32af8a6c42cacfbba0b29c2e8f4d76f3f5330dbcdcefa114508df857d6e"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 23.068,
+        "median_cpu_ms": 21.032,
+        "median_rss_bytes": 4194304,
+        "output_bytes": 510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "7243a32af8a6c42cacfbba0b29c2e8f4d76f3f5330dbcdcefa114508df857d6e"
+      }
+    },
+    "long_tty_10000": {
+      "equal_output": false,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 53.101,
+        "median_cpu_ms": 39.889,
+        "median_rss_bytes": 5537792,
+        "output_bytes": 2880000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "244075b512e9e203c345f79bfece5cb0d4fc2a34c6a06960d28d9274db0ff06c"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 47.091,
+        "median_cpu_ms": 34.875,
+        "median_rss_bytes": 4227072,
+        "output_bytes": 2510000,
+        "image_bytes": 0,
+        "images": 0,
+        "sha256": "6db925f369685f643af43788e7e5132b0743ce1c74aaade5d4b66289aee0e8ea"
+      }
+    },
+    "jpeg_grid_64": {
+      "equal_output": false,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 2752.808,
+        "median_cpu_ms": 2721.666,
+        "median_rss_bytes": 560381952,
+        "output_bytes": 1968925,
+        "image_bytes": 1958720,
+        "images": 64,
+        "sha256": "bfe3c3a67cd7dc8d7c254a0869cf16d93af7aa1030b81c7580f2d1e1fc5fd916"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 380.527,
+        "median_cpu_ms": 1470.931,
+        "median_rss_bytes": 55148544,
+        "output_bytes": 1152861,
+        "image_bytes": 1142656,
+        "images": 64,
+        "sha256": "28848bfbf8b5f8c79e63fc82179ee715b2f339dbe65b73768a497fa32e91925a"
+      }
+    },
+    "jpeg_long_miniatures_64": {
+      "equal_output": false,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 2687.162,
+        "median_cpu_ms": 2678.376,
+        "median_rss_bytes": 560414720,
+        "output_bytes": 165568,
+        "image_bytes": 142336,
+        "images": 64,
+        "sha256": "7383df3c42c35231f0211710f55340264a0c305a1f95b989369464d1e5da60c1"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 377.771,
+        "median_cpu_ms": 1459.843,
+        "median_rss_bytes": 53772288,
+        "output_bytes": 139712,
+        "image_bytes": 117504,
+        "images": 64,
+        "sha256": "1d0ec005e2a7cc00ee92b52cef02a3fb693b8343e67bbb6726536e7df461db74"
+      }
+    },
+    "folder_grid_256": {
+      "equal_output": false,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 65.297,
+        "median_cpu_ms": 33.929,
+        "median_rss_bytes": 2801664,
+        "output_bytes": 7876215,
+        "image_bytes": 7834880,
+        "images": 256,
+        "sha256": "3a1eac8921692be3ddc9c139f066b3d1e795b3b945e31e9b268b42765b8bc400"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 5.78,
+        "median_cpu_ms": 3.107,
+        "median_rss_bytes": 2981888,
+        "output_bytes": 326519,
+        "image_bytes": 285184,
+        "images": 256,
+        "sha256": "6eb08601c38b59bf50617db8bdff051640c99de2cd200d13e4ac88b1c393d3fd"
+      }
+    },
+    "sample_images_default": {
+      "equal_output": false,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 73.812,
+        "median_cpu_ms": 70.841,
+        "median_rss_bytes": 31801344,
+        "output_bytes": 154186,
+        "image_bytes": 153025,
+        "images": 5,
+        "sha256": "cf7bd6f62a90fd3e0b62cb499847cc858aa730db436dde2fc6693747649e2f74"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 32.201,
+        "median_cpu_ms": 56.886,
+        "median_rss_bytes": 33177600,
+        "output_bytes": 58595,
+        "image_bytes": 57434,
+        "images": 5,
+        "sha256": "a259e66e0f0889b661a80adf837200098c7238ebebb424d0b9939d39867e4b36"
+      }
+    },
+    "heic_grid_64": {
+      "equal_output": false,
+      "before": {
+        "runs": 9,
+        "median_elapsed_ms": 20.05,
+        "median_cpu_ms": 10.212,
+        "median_rss_bytes": 2736128,
+        "output_bytes": 1968861,
+        "image_bytes": 1958720,
+        "images": 64,
+        "sha256": "39147d4575d2ad3106db5b277f8234b1d8a052d429d2d8e90cbf86dc7e29d562"
+      },
+      "after": {
+        "runs": 9,
+        "median_elapsed_ms": 1055.806,
+        "median_cpu_ms": 1057.598,
+        "median_rss_bytes": 34881536,
+        "output_bytes": 1154333,
+        "image_bytes": 1144192,
+        "images": 64,
+        "sha256": "590ef5f07c5de77b791f0375c38b844164046a542c2982e93c6fcbe1bbe47194"
+      }
+    }
+  }
+}

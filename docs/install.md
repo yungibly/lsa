@@ -26,7 +26,9 @@ Download the matching `.tar.gz` and its `.tar.gz.sha256` from
 directory, verify with `shasum -a 256 -c FILE.tar.gz.sha256` on macOS or
 `sha256sum -c FILE.tar.gz.sha256` on Linux. Extract the archive and copy `bin/lsa`
 into a directory on PATH. No companion data files, image program, cache or service
-is required. Archives include help, usage and compiler/target information.
+is required; on macOS, previews of HEIC, AVIF, TIFF, RAW and similar formats use
+the ImageIO framework that ships with the system. Archives include help, usage and
+compiler/target information.
 
 Removing that binary uninstalls it. Explicitly configured thumbnail caches are
 independent; `lsa --cache-dir=PATH --clear-cache` clears one selected cache.
@@ -54,7 +56,7 @@ as `ls`, use `alias ls="$PWD/target/release/lsa"` in the current shell.
 
 `CI` runs on main-branch pushes, pull requests and manual dispatch. It is also
 reused by the release workflow. Four native runners run formatting, strict clippy,
-Rust tests, release builds, 234 headless terminal scenarios, and extracted-package
+Rust tests, release builds, the headless terminal checks, and extracted-package
 checks. Linux uses the native musl linker. A separate job tests all Rust targets
 with Rust 1.88.0 and validates the release tooling. CI archives are downloadable
 from the workflow run for 14 days.
@@ -77,7 +79,9 @@ verified full commit IDs; review and refresh those pins when updating Actions.
 For subsequent releases:
 
 1. Update the package version in Cargo.toml, refresh Cargo.lock with Cargo, and
-   commit the changes with any release documentation.
+   add a `## vX.Y.Z` section to CHANGELOG.md. The release workflow refuses a tag
+   without one and publishes that section, plus install instructions, as the
+   GitHub release notes.
 2. Push main, then create and push a matching tag, for example:
    `git tag v0.1.1` followed by `git push origin v0.1.1`.
 3. Check the Release workflow, including the final tap update. If a downstream

@@ -1,384 +1,73 @@
 # Application measurements
 
-## Automatic hyperlinks — 2026-09-22
+Paired measurements compare a saved "before" binary with the current release
+build. The harnesses run warmups, then fresh processes in alternating order. They
+drain output from a pipe or from a 122×40 PTY with 8×17-pixel cells, without a
+renderer, with stdin at `/dev/null`. `wait4` reports child CPU time and peak RSS;
+elapsed time ends when the child exits. OS caches are warm. Reports record exact
+binary hashes. Fixtures and fresh reports stay under the ignored
+`benchmarks/local/`; committed reports are copied explicitly. None of these
+measure terminal rendering time or terminal image memory.
 
-[Report](hyperlinks.json), [harness](hyperlinks.py). Before: v0.3.1 at `798a999`,
-saved as `target/lsa-before-hyperlinks`. After: v0.4.0; exact binary hashes are in
-the report. Arm64 macOS, thin-LTO release builds, two warmups and 21 paired,
-interleaved fresh processes with alternating order. OS caches warm, not flushed;
-no concurrent builds/tests. Output is a drained pipe without a renderer, stdin
-is `/dev/null`, and `wait4` records child CPU/RSS. Preparation is outside timing.
+## v0.5.0 — 2026-09-28
 
-Each fixture has 10,000 files with repeated timestamps; one quarter of names
-contain spaces, percent/hash characters and non-ASCII text. Absolute directory
-paths are 59 bytes (short) and 436 bytes (deep). Styled cases explicitly request
-long form, color/icons and no images; links are forced to isolate application
-cost from terminal rendering. Every comparison preserves complete visible output
-after stripping OSC 8 framing. Plain before/after bytes also match exactly.
+[Report](previews-0.5.0.json), [harness](previews.py). Before: the v0.4.0 release
+binary. After: the v0.5.0 release build. Apple M4 (10 cores, 4 performance),
+16 GB, macOS 27.0, two warmups and 9 paired runs, thumbnail cache off. Galleries
+use 64 symlinks to one 2924×1932 JPEG from `img-test` (4.5 MB), a HEIC copy made
+with `sips`, or generated folders. Medians:
 
-| Workload | Elapsed before/off → after/on | CPU before/off → after/on |
-| --- | ---: | ---: |
-| Plain names, short path, v0.3.1 → v0.4.0 | 9.00 → 8.96 ms | 7.93 → 7.92 ms |
-| Plain names, deep path, v0.3.1 → v0.4.0 | 10.71 → 10.56 ms | 9.28 → 9.29 ms |
-| Forced links, short path, v0.3.1 → v0.4.0 | 32.25 → 30.02 ms | 30.28 → 27.96 ms |
-| Forced links, deep path, v0.3.1 → v0.4.0 | 45.85 → 42.03 ms | 43.21 → 39.47 ms |
-| v0.4.0 links off → on, short path | 27.08 → 28.10 ms | 25.09 → 26.04 ms |
-| v0.4.0 links off → on, deep path | 36.38 → 41.00 ms | 34.07 → 38.33 ms |
+| Case | v0.4.0 | v0.5.0 | Notes |
+| --- | ---: | ---: | --- |
+| 10,000 plain names, pipe | 9.58 ms, 4.2 MiB | 9.00 ms, 2.8 MiB | identical output |
+| 10,000 long entries, pipe | 23.61 ms, 5.3 MiB | 23.07 ms, 4.0 MiB | identical output |
+| 10,000 long entries, terminal | 53.10 ms | 47.09 ms | 2.88 MB → 2.51 MB of output |
+| 64 JPEG photos, grid | 2,753 ms, 534 MiB | 381 ms, 53 MiB | 1.97 MB → 1.15 MB sent |
+| 64 JPEG photos, long-view miniatures | 2,687 ms, 535 MiB | 378 ms, 51 MiB | |
+| 256 folders, grid | 65.3 ms | 5.8 ms | 7.88 MB → 0.33 MB sent |
+| Four sample images, default layout | 73.8 ms | 32.2 ms | |
+| 64 HEIC photos, grid | 20 ms (artwork only) | 1,056 ms | real previews now |
 
-Plain pipes are essentially unchanged. Cached hostname/working-directory prefixes
-and streamed percent encoding remove per-label path/URL allocations; forced-link
-CPU falls about 8% versus v0.3.1 despite adding hostname bytes. Enabling links
-still adds work: about 0.95 ms CPU (3.8%) per 10,000 short-path entries and 4.26 ms
-(12.5%) for deep paths in these separate paired comparisons. Peak RSS is
-essentially unchanged with links on/off.
+Where the gains come from:
 
-Output grows from 1,792,500 bytes without links to 3,050,000 (short) or 6,820,000
-(deep) with links. These are application/pipe measurements, not Ghostty rendering
-or scrollback-memory measurements. No thumbnail/cache work is involved.
+- **Memory:** the JPEG decoder's whole-file read now reserves its length once;
+  about 8 MiB per photo above 4 MiB had stayed resident. A 64-photo gallery
+  peaked at 561 MB with the previous binary and 24 MB with only this fix.
+- **Speed:** up to four decoders in parallel. On macOS, JPEGs decode through
+  ImageIO at reduced resolution. One photo previews in ~30 ms at a 9 MB peak
+  footprint instead of ~40 ms at 29 MB, and 48 MP JPEG/HEIC/AVIF files peak at
+  about 13-25 MB.
+  Workers alone took the 64-photo gallery from 3.34 s to 0.71 s (1 to 4 workers:
+  2.76, 1.40, 0.71 s; 8 workers 0.58 s at twice the memory).
+- **Bytes:** zlib payloads (`o=z`) and artwork rendered once; decoded pixels are
+  unchanged.
+- **Listings:** name-only entries, classification computed once (and skipped for
+  plain pipes), coalesced permission colors and default-foreground names.
+- **HEIC:** 64 previews take about a second, and elapsed time equals CPU time,
+  so ImageIO appears to serialize HEVC decoding; the 64-JPEG gallery, by
+  contrast, spreads 1.5 s of CPU across four workers.
 
-```sh
-python3 benchmarks/hyperlinks.py --before target/lsa-before-hyperlinks --runs=21
-```
-
-## Formatting and artwork efficiency — 2026-09-12
-
-[Listing report](efficiency-listings.json), [artwork report](efficiency-artwork.json),
-and [image/cache controls](efficiency-images.json). Before: v0.3.0 at `0e91944`,
-saved as `target/lsa-before-efficiency-031`. After: v0.3.1 release binary. All
-reports record exact binary SHA-256 values and assert identical complete output
-in every comparison, including all image bytes and cache states.
-
-Arm64 macOS 26.6.2, Rust 1.98.0, thin-LTO/stripped. Two warmups, then seven
-paired/interleaved fresh processes with alternating version order; OS caches warm,
-not flushed. Builds/tests finished before timing. PTYs are drained at 122×40 cells
-and 8×17 pixels without a renderer; stdin is `/dev/null`. `wait4` records child CPU
-and peak RSS. Fixture/cache preparation stays outside timing.
-
-| Equal-output workload | Elapsed before → after | CPU before → after |
-| --- | ---: | ---: |
-| 10,000 compact styled entries, PTY | 30.23 → 28.31 ms | 25.34 → 23.59 ms |
-| 10,000 long entries, repeated time, pipe | 29.54 → 27.42 ms | 27.03 → 25.22 ms |
-| 10,000 numeric entries without time, pipe | 26.62 → 25.77 ms | 25.04 → 23.98 ms |
-| 10,000 long entries, repeated time, PTY | 51.46 → 47.61 ms | 40.41 → 38.59 ms |
-| 256 folder artwork tiles, PTY | 61.83 → 58.51 ms | 35.47 → 32.83 ms |
-| 256 mixed artwork tiles, PTY | 61.44 → 60.13 ms | 35.45 → 33.76 ms |
-| 256 raster thumbnails, PTY | 98.82 → 98.71 ms | 70.34 → 70.89 ms |
-
-Reusing one metadata scratch string and borrowing cached account names remove
-per-field temporary allocations. Text labels stream their icon, escaped name and
-type marker inside the existing color/link framing; column planning measures
-components without assembling a label. These cases use about **4–7% less CPU**.
-Long-listing peak RSS is only about 0.03–0.08 MiB lower: the gain is reduced
-allocation churn, not a substantial retained-memory reduction.
-
-Artwork calculates polygon edge crossings once per row instead of per pixel,
-using at most six stack floats. The folder/mixed cases use **7.5% / 4.8% less CPU**.
-Scalar-reference tests compare every source pixel, including clipped, reversed,
-degenerate and self-intersecting polygons. No cache or worker was added.
-
-Plain names and distinct-timestamp listings are essentially unchanged. In the
-listing harness plain CPU varies from 8.75 → 9.06 ms; the separate image/control
-harness gives 8.01 → 7.91 ms. Distinct timestamps still spend most CPU converting
-local time: 560.09 → 552.45 ms in pipes and 544.19 → 544.92 ms in PTYs. No general
-speedup is claimed for either path.
-
-Four original images take 84.67 → 83.53 ms with cache off, 80.28 → 81.08 ms with
-an empty cache, and 6.18 → 6.25 ms with a warm cache. Source decoding, gallery and
-long-miniature cost, graphics bytes and peak image memory are essentially
-unchanged. Cache setup is outside timing. The stripped binary is effectively the
-same size (2,289,040 → 2,288,992 bytes). These are application/PTY measurements,
-not Ghostty rendering or terminal image-memory measurements.
-
-```sh
-python3 benchmarks/performance.py --before target/lsa-before-efficiency-031 --same-options --runs=7
-python3 benchmarks/artwork.py --before target/lsa-before-efficiency-031 --runs=7
-python3 benchmarks/inline.py --before target/lsa-before-efficiency-031 --equal-output --runs=7
-```
-
-The PTY check helper also received a separate correctness fix: it now observes
-child exit before testing readability, preventing stale readiness from discarding
-a final queued write on macOS. The old helper lost one of 2,000 normal captures
-with an unchanged v0.3.0 binary, and all ten deliberately delayed trials. The fix
-passed 2,000 normal and ten delayed trials; a gated regression runs in CI. The
-benchmark reader already observed exit before readiness and did not need this fix.
-
-## Listing efficiency and long defaults — 2026-09-10
-
-[Equal-output report](performance.json) and [image/cache controls](performance-images.json).
-Before: v0.2.0 source at `02762c1`, saved as `target/lsa-before-performance`.
-After: v0.3.0 release binary; both reports record exact binary SHA-256 values.
-Arm64 macOS 26.6.2, Rust 1.98.0, thin-LTO/stripped. Two warmups followed by seven
-paired/interleaved fresh processes, OS caches warm and not flushed, no concurrent
-builds/tests. PTY output is drained at 122×40 cells / 8×17 pixels without a renderer;
-stdin is `/dev/null`. Child CPU and peak RSS come from `wait4`.
-
-| 10,000 entries, equal output | Elapsed before → after | Peak RSS before → after |
-| --- | ---: | ---: |
-| Plain names, pipe | 8.26 → 7.69 ms | 3.95 → 3.95 MiB |
-| Styled compact columns, PTY | 29.68 → 27.66 ms | 4.17 → 4.17 MiB |
-| Long, repeated timestamp, pipe | 27.52 → 24.27 ms | 5.83 → 5.03 MiB |
-| Long, distinct timestamps, pipe | 995.72 → 530.71 ms | 5.86 → 5.06 MiB |
-| Numeric fields without time, pipe | 26.08 → 23.90 ms | 5.56 → 4.53 MiB |
-| Long, repeated timestamp, PTY | 44.68 → 43.22 ms | 5.89 → 5.09 MiB |
-| Long, distinct timestamps, PTY | 975.44 → 510.10 ms | 5.91 → 5.09 MiB |
-
-The distinct fixture spaces times by 64 seconds, exceeding/defeating the bounded
-exact-second cache. It demonstrates the removed second `localtime_r` conversion:
-roughly **47–48% less elapsed/CPU time** on this host. This is not a universal speedup;
-libc/timezone costs differ by platform and repeated times already hit the cache.
-Repeated-time pipe CPU falls **13%** (25.64 → 22.35 ms); plain/compact elapsed gains
-are about **7%**. Complete output hashes match in every equal-work case.
-
-Long-listing peak RSS falls about **14%**, or **19%** without the time column.
-Each retained metadata record now contains 48 bytes of used stat fields on the
-supported 64-bit targets. A modified column retains another 24 bytes of civil-time
-state per entry so output never repeats the conversion. This still uses less memory
-than the old full stat records; no per-entry formatted timestamp strings are retained.
-Safe filenames borrow their original storage, and permission characters no longer
-allocate individually. Plain output retains no per-entry metadata; grids do not
-collect long details just because long is now the terminal fallback.
-
-The **changed default is a different workload**: styled output grows from 300,000
-to 1,750,000 bytes, elapsed from 28.29 to 43.92 ms, and RSS from 4.16 to 5.08 MiB in
-the repeated-time fixture. Explicit `-C` restores compact columns; the equal-work
-PTY rows compare old `-l` with the new default. Automatic sparse-image long listings
-also perform miniature decoding just as explicit `-l` does; `--no-images` avoids it.
-
-Image controls are essentially unchanged: four original images take 73.06 → 72.51 ms
-with cache off, 73.20 → 73.04 ms with an empty cache, and 5.58 → 5.42 ms with a warm
-cache. The 40-image gallery takes 17.66 → 17.67 ms. Long miniatures, images, artwork and all output bytes agree across versions
-and off/empty/warm cache modes. Image RSS
-and graphics traffic are essentially unchanged. Cache setup is outside timing.
-The stripped binary grows by only 80 bytes (2,288,960 → 2,289,040), with no
-new dependencies. These measurements establish application/transport costs, not Ghostty rendering
-speed, image memory, or a new real-terminal visual pass.
-
-```sh
-python3 benchmarks/performance.py --before target/lsa-before-performance --runs=7
-python3 benchmarks/inline.py --before target/lsa-before-performance --runs=7
-```
-
-The first harness fixes timestamps and alternates version order per pair. The
-second retains the existing image/cache controls. Reports first go under ignored
-`benchmarks/local/`; checked final reports are copied explicitly.
-
-
-## Final artwork pass for v0.2.0 — 2026-09-07
-
-[Paired report](artwork.json), same arm64 macOS/122×40 drained-PTY conditions as
-below. Seven paired/interleaved runs after two warmups; no thumbnail cache and no
-concurrent builds/tests. Before is the user's Ghostty-verified gallery build saved
-as `target/lsa-before-final-efficiency`; after is the local v0.2.0 release binary.
-The report records exact hashes. Every case asserts identical complete output.
-
-| 256 entries | Elapsed before → after | CPU before → after |
-| --- | ---: | ---: |
-| Folders with grid artwork | 58.29 → 52.24 ms | 37.05 → 31.28 ms |
-| All eleven artwork categories | 60.85 → 51.85 ms | 39.73 → 31.15 ms |
-| Raster image control | 84.21 → 83.67 ms | 61.84 → 61.64 ms |
-
-Integer rectangles now paint directly, and polygons scan only their vertex bounds
-instead of all 8,000 canvas pixels. Folder CPU falls about **16%** and mixed artwork
-CPU about **22%**, with identical pixels/bytes and essentially unchanged peak memory.
-The complete offline artwork sheet is also byte-identical. Source image decoding
-is unaffected. No additional retained cache, queue or worker was introduced.
-
-```sh
-python3 benchmarks/artwork.py --before target/lsa-before-final-efficiency --runs=7
-```
-
-Earlier measurements below describe the gallery build before this final pass.
-
-## Larger galleries, variable size and SVG/ICO — 2026-09-07
-
-[Everyday cases](gallery-options.json) and [equal-work/EXIF cases](gallery-efficiency.json),
-arm64 macOS 26.6.2, Rust 1.98.0, release/thin-LTO/stripped. Before: checkout
-`e966c9e`, saved as `target/lsa-before-gallery-options`. Both reports identify the
-exact before/after binaries by SHA-256. Two warmups, seven paired/interleaved fresh
-processes per case; OS caches warm, not flushed. Output goes to a drained 122×40
-PTY with 8×17 cell pixels, no renderer, and stdin `/dev/null`. `wait4` records child
-CPU/RSS. Cache clearing/priming and output parsing are outside elapsed timing.
-The helper preserves the queued PTY tail after process exit.
-
-| Median elapsed time | Before | After |
-| --- | ---: | ---: |
-| 10,000 plain names, pipe | 7.98 ms | 8.14 ms |
-| 10,000 styled names, terminal | 26.94 ms | 27.08 ms |
-| 10,000 long entries, pipe | 24.90 ms | 24.98 ms |
-| Four original images, cache off | 71.02 ms | 70.94 ms |
-| Four original images, empty cache | 71.56 ms | 70.90 ms |
-| Four original images, warm cache | 5.28 ms | 5.43 ms |
-| 40-image gallery, defaults | 10.27 ms (16 previews + 4 artwork) | 16.93 ms (40 previews) |
-| 256-image gallery, explicit equal limits | 84.43 ms | 85.35 ms |
-| 6.4 MP rotated JPEG, cache off | 20.82 ms | 15.60 ms |
-| Same JPEG, empty cache | 20.91 ms | 15.53 ms |
-| Same JPEG, warm cache | 4.56 ms | 4.57 ms |
-| Same JPEG, long miniature, cache off | 20.75 ms | 15.41 ms |
-
-The 256-image case uses **distinct copies** of one synthetic 320×160 PNG, cache
-off, with `--preview-limit=256` on both versions. Both print 256 source previews
-and byte-identical output: 7,834,880 graphics bytes. Its speed and roughly 2.9 MiB
-RSS are essentially unchanged. The default 40-image case instead does more work:
-graphics traffic doubles to 1,224,200 bytes. It links one small source and does not
-model 256 large photographs. More previews increase terminal traffic and residency;
-these measurements do not establish Ghostty rendering time or image memory.
-
-Bounded buffered reads reduce the original four-image case from **31.45 to 29.97
-MiB** peak RSS, about 1.5 MiB, without changing output bytes. Whole-file base64
-allocation is replaced with fixed 4 KiB scratch space. These changes do not produce
-a broad timing gain in the sampled PNGs or ordinary text.
-
-Moving EXIF rotation after thumbnailing gives the clearest gain: the generated
-3,200×2,000 JPEG with orientation 6 takes **25% less elapsed time**, **30% less CPU**,
-and **47% less peak RSS** (39.58 → 21.12 MiB) with caching off. Long miniatures show
-similar savings. Fractional resize-edge pixels can differ slightly when rotating
-after sampling; all eight orientations have content/coverage tests, and cache v2
-prevents stale transform reuse. Off, empty and warm caches remain byte-identical
-within each binary. This sample is one synthetic JPEG, not a universal decoder gain.
-
-SVG/ICO support adds about 0.90 MiB to the stripped binary: **1,345,936 → 2,289,008
-bytes**. resvg 0.48.1 has text/system-font/raster-image/SVGZ features disabled.
-The SVG path renders at thumbnail resolution with bounded input complexity; it
-does not allocate a native-resolution image. CPU/allocation bounds remain best
-effort for third-party decoders/renderers; no hard wall-clock timeout was added.
+Earlier distinct-timestamp reports (below, 2026-09-10/12) measured ~530-560 ms
+for 10,000 long entries on macOS 26.6.2. The same fixture takes ~23 ms on this
+machine: that cost was the earlier host's local-time conversion, not lsa's.
 
 ```sh
 cargo build --release --locked --examples --bins
-./target/release/examples/gallery_fixtures  # once; refuses to overwrite
-python3 benchmarks/inline.py --before target/lsa-before-gallery-options --runs=7
-python3 benchmarks/gallery.py --before target/lsa-before-gallery-options --runs=7
+python3 benchmarks/previews.py --before target/lsa-before-v050 --runs=9
 ```
 
-Run measurements after builds/tests finish to avoid local contention. Reports go
-under `benchmarks/local/`; copying checked reports into the repository is explicit.
+## Earlier reports
 
-## Smaller grids and long-view miniatures — 2026-09-06
+| Date | Change | Reports | Harness | Summary |
+| --- | --- | --- | --- | --- |
+| 2026-09-22 | Automatic hyperlinks (v0.4.0) | [hyperlinks](hyperlinks.json) | [hyperlinks.py](hyperlinks.py) | Links add 0.95-4.26 ms CPU per 10,000 entries; forced-link streaming 8% cheaper |
+| 2026-09-12 | Formatting and artwork efficiency (v0.3.1) | [listings](efficiency-listings.json), [artwork](efficiency-artwork.json), [images](efficiency-images.json) | [performance.py](performance.py), [artwork.py](artwork.py), [inline.py](inline.py) | 4-7% less CPU for styled/long listings, 4.8-7.5% less for artwork |
+| 2026-09-10 | Long defaults, compact metadata (v0.3.0) | [listings](performance.json), [images](performance-images.json) | [performance.py](performance.py), [inline.py](inline.py) | Long-listing RSS 14% lower; one local-time conversion per entry |
+| 2026-09-07 | Final artwork pass (v0.2.0) | [artwork](artwork.json) | [artwork.py](artwork.py) | 16-22% less artwork CPU, identical pixels |
+| 2026-09-07 | Larger galleries, SVG/ICO (v0.2.0) | [options](gallery-options.json), [efficiency](gallery-efficiency.json) | [gallery.py](gallery.py), [inline.py](inline.py) | Rotating JPEGs after thumbnailing: 25% faster, 47% less memory |
+| 2026-09-06 | Smaller grids, miniatures | [thumbnail UX](thumbnail-ux.json) | [inline.py](inline.py) | 52% fewer graphics bytes for mixed grids |
+| 2026-09-05 | Inline product reset | [inline](inline.json) | [inline.py](inline.py) | Pager removed; plain output unchanged |
+| Earlier | Baseline, defaults, metadata, cache, removed browser/pager | [history/](history/) | — | Superseded implementations |
 
-[Paired report](thumbnail-ux.json), arm64 macOS 26.6.2, Rust 1.98.0,
-release/thin-LTO/stripped. The before binary is commit `4a5269b`; SHA-256 identities
-and sizes are in the report. Two warmups, then seven paired/interleaved fresh
-processes per case. OS caches are warm, not flushed. Output goes to a drained
-122×40 PTY with 8×17 cell pixels and no renderer; stdin is `/dev/null`.
-
-| Median elapsed time | Before | After |
-| --- | ---: | ---: |
-| 10,000 plain filenames, pipe | 9.64 ms | 9.71 ms |
-| 10,000 filenames, default terminal output | 27.46 ms | 29.99 ms |
-| 10,000 entries, default long listing, pipe | 30.21 ms | 30.25 ms |
-| Four user images, cache off | 80.44 ms | 78.98 ms |
-| Four user images, empty thumbnail cache | 82.02 ms | 79.26 ms |
-| Four user images, warm thumbnail cache | 4.58 ms | 3.59 ms |
-| 40-image gallery, default output | 15.54 ms | 9.85 ms |
-| Four user images, long view, cache off | 4.15 ms (text) | 78.26 ms (miniatures) |
-| Four user images, long view, empty cache | 3.64 ms (text) | 79.71 ms (miniatures) |
-| Four user images, long view, warm cache | 3.36 ms (text) | 3.64 ms (miniatures) |
-| Release binary size | 1,329,312 bytes | 1,345,936 bytes |
-
-The mixed grid sends **52.2% fewer graphics bytes**, from 320,340 to 153,025, even
-with a fifth placement for folder artwork. Frames shrink from 176×85 to 112×51
-pixels. The gallery now emits 16 source previews and four built-in images to finish
-its last grid row; all 40 names remain present. Its graphics traffic falls from
-1,281,360 to 612,100 bytes. This fixture links one small synthetic source, so its
-decode time does not represent 16 large photographs. `images` in the report counts
-all placements, including artwork; `image_bytes` counts complete Kitty APC bytes.
-
-Long view sends four 24×17 miniatures in 8,896 graphics bytes. Their small output
-does not remove source decoding cost: the uncached four-image sample takes about
-78 ms and 31.6 MiB peak RSS, versus 3.6 ms and 2.2 MiB with a warm thumbnail cache.
-Use `--no-images` for text-only long listings. Cache remains opt-in; clearing and
-priming occur outside timed runs. Off, empty and warm caches produce identical
-output bytes within each binary and layout.
-
-Plain filename and long metadata pipe output is byte-identical across versions,
-with essentially unchanged measured cost. Default styled text adds a neutral
-foreground for otherwise unclassified files: 300,000 versus 210,000 output bytes
-and about 2.5 ms more in this 10,000-entry fixture. No blanket speedup is claimed.
-
-The harness records child CPU/RSS with `wait4`. It measures application and PTY
-transport cost, not visible rendering or terminal image memory.
-
-```sh
-python3 benchmarks/inline.py --before target/lsa-before-tile-polish --runs=7
-```
-
-The updated harness includes long-view image cases and graphics byte counts.
-Reports are written to `benchmarks/local/inline.json`; committed evidence is copied
-explicitly after checking that the release binary hash matches.
-
-
-## Previous inline product reset — 2026-09-05
-
-[Paired report](inline.json), arm64 macOS 26.6.2, Rust 1.98.0, release/thin-LTO/stripped.
-The before binary is the uncommitted automatic-pager implementation saved at the
-start of this change; both binaries are identified by SHA-256 in the report.
-Two warmups, then 11 paired/interleaved fresh processes per case. OS caches warm,
-not flushed. Terminal output goes to a drained 122×40 PTY with 8×17 cell pixels;
-stdin is `/dev/null`, so the former automatic pager cannot capture input.
-
-| Median elapsed time | Before | At that change |
-| --- | ---: | ---: |
-| 10,000 plain filenames, pipe | 8.01 ms | 9.13 ms |
-| 10,000 filenames, default terminal output | 10.50 ms | 26.40 ms |
-| 10,000 entries, default long listing, pipe | 1,020.02 ms | 29.61 ms |
-| Four user images, cache off | 76.55 ms | 76.39 ms |
-| Four user images, empty thumbnail cache | 78.01 ms | 77.77 ms |
-| Four user images, warm thumbnail cache | 3.98 ms | 3.99 ms |
-| 40-image gallery, default output | 2.31 ms (text only) | 12.22 ms (16 previews + all names) |
-| Release binary size | 1,381,072 bytes | 1,329,312 bytes |
-
-Natural sorting adds roughly 1 ms in the plain fixture; byte output is identical
-for these zero-padded names. Automatic terminal styling adds mode reads to identify
-executables, icon formatting and more output. Its measured 10,000-entry peak RSS is
-about 3.97 MiB, the same as before; mode reads retain only a boolean per entry.
-The default has useful decoration but is not faster than the former plain columns.
-
-The long-listing fixture contains many identical modification timestamps. A bounded
-64-slot exact-second formatting cache avoids repeated expensive `localtime_r` calls
-across the width/output passes on this host. This is a large fixture-specific gain,
-not a universal long-listing speedup; distinct times or cache collisions still need
-conversion. Default long columns also changed to readable owner/size details.
-The local timezone environment was inherited. Historical long measurements were
-much faster than this before sample; compare paired results within a session.
-
-Four original user sources and 176×85 thumbnail canvases are unchanged. Cache off,
-empty and warm produce identical bytes within each binary; the new binary adds
-styled labels. Cache clear/priming occur outside measured runs. Uncached image RSS
-is about 31.44 MiB; warm-cache RSS about 2.09 MiB. The gallery fixture uses 40 links
-to one small synthetic source, so its decode times do not describe 16 large photos.
-
-The harness drains output and records child CPU/RSS with `wait4`. It does **not**
-measure visible rendering, terminal image memory or time until the user sees pixels.
-No kernel/OS-cache flush, terminal renderer or external timing executable is used.
-
-```sh
-python3 benchmarks/inline.py
-python3 benchmarks/inline.py --before target/before-inline-overhaul/lsa
-```
-
-Reports go to `benchmarks/local/inline.json`; saving committed evidence is explicit.
-Fixtures/cache stay under `benchmarks/local/inline/`. The separately built host
-archive is smoke-tested after extraction; the report describes `target/release/lsa`.
-
-## Historical evidence
-
-[Historical reports](history/) retain earlier measurements, not the current product.
-Their output policies, columns, harnesses and sampling conditions differ. Reproduce
-older implementations using their corresponding Git revision and harness.
-
-| Topic | Report |
-| --- | --- |
-| Initial inline cost | [baseline](history/baseline.json) |
-| First automatic grids and columns | [defaults](history/defaults.json) |
-| Metadata alignment | [metadata](history/metadata.json) |
-| Opt-in cache | [cache](history/cache.json) |
-| Cache working sets | [working sets](history/cache-working-set.json) |
-| Removed interactive implementations | [browser](history/browser.json), [automatic pager](history/pager-auto.json) |
-
-The cache working-set report compares stable independent source identities and
-64 slots with eight candidate locations per key. Its 32-source repeated case reached
-100% hits versus 56.25% for direct mapping; 96 alternating sources exceed capacity.
-`cache_working_set.py --label NAME` remains a focused current-build experiment;
-it explicitly raises the attempt cap and uses undecorated output. Preserve its
-ignored source files to retain source identities across measurements. It relies on
-the four original user images; its historical-binary option requires the matching
-version of the PTY helper. The cache itself is unchanged by the product reset.
+[cache_working_set.py](cache_working_set.py) remains a focused cache experiment
+(eight candidate slots: 100% hits for a repeated 32-source working set).

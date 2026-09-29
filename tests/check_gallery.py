@@ -59,38 +59,53 @@ def check_system_formats(root):
         data = run(['--diagnose', formats])
         assert b'preview_candidates=0' in data, data
         return 1
-    convert = lambda fmt, src, name, *extra: subprocess.run(
-        ['sips', *extra, '-s', 'format', fmt, str(src), '--out', str(formats / name)],
-        check=True, capture_output=True)
-    for fmt, name in [('heic', 'a.heic'), ('avif', 'b.avif'), ('tiff', 'c.tiff'), ('psd', 'd.psd')]:
-        convert(fmt, source, name)
-    convert('tiff', ROOT / 'img-test/generated/transparent.png', 'e-alpha.tiff')
-    # 6000x3000 = 18 MP: beyond the Rust decoders' 16 MP limit, but ImageIO
-    # decodes JPEG at reduced resolution.
-    convert('jpeg', source, 'f-large.jpg', '-z', '3000', '6000')
+    # CI runners are VMs whose sips may lack encoders (AVIF, HEVC); a format
+    # sips cannot write is skipped, but everything written must decode.
+    made = []
+    for fmt, src, name, extra in [
+        ('heic', source, 'a.heic', []), ('avif', source, 'b.avif', []),
+        ('tiff', source, 'c.tiff', []), ('psd', source, 'd.psd', []),
+        ('tiff', ROOT / 'img-test/generated/transparent.png', 'e-alpha.tiff', []),
+        # 6000x3000 = 18 MP: beyond the Rust decoders' 16 MP limit, but ImageIO
+        # decodes JPEG at reduced resolution.
+        ('jpeg', source, 'f-large.jpg', ['-z', '3000', '6000']),
+    ]:
+        out = formats / name
+        result = subprocess.run(['sips', *extra, '-s', 'format', fmt, str(src), '--out', str(out)],
+                                capture_output=True)
+        if result.returncode == 0 and out.exists() and out.stat().st_size:
+            made.append(name)
+        else:
+            out.unlink(missing_ok=True)
+            print(f'note: sips cannot write {fmt} here; skipped {name}')
+    assert {'c.tiff', 'e-alpha.tiff', 'f-large.jpg'} <= set(made), made
     (formats / 'g-empty.heic').write_bytes(b'')
     geometry = dict(cols=122, rows=40, pixels=(976, 680))
     data = run(['--grid', formats], **geometry)
     frames = images(data, pixels=True)
-    assert len(frames) == 7, len(frames)
+    names = sorted([*made, 'g-empty.heic'])
+    assert len(frames) == len(names), (len(frames), names)
+    frame = dict(zip(names, frames))
     def pixel(frame, fx, fy):
         control, raw = frame
         w, h = int(control[b's']), int(control[b'v'])
         i = (int(fy * h) * w + int(fx * w)) * 4
         return raw[i:i + 4]
-    for frame in frames[:4] + frames[5:6]:
-        left, right = pixel(frame, 0.35, 0.5), pixel(frame, 0.65, 0.5)
-        assert left[0] > 180 and left[2] < 90, left     # red half
-        assert right[2] > 180 and right[0] < 90, right  # blue half
-    # Straight alpha survives premultiplied drawing: green disc over checker.
-    center = pixel(frames[4], 0.5, 0.5)
-    assert center[1] > 150 and center[1] > center[0] + 60 and center[3] == 255, center
+    for name in made:
+        if name == 'e-alpha.tiff':
+            # Straight alpha survives premultiplied drawing: green disc over checker.
+            center = pixel(frame[name], 0.5, 0.5)
+            assert center[1] > 150 and center[1] > center[0] + 60 and center[3] == 255, center
+            continue
+        left, right = pixel(frame[name], 0.35, 0.5), pixel(frame[name], 0.65, 0.5)
+        assert left[0] > 180 and left[2] < 90, (name, left)     # red half
+        assert right[2] > 180 and right[0] < 90, (name, right)  # blue half
     # An empty HEIC is a failed preview: shared error artwork, name intact.
     error = images(run(['--grid', ROOT / 'img-test/generated/broken.png'], **geometry), pixels=True)
-    assert frames[6][1] == error[0][1] and b'g-empty.heic' in plain(data)
+    assert frame['g-empty.heic'][1] == error[0][1] and b'g-empty.heic' in plain(data)
     # Long view miniatures and the opt-in cache use the same backend.
     data = run(['-l', formats], **geometry)
-    assert len(images(data)) == 7
+    assert len(images(data)) == len(names)
     cache = root / 'system-cache'
     flags = [f'--cache-dir={cache}', '--grid', formats]
     assert run(flags, **geometry) == run(flags, **geometry) == run(['--grid', formats], **geometry)

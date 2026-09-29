@@ -1,308 +1,37 @@
 # Session handoff
 
-## 2026-09-22 — automatic hyperlinks and v0.4.0
+Recheck Git state before relying on this snapshot. Keep this file short: the
+current state and next step. History belongs in the [changelog](CHANGELOG.md),
+decisions in [docs/decisions.md](docs/decisions.md).
 
-The user requested automatic clickable filenames, commit/tag/push and watching CI
-until green. All work/access stays in this repository; no computer use, shell
-changes or original-image edits. Recheck Git state. v0.4.0 is published.
+## 2026-09-28 — v0.5.0
 
-Auto links require stdout TTY, a nonempty/non-dumb TERM, and no SSH_CONNECTION,
-SSH_CLIENT or SSH_TTY. `--hyperlink=auto|always|never` and `--no-hyperlink` follow
-argument order; bare `--hyperlink` retains force behavior. Pipes/files stay plain
-by default, and NO_COLOR affects only color. Hostname-qualified file URIs encode
-raw bytes, preserve symlink identity and avoid DNS/canonicalization/extra stats.
-Hostname and encoded cwd prefixes are cached per invocation; per-label path/URL
-allocations are removed. Hostname/current-directory lookup failures fall back to
-text. Cache, image budgets and image output are unchanged.
+The user asked for the full set of recommendations from a whole-program review,
+committed at a sensible cadence and released. The work landed as separate
+commits:
 
-Local checks pass 51 unit, 15 macOS CLI, two artwork-example and three release
-tests, 234 PTY scenarios, formatting, strict clippy, release build and extracted
-host-package checks. Unix-socket CLI fixtures used normal sandbox escalation.
-New tests cover redirects, force/disable/order, SSH/TERM/NO_COLOR, unsafe raw names,
-symlinks and full URIs on each wrapped label fragment. PTY parsers treat OSC 8 as
-zero width; undecorated graphics fixtures explicitly disable links.
+- JPEG memory growth fix.
+- Name-only entries with classification computed once.
+- Appearance fixes: default foreground for plain files, dangling links,
+  directory sizes, LS_COLORS, hyperlink paths, SSH graphics policy, `--grid`
+  notices.
+- `ls` flags, with column-major `-C` and a new `-x`.
+- zlib-compressed payloads and reused artwork.
+- Parallel decoding.
+- macOS ImageIO previews.
+- An optional Ghostty VT check.
+- Documentation restructure and release.
 
-Baseline: target/lsa-before-hyperlinks, v0.3.1 SHA beginning 408386362131b208.
-Final binary SHA begins 7397267ab43b50b0. benchmarks/hyperlinks.py and
-benchmarks/hyperlinks.json record 21 paired runs after two warmups. Plain output
-and CPU are unchanged; streaming forced links uses about 8% less CPU than v0.3.1.
-Enabling links adds about 0.95–4.26 ms CPU per 10,000 short/deep-path entries, and
-adds 1.26–5.03 MB of output. No terminal renderer or scrollback memory was measured.
+Evidence for each commit is in its message and in
+[benchmarks/README.md](benchmarks/README.md).
 
-Commit `317255b94a9e5a04c5750d63746164cd4e94ccd7` and annotated tag `v0.4.0` are
-pushed to the verified public yungibly/lsa remote. Both workflows passed without
-reruns: [CI, five jobs](https://github.com/yungibly/lsa/actions/runs/35737546891),
-[Release, eleven jobs](https://github.com/yungibly/lsa/actions/runs/35737550065).
-Native macOS/Linux builds, Rust 1.88, publication, all three Homebrew installs and
-the tap update are green. The [public release](https://github.com/yungibly/lsa/releases/tag/v0.4.0)
-notes match docs/releases/v0.4.0.md. Its Apple Silicon archive passed checksum,
-extraction, version, plain pipe/file output, automatic hostname-link bytes,
-opt-out and SSH fallback checks. The public formula points to all four v0.4.0
-archives. Workflow snapshots, public package/formula and smoke script are under
-target/automation/v0.4.0/.
+Tools under the ignored `target/` directory:
 
-This documentation follow-up uses [skip ci]; the tag retains the fully tested
-source commit. No pending publication work. Real Ghostty click/scrollback behavior
-remains for the user, with terminal/version and transport recorded; the previous
-default-details/AM-PM appearance pass is also still pending.
+- `target/tools/tui-test/tui-test`: the microsoft/tui-test 0.1.0-beta.5 release
+  binary (checksum-verified), suggested by the user. Run it with
+  `HOME=target/tools/tui-test/home`. `tests/check_ghostty_vt.py` uses it.
+- `target/lsa-before-v050`: the v0.4.0 release binary, used for comparisons.
 
-## 2026-09-12 — formatting/artwork efficiency and v0.3.1
+Unix-socket CLI fixtures ran without sandbox escalation this session.
 
-The user requested another performance/resource hunt and authorized commit, tag,
-push and watching CI until green. Work/access stays in this repository; no computer
-use or source-image edits. Recheck Git state. Version 0.3.1 is published.
-
-Metadata formatting reuses one scratch string and borrows cached owner/group
-names. Text labels stream icon/name/type-marker components without a combined
-allocation; column widths and color/hyperlink framing retain exact behavior.
-Artwork computes polygon crossings per scanline with at most six stack floats,
-instead of recomputing them for every pixel. No dependency, worker, cache-policy
-or resource-budget change. Reference tests preserve every artwork source pixel.
-
-Before binary: `target/lsa-before-efficiency-031` at `0e91944` (v0.3.0). Paired
-seven-run reports are `benchmarks/efficiency-{listings,artwork,images}.json`; every
-output hash matches. Sampled styled/repeated-time/numeric listing CPU falls about
-4–7%, artwork CPU 4.8–7.5%. Plain names, distinct-time conversion, raster previews
-and retained memory are essentially unchanged. Conditions and limitations are in
-benchmarks/README.md. Final release binary SHA-256 starts `408386362131b208`.
-
-An intermittent thumbnail assertion exposed a PTY helper race: select could time
-out just before a child wrote/exited, then closing the last slave discarded queued
-bytes on macOS. The unchanged old binary reproduced an empty capture in 2,000
-trials; all ten forced timing gaps lost output with the old helper. Observing exit
-before readiness fixes it. All 2,000 normal and ten forced captures then passed,
-and a gated regression is in check_pty.py. The earlier unlogged Intel diagnostic
-failure remains unconfirmed; this is independent evidence of a helper defect.
-Reproduction scripts/results stay in `target/automation/v0.3.1/`.
-
-Local validation: 50 unit tests, 13 macOS CLI tests, two artwork-example tests,
-three release tests, all 196 PTY scenarios, formatting, strict clippy, release build,
-extracted-package smoke checks and matching release-tag validation. No new Ghostty
-visual pass is claimed; pending v0.3.0 default details/AM-PM appearance verification
-still belongs to the user.
-
-Commit `564388f05befc85e580d7fca287f3bdc9063caa1` and annotated tag `v0.3.1` are
-pushed. CI passed all five jobs:
-https://github.com/yungibly/lsa/actions/runs/34678732155. Release passed all eleven:
-https://github.com/yungibly/lsa/actions/runs/34678732395, including Rust 1.88, four
-native builds, publication, all three Homebrew installations and the tap update.
-Public release notes match docs/releases/v0.3.1.md:
-https://github.com/yungibly/lsa/releases/tag/v0.3.1. The public Apple Silicon archive
-passed checksum/extraction/version, complete plain names and AM/PM long-listing
-checks. The public formula independently points to all four v0.3.1 archives.
-Watch logs, public downloads/formula and smoke script stay under the ignored
-target/automation/v0.3.1 directory.
-
-Automatic approval review initially rejected the push as an unverified destination
-and payload. Read-only checks confirmed the configured public yungibly/lsa remote,
-ADMIN access and the sole reviewed outgoing commit without ignored files or changed
-release workflow. The same direct push was then approved and succeeded; no user
-confirmation or workaround was needed. This documentation-only follow-up uses
-[skip ci]; the release tag retains exactly the fully tested source commit.
-Next: normal use and the pending Ghostty appearance pass. No pending release work.
-
-## 2026-09-10 — performance, long defaults and AM/PM
-
-The user requested a performance/resource hunt, long form as the automatic text
-default, a 12-hour clock flag, then commit/tag/push and watching CI until green.
-All work/access remains in this repository; no computer use or source-image edits.
-Recheck Git state before continuing. Version 0.3.0 is published.
-
-Terminal fallback now uses long details; automatic grids, plain pipes and default
-directory-symlink traversal remain. `-C` / `--columns` selects compact text and
-`--12-hour` adds AM/PM only where timestamps are shown. Compact metadata, one
-localtime conversion per entry, borrowed safe names and stack permission glyphs
-reduce cost without workers or cache changes. Distinct-time cases show the main
-speed gain; long-form defaults emit more text than old compact defaults.
-
-Validation: 47 unit + 13 macOS CLI + one artwork-example + three release tests,
-195 PTY scenarios, formatting, strict lint and package checks. Tests cover UTC,
-midnight/noon, DST, epoch boundaries, extreme year widths, layout precedence,
-symlinks and AM/PM thumbnail alignment. Unix-socket tests used approved sandbox
-escalation. No new Ghostty visual pass; image pixels remain unchanged.
-
-Before binary: `target/lsa-before-performance` from 02762c1. Reproducible paired
-reports/harnesses live under benchmarks and match the final local release binary.
-GitHub access requires the ordinary network escalation.
-
-Commit `96755cd` and annotated tag `v0.3.0` are pushed. CI passed all five jobs:
-https://github.com/yungibly/lsa/actions/runs/34544594224. Release passed all eleven:
-https://github.com/yungibly/lsa/actions/runs/34544595865, including native builds,
-Rust 1.88, checked archives, Homebrew installs on both macOS architectures and
-x86-64 Linux, and the tap update. Public release notes match docs/releases/v0.3.0.md:
-https://github.com/yungibly/lsa/releases/tag/v0.3.0. The public Apple Silicon archive
-passed checksum/extraction/version and the new option/pipe/default checks locally.
-The public formula independently points to all four v0.3.0 architecture archives.
-
-The initial Intel release job failed tests/check_layout.py's diagnostic-output
-assertion, without recording the captured output. The independent Intel CI job
-and the unchanged release retry passed. All 500 consecutive local diagnostic
-captures also passed. Cause remains unconfirmed; no test was skipped or weakened,
-and the tag/source stayed unchanged. Investigate if it recurs. Watch logs, public
-archive, formula and smoke-check script stay under target/automation/v0.3.0/.
-
-The documentation-only follow-up uses [skip ci]; tagged source remains the tested
-96755cd. Next: normal use and optional user Ghostty verification of the new
-default/AM-PM appearance. No pending release work, local installation or shell edits.
-
-## 2026-09-07 — verified Ghostty and v0.2.0 release
-
-The user tested everything successfully in Ghostty and explicitly authorized a
-final efficiency pass, commit, tag, push, and watching CI until green. Their terminal
-version/geometry/transport were not resupplied. Recheck Git state before continuing.
-
-The final pass limits artwork polygon rasterization to vertex bounds and paints
-integer rectangles directly. No caching, memory policy, image pixels or terminal
-behavior changes. The full artwork sheet and paired end-to-end outputs match
-exactly. Folder grids use about 16% less CPU; mixed artwork grids about 22% less;
-raster previews are unchanged. Evidence: benchmarks/artwork.json and its harness.
-Before binary: target/lsa-before-final-efficiency. Version chosen: v0.2.0.
-
-Commit `ba4a882` and annotated tag `v0.2.0` are pushed. All five jobs passed in
-CI: https://github.com/yungibly/lsa/actions/runs/34106546519 (four native targets
-plus Rust 1.88). Local full checks and extracted v0.2.0 package also passed.
-Release workflow: https://github.com/yungibly/lsa/actions/runs/34107070950.
-All eleven release jobs passed, including native builds, Rust 1.88, publication,
-Homebrew installations on both macOS architectures and x86-64 Linux, and the tap
-update. Public release: https://github.com/yungibly/lsa/releases/tag/v0.2.0.
-Reviewed docs/releases/v0.2.0.md notes are applied. The public formula independently
-checks as v0.2.0 with all four architecture URLs. The published Apple Silicon
-archive passed SHA-256, extraction, version and mixed-listing checks locally.
-Progress/results and downloaded files stay under ignored target/automation/.
-No local Homebrew installation, shell changes or source-image modifications.
-
-The final documentation follow-up records these results with [skip ci]; source
-and the release tag remain exactly the successfully tested ba4a882 commit.
-Next: normal personal use and concrete regressions; no pending publication work.
-The prior "not requested" release restriction below is superseded by the user's
-latest authorization.
-
-## 2026-09-07 — gallery defaults, sizing, UX and formats
-
-The user's personal use found the 16-image default frustrating. Work is local and
-uncommitted on main; recheck Git state. The original images remain unchanged, all
-work/artifacts are in this repository, and no computer use was performed. The
-published Homebrew v0.1.0 release has not been changed by this session.
-
-- Default source attempts: 256; `--preview-limit=0..4096`, with equals or space.
-  Graphics: 128 MiB and 4,096 placements across all operands. Budget exhaustion
-  retains compact text; partially completed grid rows retain artwork.
-- `--thumbnail-size=1..12`: terminal-row increments, default 3, proportional width/
-  spacing, terminal clamping, unchanged 320×240 maximum pixels. Long miniatures
-  stay one row. Cache keys continue to separate pixel geometry.
-- Help now has examples, says --header/--fields imply -l, and explains precedence.
-  An explicit ignored grid/size request gets one notice per invocation, including
-  --grid --header. Familiar text overrides remain order independent.
-- SVG shapes/paths/gradients/clipping via resvg 0.48.1 with default features off;
-  bounded XML preflight, disabled image resolvers, no fonts/resources. Whole-preview
-  fallback for text, embedded/external images, filters, masks, patterns, markers,
-  use expansion; 256 KiB, 4,096 nodes, 32 nesting levels. ICO uses existing image
-  codecs. WebM is deliberately deferred to avoid codec/process complexity, as the
-  user allowed. No pager: existing scrollback model remains.
-- Bounded buffered raster reads remove one compressed-source copy. JPEG EXIF
-  rotation follows thumbnailing; 4 KiB base64 scratch replaces whole-image encoding
-  allocation. Slight fractional resize-edge changes require cache v2; old cache
-  namespace is untouched and clear acts on the new one only.
-
-Checks: 46 unit + 12 macOS CLI + one artwork-example + three release-tooling tests;
-183 PTY scenarios including 75 new gallery checks; formatting, strict clippy,
-release build, extracted host-package smoke checks. Unix socket fixtures needed
-normal sandbox escalation. CI includes the new gallery script, but hosted Linux
-and Rust 1.88 have not yet checked this change; prior passes below are historical.
-
-The before binary is `target/lsa-before-gallery-options`. Paired reports and
-methodology are in benchmarks/README.md. Equal-work galleries and text timings are
-essentially unchanged; 6.4 MP rotated JPEGs use substantially less time/memory.
-PTY timing is not renderer timing. The extra fixtures are at
-`target/visual-checks/gallery-files`, created by examples/gallery_fixtures.rs.
-
-**Next:** user Ghostty check of large personal directories, sizes 1/3/6/12, SVG/ICO/
-EXIF fixtures, --grid --header notice, long alignment, and prior placements in
-scrollback. Record version, geometry and transport. See docs/compatibility.md for
-commands. A new release/push was not requested; run hosted CI when preparing it.
-
-## Previous session — distribution
-
-2026-09-06. Recheck Git state. Distribution work started at `8f71819` with the user's
-`.gitignore` addition for `.env`. The user authorized GitHub builds, release and
-Homebrew tap setup, including pushing the needed changes and publication.
-Work/access stays in this repository; the user handles Ghostty visual checks.
-
-## Distribution verified
-
-The chosen name is `lsa`, tagline `ls, augmented`. The remote is
-`https://github.com/yungibly/lsa.git`; the user made it public during this session.
-The normal GitHub CLI session has write access. `.env` contains BREWTAP_TOKEN for
-`yungibly/homebrew-tap`; it must stay ignored and its value must never be printed.
-
-Release `v0.1.0` tags `ded6e1c`, following setup commit `33bf7ee`. Both commits are
-pushed. BREWTAP_TOKEN is configured as a repository Actions secret. Native CI and
-the full release pipeline passed:
-
-- CI: https://github.com/yungibly/lsa/actions/runs/34011569797
-- Release: https://github.com/yungibly/lsa/actions/runs/34011671355
-- Public binaries: https://github.com/yungibly/lsa/releases/tag/v0.1.0
-- Formula: https://github.com/yungibly/homebrew-tap/blob/main/Formula/lsa.rb
-
-Four architectures passed native builds, strict lint, all Rust and 108 headless
-terminal scenarios, and extracted-package smoke tests. CI uses Rust 1.98.1; Rust
-1.88.0 passed separately on GNU x86-64 Linux. Homebrew install/test passed on
-arm64 macOS 14.8.9, Intel macOS 15.7.9 and x86-64 Ubuntu 24.04.4 before the automatic
-tap commit. ARM64 Linux binaries passed native tests on Ubuntu 24.04.4; Homebrew
-installation there is not yet tested. The published Apple Silicon archive passed
-checksum, extraction, version and mixed-listing checks on this machine as well.
-
-The first Linux lint run exposed libc type differences; metadata keeps portable
-mode casts and infers localtime_r's time type. Concurrent local cache tests also
-exposed a PTY capture tail loss: keep the slave open until buffered master bytes
-are drained after child exit. Ten repeated stress runs (160 concurrent captures)
-passed after the fix. No listing/preview behavior was intentionally changed.
-
-Install with `brew install yungibly/tap/lsa`. Future matching stable version tags
-publish checksummed binaries and update the formula automatically. See
-`docs/install.md` for release/recovery instructions. Local temporary tooling,
-logs, tap README staging, and the downloaded package stay under ignored
-`target/automation/`; no local Homebrew installation or shell changes were made.
-
-## Latest direction
-
-The user prefers the inline-only overhaul. Their screenshot shows an empty-looking
-folder tile among four apple images and they request meaningful artwork for every
-entry/failure, smaller grid previews, removal of redundant grid glyphs, and possible
-tiny long-view previews. Preserve ls simplicity, complete names and performance.
-
-## Implementation
-
-- 14×3-cell maximum grid frames; keep wider label columns, center/wrap full names,
-  and suppress redundant glyphs only in thumbnail labels.
-- Code-generated folder/file/media/link/error drawings. Every tile has pixels;
-  failed previews show error artwork. No added font/dependency/asset requirement.
-- One-row 3-cell long-view previews replace the name icon in a fixed gutter. Text
-  overrides and narrow/short terminal fallback remain; later entries stay aligned
-  after budgets. Piped metadata stays plain. Full names may wrap normally.
-- One case-insensitive filename classifier for style and preview eligibility.
-  Recognized image files keep image styling even with executable mode bits;
-  unsupported/unknown types get image/generic artwork respectively.
-- All graphics, including artwork, share 8 MiB and 256 placement limits. Source
-  attempts remain 16 by default; failures/cache hits consume attempts. Completed
-  grid rows fall back to compact text when budgets run out. Cache stays opt-in.
-- Existing cache keys already separate thumbnail geometry; long miniatures cannot
-  reuse a grid-sized record. Built-in artwork never opens source files or storage.
-
-The prior release binary is saved as `target/lsa-before-tile-polish`. Original
-img-test files remain unchanged. `examples/preview_sheet.rs` produces an offline
-light/dark artwork sheet under target/visual-checks; it was inspected without GUI
-control. `tests/check_thumbnails.py` replays terminal rows and checks actual pixels.
-The PTY helper now drains through EOF after child exit to avoid losing a final write.
-
-## Verification and next work
-
-38 unit + 12 CLI tests, strict clippy and release build pass. The PTY suite covers
-16 protocol + 48 layout/style + 23 cache + 21 thumbnail UX scenarios. Package checks
-and paired measurements are recorded in compatibility/benchmarks.
-Use README's test/build commands. Unix socket CLI fixtures require normal sandbox
-escalation. The target remains Ghostty; current art/layout needs a user terminal pass.
-The latest screenshot does not resupply version/geometry/transport. Historical
-context: Ghostty 1.3.1, arm64 macOS 26.6.2, 122×40 cells, 8×17 pixels. Linux packages
-and Rust 1.88 are now verified by the hosted jobs above. No terminal queries, input
-handling or paging.
+**Next:** the user's Ghostty pass (see [roadmap](ROADMAP.md)), then daily use.

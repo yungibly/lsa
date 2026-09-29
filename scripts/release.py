@@ -7,6 +7,7 @@ import re
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+CHANGELOG = ROOT / "CHANGELOG.md"
 TARGETS = {
     "macos": {"arm": "aarch64-apple-darwin", "intel": "x86_64-apple-darwin"},
     "linux": {"arm": "aarch64-unknown-linux-musl", "intel": "x86_64-unknown-linux-musl"},
@@ -20,8 +21,27 @@ def validate_tag(tag, version):
         raise ValueError(f"tag {tag!r} does not match Cargo.toml version {version!r}")
 
 
-def prepare(tag, version, repository, packages, output):
+def release_notes(version, changelog=CHANGELOG):
+    """The CHANGELOG section for this version, without its heading."""
+    lines = changelog.read_text().splitlines()
+    heading = re.compile(rf"## v{re.escape(version)}(?:\s|$)")
+    starts = [i for i, line in enumerate(lines) if heading.match(line)]
+    if len(starts) != 1:
+        raise ValueError(f"{changelog.name} needs exactly one '## v{version}' section")
+    body = []
+    for line in lines[starts[0] + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    text = "\n".join(body).strip()
+    if not text:
+        raise ValueError(f"{changelog.name} section for v{version} is empty")
+    return text
+
+
+def prepare(tag, version, repository, packages, output, changelog=CHANGELOG):
     validate_tag(tag, version)
+    notes = release_notes(version, changelog)
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("repository must be OWNER/REPO")
     homepage = f"https://github.com/{repository}"
@@ -81,15 +101,14 @@ def prepare(tag, version, repository, packages, output):
     (output / "lsa.rb").write_text("\n".join(lines))
     (output / "SHA256SUMS").write_text("\n".join(sums) + "\n")
     (output / "notes.md").write_text(
-        f"**lsa {version} — ls, augmented.**\n\n"
-        "Colored listings, file icons, and bounded inline image thumbnails. "
-        "Output stays in terminal scrollback and returns to the shell.\n\n"
+        notes + "\n\n"
+        "## Install\n\n"
+        "```sh\nbrew install yungibly/tap/lsa\n# Existing installation:\n"
+        "brew update && brew upgrade lsa\n```\n\n"
         "Native binaries for Apple Silicon and Intel macOS (Sonoma 14 or later), "
         "and ARM64 and x86-64 Linux (static musl). Each archive was built, tested, "
-        "extracted, and smoke-tested on its matching architecture.\n\n"
-        "Install from Homebrew once the release workflow's tap update completes:\n\n"
-        "```sh\nbrew install yungibly/tap/lsa\n```\n\n"
-        "Or download the matching `.tar.gz` and `SHA256SUMS`, verify with "
+        "extracted, and smoke-tested on its matching architecture. Download the "
+        "matching `.tar.gz` and `SHA256SUMS`, verify with "
         "`shasum -a 256 --ignore-missing -c SHA256SUMS` on macOS or "
         "`sha256sum --ignore-missing -c SHA256SUMS` on Linux, then extract and "
         "copy `bin/lsa` onto your PATH.\n\n"
@@ -110,6 +129,7 @@ def main():
     version = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
     try:
         validate_tag(args.tag, version)
+        release_notes(version)
         if args.command == "prepare":
             prepare(args.tag, version, args.repository, args.packages, args.output)
     except (ValueError, OSError) as error:
