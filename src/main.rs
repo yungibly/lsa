@@ -216,8 +216,10 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
             layout::Layout::Lines => entry::write_text(out, dir, entries, &style),
         }
     };
+    // Classification serves styling, layout and previews; plain pipes use none.
+    let classify = term.tty || opts.diagnose || style.needs_mode();
     for path in &opts.paths {
-        let mut listing = entry::list(path, opts);
+        let mut listing = entry::list(path, opts, classify);
         if listing.directory {
             let long = layout::choose(&listing.entries, &term, opts).layout == layout::Layout::Long;
             // Dangling links matter where they are styled or could be previewed.

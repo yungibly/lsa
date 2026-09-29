@@ -97,8 +97,19 @@ impl Entry {
         let name = name.into();
         Self {
             class: filetype::classify(Path::new(&name)),
+            ..Self::unclassified(name, kind)
+        }
+    }
+    /// For output that never styles or previews (plain names in a pipe),
+    /// skipping filename classification.
+    fn unclassified(name: OsString, kind: Kind) -> Self {
+        Self {
             name,
             kind,
+            class: Classification {
+                category: filetype::Category::File,
+                preview: false,
+            },
             metadata: None,
             executable: false,
             broken: false,
@@ -152,7 +163,8 @@ pub struct Listing {
     pub valid: bool,
 }
 
-pub fn list(path: &Path, opts: &Options) -> Listing {
+/// `classify` is false when nothing will style or preview the entries.
+pub fn list(path: &Path, opts: &Options, classify: bool) -> Listing {
     let mut result = Listing::default();
     let meta = match fs::symlink_metadata(path) {
         Ok(m) => m,
@@ -214,7 +226,11 @@ pub fn list(path: &Path, opts: &Options) -> Listing {
                 Kind::Unknown
             }
         };
-        result.entries.push(Entry::new(name, kind));
+        result.entries.push(if classify {
+            Entry::new(name, kind)
+        } else {
+            Entry::unclassified(name, kind)
+        });
     }
     result
 }

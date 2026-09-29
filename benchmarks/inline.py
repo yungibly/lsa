@@ -39,6 +39,7 @@ def measure(binary, flags, terminal=False):
     descriptor = master if terminal else child.stdout.fileno()
     data = bytearray()
     usage = None
+    quiet = 0
     try:
         while True:
             if time.perf_counter() - start > 15: raise TimeoutError("measurement exceeded 15s")
@@ -47,12 +48,18 @@ def measure(binary, flags, terminal=False):
                 if pid:
                     usage = measured
                     child.returncode = os.waitstatus_to_exitcode(status)
+                    # Elapsed time ends at exit; draining below is not the child's.
+                    elapsed = time.perf_counter() - start
             if not select.select([descriptor], [], [], .001)[0]:
                 if terminal and usage is not None and slave is not None:
-                    # Preserve the queued PTY tail after exit, as in check_pty.
-                    os.close(slave)
-                    slave = None
+                    # Preserve the queued PTY tail after exit: closing the last
+                    # slave can discard it on macOS, so wait for 10 quiet polls.
+                    quiet += 1
+                    if quiet >= 10:
+                        os.close(slave)
+                        slave = None
                 continue
+            quiet = 0
             try: chunk = os.read(descriptor, 65536)
             except OSError as error:
                 if error.errno != errno.EIO: raise
@@ -62,7 +69,7 @@ def measure(binary, flags, terminal=False):
         if usage is None:
             _, status, usage = os.wait4(child.pid, 0)
             child.returncode = os.waitstatus_to_exitcode(status)
-        elapsed = time.perf_counter() - start
+            elapsed = time.perf_counter() - start
         err = child.stderr.read()
         assert child.returncode == 0 and not err, (child.returncode, err)
         return {"elapsed_ms": elapsed * 1000, "cpu_ms": (usage.ru_utime + usage.ru_stime) * 1000,
