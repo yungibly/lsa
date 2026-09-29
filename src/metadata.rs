@@ -332,121 +332,123 @@ pub fn write(
         None => (&mut none, None),
     };
     let cache = Mutex::new(cache);
-    pool::ordered(
-        &jobs,
-        pool::workers(),
-        |job| preview::decode(job, &cache),
-        |results| -> io::Result<()> {
-            for (row, entry) in entries.iter().enumerate() {
-                // Some(Err) marks a failed preview, drawn with shared error art.
-                let image = if attempts[row] {
-                    // Show finished lines while a slow source decodes.
-                    if !results.is_ready() {
-                        out.flush()?;
+    preview::decoding(&jobs, || {
+        pool::ordered(
+            &jobs,
+            pool::workers(),
+            |job| preview::decode(job, &cache),
+            |results| -> io::Result<()> {
+                for (row, entry) in entries.iter().enumerate() {
+                    // Some(Err) marks a failed preview, drawn with shared error art.
+                    let image = if attempts[row] {
+                        // Show finished lines while a slow source decodes.
+                        if !results.is_ready() {
+                            out.flush()?;
+                        }
+                        Some(results.next().unwrap_or(Err(())))
+                    } else {
+                        None
+                    };
+                    if image.is_some() {
+                        // Scroll before placement, then write this entry into the
+                        // reserved line. Do not print spaces over the image cells.
+                        out.write_all(b"\r\n\x1b[1A\r")?;
                     }
-                    Some(results.next().unwrap_or(Err(())))
-                } else {
-                    None
-                };
-                if image.is_some() {
-                    // Scroll before placement, then write this entry into the
-                    // reserved line. Do not print spaces over the image cells.
-                    out.write_all(b"\r\n\x1b[1A\r")?;
-                }
-                for (i, field) in fields.iter().enumerate() {
-                    field.value(
-                        &mut value,
-                        entry,
-                        opts,
-                        &mut owners,
-                        times.get(row).copied().flatten(),
-                    );
-                    let padding = widths[i] - value.width();
-                    let right = matches!(
-                        field,
-                        Field::Links
-                            | Field::Uid
-                            | Field::Gid
-                            | Field::Size
-                            | Field::Allocated
-                            | Field::Inode
-                    );
-                    if right {
-                        write!(out, "{:padding$}", "")?;
-                    }
-                    if *field == Field::Mode && style.color {
-                        // One SGR per run of equally colored characters, then a
-                        // single reset: each switch resets, so dim never carries.
-                        let mut current = "";
-                        for c in value.chars() {
-                            let code = match c {
-                                'r' => "33",
-                                'w' => "31",
-                                'x' | 's' | 't' => "32",
-                                '-' => "2",
-                                _ => "36",
-                            };
-                            if code != current {
-                                write!(out, "\x1b[0;{code}m")?;
-                                current = code;
+                    for (i, field) in fields.iter().enumerate() {
+                        field.value(
+                            &mut value,
+                            entry,
+                            opts,
+                            &mut owners,
+                            times.get(row).copied().flatten(),
+                        );
+                        let padding = widths[i] - value.width();
+                        let right = matches!(
+                            field,
+                            Field::Links
+                                | Field::Uid
+                                | Field::Gid
+                                | Field::Size
+                                | Field::Allocated
+                                | Field::Inode
+                        );
+                        if right {
+                            write!(out, "{:padding$}", "")?;
+                        }
+                        if *field == Field::Mode && style.color {
+                            // One SGR per run of equally colored characters, then a
+                            // single reset: each switch resets, so dim never carries.
+                            let mut current = "";
+                            for c in value.chars() {
+                                let code = match c {
+                                    'r' => "33",
+                                    'w' => "31",
+                                    'x' | 's' | 't' => "32",
+                                    '-' => "2",
+                                    _ => "36",
+                                };
+                                if code != current {
+                                    write!(out, "\x1b[0;{code}m")?;
+                                    current = code;
+                                }
+                                out.write_all(c.encode_utf8(&mut [0; 4]).as_bytes())?;
                             }
-                            out.write_all(c.encode_utf8(&mut [0; 4]).as_bytes())?;
+                            out.write_all(b"\x1b[0m")?;
+                        } else {
+                            style.paint(
+                                out,
+                                match field {
+                                    Field::Size | Field::Allocated => "32",
+                                    Field::Modified => "2",
+                                    Field::User | Field::Group | Field::Uid | Field::Gid => "33",
+                                    _ => "2",
+                                },
+                                &value,
+                            )?;
                         }
-                        out.write_all(b"\x1b[0m")?;
-                    } else {
-                        style.paint(
-                            out,
-                            match field {
-                                Field::Size | Field::Allocated => "32",
-                                Field::Modified => "2",
-                                Field::User | Field::Group | Field::Uid | Field::Gid => "33",
-                                _ => "2",
-                            },
-                            &value,
-                        )?;
-                    }
-                    if !right {
-                        write!(out, "{:padding$}", "")?;
-                    }
-                    write!(out, " ")?;
-                }
-                if let Some((w, h)) = mini {
-                    if let Some(image) = image {
-                        match &image {
-                            Ok(payload) => payload.write(out, 3, 1)?,
-                            Err(()) => art
-                                .as_deref_mut()
-                                .expect("previews supply artwork")
-                                .get(Icon::Error, w, h, style.color)
-                                .write(out, 3, 1)?,
+                        if !right {
+                            write!(out, "{:padding$}", "")?;
                         }
-                        write!(out, "\x1b[{}G", metadata_width + 5)?;
-                    } else if style.icons != crate::style::Icons::None {
-                        style.write_label(out, dir, entry, style.icon(entry))?;
-                        write!(
-                            out,
-                            "{:padding$}",
-                            "",
-                            padding = 4 - style.icon(entry).width()
-                        )?;
-                    } else {
-                        write!(out, "    ")?;
+                        write!(out, " ")?;
                     }
-                    style.write_label(out, dir, entry, &style.name(entry))?;
-                } else {
-                    style.write_name(out, dir, entry)?;
+                    if let Some((w, h)) = mini {
+                        if let Some(image) = image {
+                            match &image {
+                                Ok(payload) => payload.write(out, 3, 1)?,
+                                Err(()) => art
+                                    .as_deref_mut()
+                                    .expect("previews supply artwork")
+                                    .get(Icon::Error, w, h, style.color)
+                                    .write(out, 3, 1)?,
+                            }
+                            write!(out, "\x1b[{}G", metadata_width + 5)?;
+                        } else if style.icons != crate::style::Icons::None {
+                            style.write_label(out, dir, entry, style.icon(entry))?;
+                            write!(
+                                out,
+                                "{:padding$}",
+                                "",
+                                padding = 4 - style.icon(entry).width()
+                            )?;
+                        } else {
+                            write!(out, "    ")?;
+                        }
+                        style.write_label(out, dir, entry, &style.name(entry))?;
+                    } else {
+                        style.write_name(out, dir, entry)?;
+                    }
+                    if entry.kind == Kind::Link {
+                        let target = fs::read_link(entry.path(dir))
+                            .map(|p| escape(p.as_os_str()))
+                            .unwrap_or_else(|_| "?".into());
+                        style.paint(out, style.target_code(entry), &format!(" -> {target}"))?;
+                    }
+                    writeln!(out)?;
                 }
-                if entry.kind == Kind::Link {
-                    let target = fs::read_link(entry.path(dir))
-                        .map(|p| escape(p.as_os_str()))
-                        .unwrap_or_else(|_| "?".into());
-                    style.paint(out, style.target_code(entry), &format!(" -> {target}"))?;
-                }
-                writeln!(out)?;
-            }
-            Ok(())
-        },
-    )
+                Ok(())
+            },
+        )
+    })
 }
 
 fn size(out: &mut String, n: u64, human: bool) {

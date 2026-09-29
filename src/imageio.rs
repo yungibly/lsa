@@ -160,6 +160,43 @@ unsafe fn load() -> Option<Api> {
     }
 }
 
+/// Silences stderr while held. System frameworks print diagnostics from
+/// inside ImageIO (in macOS virtual machines, for example,
+/// "IOServiceMatchingfailed for: AppleM2ScalerCSCDriver"), which would
+/// interleave with the listing. lsa writes nothing to stderr while preview
+/// workers run, so its own notices and errors are unaffected.
+pub struct QuietStderr(Option<libc::c_int>);
+
+impl QuietStderr {
+    pub fn new() -> Self {
+        unsafe {
+            let saved = libc::fcntl(libc::STDERR_FILENO, libc::F_DUPFD_CLOEXEC, 0);
+            let null = libc::open(c"/dev/null".as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC);
+            if saved < 0 || null < 0 || libc::dup2(null, libc::STDERR_FILENO) < 0 {
+                for fd in [saved, null] {
+                    if fd >= 0 {
+                        libc::close(fd);
+                    }
+                }
+                return Self(None);
+            }
+            libc::close(null);
+            Self(Some(saved))
+        }
+    }
+}
+
+impl Drop for QuietStderr {
+    fn drop(&mut self) {
+        if let Some(saved) = self.0 {
+            unsafe {
+                libc::dup2(saved, libc::STDERR_FILENO);
+                libc::close(saved);
+            }
+        }
+    }
+}
+
 /// An owned (+1) Core Foundation object, released on drop.
 struct Owned<'a>(Ref, &'a Api);
 impl<'a> Owned<'a> {
@@ -571,6 +608,32 @@ mod tests {
             thumb(&bytes, 240, 160, 16_000_000).unwrap().dimensions(),
             (240, 160)
         );
+    }
+
+    #[test]
+    fn quiet_stderr_discards_only_while_held() {
+        // Point fd 2 at a pipe, write around the guard, then restore fd 2.
+        unsafe {
+            let mut pipe = [0; 2];
+            assert_eq!(libc::pipe(pipe.as_mut_ptr()), 0);
+            let original = libc::dup(libc::STDERR_FILENO);
+            libc::dup2(pipe[1], libc::STDERR_FILENO);
+            let write =
+                |text: &[u8]| libc::write(libc::STDERR_FILENO, text.as_ptr().cast(), text.len());
+            write(b"before|");
+            {
+                let _quiet = QuietStderr::new();
+                write(b"framework noise|");
+            }
+            write(b"after");
+            libc::dup2(original, libc::STDERR_FILENO);
+            libc::close(original);
+            libc::close(pipe[1]);
+            let mut buffer = [0_u8; 64];
+            let read = libc::read(pipe[0], buffer.as_mut_ptr().cast(), buffer.len());
+            libc::close(pipe[0]);
+            assert_eq!(&buffer[..read as usize], b"before|after");
+        }
     }
 
     #[test]

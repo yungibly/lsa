@@ -92,6 +92,19 @@ pub struct Job {
     pub height: u32,
 }
 
+/// Run preview workers for `jobs`, keeping system framework diagnostics out of
+/// the terminal while any job decodes through macOS ImageIO.
+pub fn decoding<R>(jobs: &[Job], work: impl FnOnce() -> R) -> R {
+    #[cfg(target_os = "macos")]
+    let _quiet = jobs
+        .iter()
+        .any(|job| crate::filetype::system_decoder(&job.path))
+        .then(crate::imageio::QuietStderr::new);
+    #[cfg(not(target_os = "macos"))]
+    let _ = jobs;
+    work()
+}
+
 /// Decode and compress a job's thumbnail. Failures become error artwork.
 pub fn decode(job: &Job, cache: &Mutex<&mut Cache<'_>>) -> Result<Payload, ()> {
     load_shared(&job.path, job.width, job.height, cache)

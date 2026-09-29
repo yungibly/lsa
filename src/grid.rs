@@ -106,64 +106,67 @@ pub fn write(
         drawn += row.len();
     }
     let cache = Mutex::new(cache);
-    pool::ordered(
-        &jobs,
-        pool::workers(),
-        |job| preview::decode(job, &cache),
-        |results| -> io::Result<()> {
-            for (row_index, row) in entries[..drawn].chunks(columns).enumerate() {
-                // Reserve the image area AND a label line before placing images.
-                // This scrolls first, so a placement never extends below the
-                // visible screen.
-                for _ in 0..=image_rows {
-                    out.write_all(b"\r\n")?;
-                }
-                out.flush()?;
-                for (column, entry) in row.iter().enumerate() {
-                    // Stay below the row while waiting for a decode, so
-                    // interrupting a slow input leaves the cursor clear of images
-                    // already emitted.
-                    let decoded;
-                    let image = if attempts[row_index * columns + column] {
-                        match results.next() {
-                            Some(Ok(payload)) => {
-                                decoded = payload;
-                                &decoded
-                            }
-                            _ => art.get(Icon::Error, width, height, style.color),
-                        }
-                    } else {
-                        art.get(entry.artwork(), width, height, style.color)
-                    };
-                    let left = column * tile + (tile - image_cols) / 2 + 1;
-                    write!(out, "\x1b[{}A\x1b[{}G", image_rows + 1, left)?;
-                    image.write(out, image_cols, image_rows)?;
-                    write!(out, "\r\x1b[{}B", image_rows + 1)?;
+    preview::decoding(&jobs, || {
+        pool::ordered(
+            &jobs,
+            pool::workers(),
+            |job| preview::decode(job, &cache),
+            |results| -> io::Result<()> {
+                for (row_index, row) in entries[..drawn].chunks(columns).enumerate() {
+                    // Reserve the image area AND a label line before placing images.
+                    // This scrolls first, so a placement never extends below the
+                    // visible screen.
+                    for _ in 0..=image_rows {
+                        out.write_all(b"\r\n")?;
+                    }
                     out.flush()?;
-                }
-                out.write_all(b"\x1b[1A")?;
-                let labels: Vec<_> = row.iter().map(|e| wrap(&style.name(e), tile - 2)).collect();
-                let lines = labels.iter().map(Vec::len).max().unwrap_or(0);
-                for line in 0..lines {
-                    for (entry, label) in row.iter().zip(&labels) {
-                        let text = label.get(line).map(String::as_str).unwrap_or("");
-                        let left = (tile - text.width()) / 2;
-                        write!(out, "{:left$}", "")?;
-                        style.write_label(out, dir, entry, text)?;
-                        write!(out, "{:padding$}", "", padding = tile - text.width() - left)?;
+                    for (column, entry) in row.iter().enumerate() {
+                        // Stay below the row while waiting for a decode, so
+                        // interrupting a slow input leaves the cursor clear of images
+                        // already emitted.
+                        let decoded;
+                        let image = if attempts[row_index * columns + column] {
+                            match results.next() {
+                                Some(Ok(payload)) => {
+                                    decoded = payload;
+                                    &decoded
+                                }
+                                _ => art.get(Icon::Error, width, height, style.color),
+                            }
+                        } else {
+                            art.get(entry.artwork(), width, height, style.color)
+                        };
+                        let left = column * tile + (tile - image_cols) / 2 + 1;
+                        write!(out, "\x1b[{}A\x1b[{}G", image_rows + 1, left)?;
+                        image.write(out, image_cols, image_rows)?;
+                        write!(out, "\r\x1b[{}B", image_rows + 1)?;
+                        out.flush()?;
+                    }
+                    out.write_all(b"\x1b[1A")?;
+                    let labels: Vec<_> =
+                        row.iter().map(|e| wrap(&style.name(e), tile - 2)).collect();
+                    let lines = labels.iter().map(Vec::len).max().unwrap_or(0);
+                    for line in 0..lines {
+                        for (entry, label) in row.iter().zip(&labels) {
+                            let text = label.get(line).map(String::as_str).unwrap_or("");
+                            let left = (tile - text.width()) / 2;
+                            write!(out, "{:left$}", "")?;
+                            style.write_label(out, dir, entry, text)?;
+                            write!(out, "{:padding$}", "", padding = tile - text.width() - left)?;
+                        }
+                        out.write_all(b"\r\n")?;
                     }
                     out.write_all(b"\r\n")?;
+                    out.flush()?;
                 }
-                out.write_all(b"\r\n")?;
-                out.flush()?;
-            }
-            // Once a budget is spent, remaining names continue the gallery's
-            // across-the-row order as compact text.
-            let remaining = &entries[drawn..];
-            if remaining.is_empty() {
-                return Ok(());
-            }
-            columns::Plan::across(remaining, term.cols, style).write(out, dir, remaining, style)
-        },
-    )
+                // Once a budget is spent, remaining names continue the gallery's
+                // across-the-row order as compact text.
+                let remaining = &entries[drawn..];
+                if remaining.is_empty() {
+                    return Ok(());
+                }
+                columns::Plan::across(remaining, term.cols, style).write(out, dir, remaining, style)
+            },
+        )
+    })
 }
