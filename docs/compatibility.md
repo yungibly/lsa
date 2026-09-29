@@ -16,8 +16,26 @@ terminal or library is not lsa validation; record real terminal evidence here.
 | SSH | Links off by default | Text by default since v0.5.0 | Forced graphics and remote file URIs unverified |
 | Other terminals | Unverified | Text | Unknown terminals never get graphics automatically |
 
-Hosted CI and release results for each version are linked from its tag's
-workflow runs on GitHub.
+### v0.5.0 hosted results (2026-09-28/29)
+
+- [CI at eadbdc0](https://github.com/yungibly/lsa/actions/runs/36502914797)
+  passed all five jobs.
+- The [release workflow](https://github.com/yungibly/lsa/actions/runs/36503290801)
+  passed all eleven jobs without retries: native builds, Rust 1.88,
+  publication, Homebrew installs on arm64/Intel macOS and x86-64 Linux, and the
+  tap update.
+- The public Apple Silicon archive passed checksum, version, plain pipe output,
+  six ImageIO previews, SSH text fallback, links and `--diagnose` checks.
+- On the macOS runners, sips could not write AVIF, so AVIF decoding was checked
+  locally only. HEIC, TIFF, PSD and 18 MP JPEG decoding passed there, including
+  on Intel.
+- The [first CI run](https://github.com/yungibly/lsa/actions/runs/36502342540)
+  failed on the arm64 macOS runner. That VM lacks Apple Silicon's hardware
+  scaler, and ImageIO printed "IOServiceMatchingfailed for:
+  AppleM2ScalerCSCDriver" to stderr. Since eadbdc0, stderr is silenced while
+  ImageIO workers run (lsa writes nothing there meanwhile).
+
+Earlier versions' results are linked from their tags' workflow runs on GitHub.
 
 ## Ghostty check for v0.5.0
 

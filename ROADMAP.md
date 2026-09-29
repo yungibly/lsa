@@ -7,9 +7,11 @@ and [measurements](benchmarks/README.md).
 
 ## Status
 
-v0.5.0 is implemented and covered by automated checks on four native targets:
-unit, CLI and headless PTY tests, plus a text-layer check in Ghostty's terminal
-core (libghostty-vt). No real Ghostty visual pass has been recorded since v0.2.0.
+[v0.5.0](https://github.com/yungibly/lsa/releases/tag/v0.5.0) is published and
+the Homebrew tap points to it. CI and the release workflow passed on four native
+targets plus Rust 1.88 ([evidence](docs/compatibility.md)). The text layer was
+also checked in Ghostty's terminal core (libghostty-vt). No real Ghostty visual
+pass has been recorded since v0.2.0.
 
 ## Next
 

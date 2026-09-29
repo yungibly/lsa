@@ -25,6 +25,17 @@ commits:
 Evidence for each commit is in its message and in
 [benchmarks/README.md](benchmarks/README.md).
 
+Published:
+
+- Tag `v0.5.0` is on `eadbdc0`; the tap formula is at `f91b934`.
+- CI passed all 5 jobs; the release workflow passed all 11, without retries.
+- The public Apple Silicon archive and the tap formula were verified; links are
+  in [compatibility](docs/compatibility.md).
+- The first CI run exposed ImageIO stderr noise in a macOS VM; it is fixed and
+  tested.
+- Watch logs and the downloaded public artifacts are under
+  `target/automation/v0.5.0/`.
+
 Tools under the ignored `target/` directory:
 
 - `target/tools/tui-test/tui-test`: the microsoft/tui-test 0.1.0-beta.5 release
