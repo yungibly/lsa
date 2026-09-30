@@ -1,6 +1,6 @@
 # Ghostty demo
 
-[Download the 18-second MP4](assets/lsa-in-ghostty.mp4?raw=true) · [Back to the README](../README.md)
+[Original 18-second MP4](assets/lsa-in-ghostty.mp4) · [Back to the README](../README.md)
 
 Recorded on 2026-09-30 from a real Ghostty window on Debian 13.6 (x86-64),
 using the released lsa 0.5.0 binary. Ghostty was built from its verified 1.3.1

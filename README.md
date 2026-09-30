@@ -6,10 +6,10 @@ straight back at the shell.
 
 One Rust binary for macOS and Linux. No configuration file or background process.
 
-[![lsa in Ghostty: a detailed listing with tiny previews, a thumbnail gallery, and plain names piped to head](docs/assets/lsa-in-ghostty.gif)](docs/assets/lsa-in-ghostty.mp4?raw=true)
+[![lsa in Ghostty: a detailed listing with tiny previews, a thumbnail gallery, and plain names piped to head](docs/assets/lsa-in-ghostty.gif)](docs/assets/lsa-in-ghostty.mp4)
 
 18 seconds in Ghostty 1.3.1 on Linux, using lsa 0.5.0 and generated sample images.
-[Download the MP4](docs/assets/lsa-in-ghostty.mp4?raw=true) · [Demo details](docs/demo.md)
+[Original MP4](docs/assets/lsa-in-ghostty.mp4) · [Demo details](docs/demo.md)
 
 ## Install
 
