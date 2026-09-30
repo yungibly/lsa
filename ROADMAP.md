@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-09-28, after v0.5.0. lsa prints into scrollback, returns to the
+Updated 2026-09-30, after the README demo. lsa prints into scrollback, returns to the
 shell and keeps one mixed ordering with complete names. History lives in the
 [changelog](CHANGELOG.md); evidence in [compatibility](docs/compatibility.md)
 and [measurements](benchmarks/README.md).
@@ -10,8 +10,10 @@ and [measurements](benchmarks/README.md).
 [v0.5.0](https://github.com/yungibly/lsa/releases/tag/v0.5.0) is published and
 the Homebrew tap points to it. CI and the release workflow passed on four native
 targets plus Rust 1.88 ([evidence](docs/compatibility.md)). The text layer was
-also checked in Ghostty's terminal core (libghostty-vt). No real Ghostty visual
-pass has been recorded since v0.2.0.
+also checked in Ghostty's terminal core (libghostty-vt). A limited real Ghostty 1.3.1 Linux check now has a
+[recorded demo](docs/demo.md): long-view miniatures, an eight-image gallery and
+plain pipe output. The full v0.5.0 visual pass below remains open. The README
+now includes the recording as an inline GIF with the original MP4 linked.
 
 ## Next
 
@@ -26,9 +28,7 @@ pass has been recorded since v0.2.0.
    - the `--grid` notices.
 
    The steps are in [compatibility](docs/compatibility.md).
-2. **README screenshot** from a real Ghostty session showing a mixed long view
-   and a gallery.
-3. **Carried over:** the v0.4.0 link click and scrollback check, and the v0.3.0
+2. **Carried over:** the v0.4.0 link click and scrollback check, and the v0.3.0
    default-details and AM/PM appearance.
 
 ## Open questions
