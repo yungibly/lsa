@@ -14,8 +14,10 @@ safe filename text and automatic previews remain product defaults. Recursion
 shares the invocation's existing preview limits and detects ancestor cycles.
 See [usage](docs/usage.md) for supported behavior and intentional differences.
 
-Local tests, headless terminal checks, Ghostty's text core and packaging pass;
-hosted CI and publication are next. Evidence is recorded in
+Released as [v0.6.0](https://github.com/yungibly/lsa/releases/tag/v0.6.0), with
+the Homebrew tap updated. Local tests, headless terminal checks, Ghostty's text
+core, all four platform builds and published-package/Homebrew checks pass.
+Evidence is recorded in
 [compatibility](docs/compatibility.md) and application cost in
 [measurements](benchmarks/README.md). The [v0.5.0 Ghostty demo](docs/demo.md)
 remains the latest recorded image rendering evidence; it does not validate
