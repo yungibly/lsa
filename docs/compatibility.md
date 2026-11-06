@@ -43,6 +43,32 @@ v0.6.0's changed long columns, optional metadata rows and recursive output
 still need a human visual pass. Application measurements are in
 [benchmarks](../benchmarks/README.md).
 
+### v0.6.0 hosted results (2026-11-06)
+
+- [PR #2](https://github.com/yungibly/lsa/pull/2) was merged after
+  [all five CI jobs](https://github.com/yungibly/lsa/actions/runs/42304434761)
+  passed: both native macOS architectures, both native musl Linux architectures,
+  and Rust 1.88 plus release tooling. The release tag points to merge commit
+  `5823fe1`, whose tree is identical to the checked PR head.
+- The [release workflow](https://github.com/yungibly/lsa/actions/runs/42305020841)
+  first stopped at the ARM Mac gallery-memory assertion: one 8-versus-24-preview
+  sample measured 40.44 versus 67.98 MiB (27.55 MiB difference, above the
+  unchanged 24 MiB guard). All other platform jobs passed.
+- Investigation found no decoder/pool/ImageIO changes from v0.5.0. Seven local
+  paired trials of each version stayed within 1.10 MiB of growth; three further
+  trials each at 8, 24 and 96 previews plateaued around 50 MiB in both versions.
+  These local samples do not reproduce the hosted VM's native allocator state.
+  The failed ARM job was retried without changing code or the memory threshold.
+- The unchanged retry passed. All eleven release jobs completed successfully,
+  including four platform archives, Homebrew installs on Apple Silicon, Intel
+  Mac and Linux, and the automatic tap update.
+- [v0.6.0](https://github.com/yungibly/lsa/releases/tag/v0.6.0) is public, with
+  four archives, individual checksums and `SHA256SUMS`. The downloaded Apple
+  Silicon archive passed checksum, version, plain-output, format precedence,
+  dot-entry, symlink, recursion and metadata-option smoke checks. Its SHA-256 is
+  `87ed9e0d2e105ae0a7528de9f44ed14557535f97075cd40494cc96243600c31f`, matching
+  the [0.6.0 tap formula](https://github.com/yungibly/homebrew-tap/blob/main/Formula/lsa.rb).
+
 ### v0.5.0 hosted results (2026-09-28/29)
 
 - [CI at eadbdc0](https://github.com/yungibly/lsa/actions/runs/36502914797)
