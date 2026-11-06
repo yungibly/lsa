@@ -34,6 +34,9 @@ terminal or library is not lsa validation; record real terminal evidence here.
   to `sips`; the gallery checks reported those skips. This pass does not add
   new visual evidence for those formats. Hosted platform results are recorded
   after CI and release completion.
+- The first hosted attempt could not start its ARM Mac job because GitHub
+  retired the macOS 14 image on November 2. Build and Homebrew jobs now use
+  macOS 15; `MACOSX_DEPLOYMENT_TARGET=14.0` still sets the binary's minimum.
 
 The latest real-renderer evidence remains the v0.5.0 Ghostty demo above.
 v0.6.0's changed long columns, optional metadata rows and recursive output
