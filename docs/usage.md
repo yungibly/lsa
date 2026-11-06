@@ -29,8 +29,12 @@
   foreground. `LS_COLORS` type keys (including `or`/`mi`) and `*suffix` rules
   apply, with a case-insensitive fallback. Dangling symlinks are red. `NO_COLOR`
   and `--color=auto|always|never` are honored.
-- Icons: Nerd Font glyphs in Ghostty, portable symbols elsewhere (`--icons`,
-  `--no-icons`).
+- Icons: Nerd Font glyphs on all normal terminals, including multiplexers and
+  SSH sessions. Font support is a terminal setting, not inferred from its name.
+  Use `--icon-style=portable` for basic Unicode symbols if your font lacks Nerd
+  Font glyphs, or `--no-icons` to hide icons. `--icons=auto|always|never` controls
+  visibility separately; `always` also enables icons in pipes, while `auto`
+  keeps pipes and `TERM=dumb` plain. Changing icon style alone never forces icons.
 - Names are clickable (OSC 8) on local terminals; `--hyperlink=auto|always|never`.
 - Pipes get complete plain names, one per line. Control characters and invalid
   UTF-8 are escaped everywhere; no name is shortened. Explicit `-q` replaces

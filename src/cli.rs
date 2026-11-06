@@ -33,6 +33,14 @@ impl When {
     }
 }
 
+/// Glyph choice is independent of terminal identity and icon visibility.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum IconStyle {
+    #[default]
+    Nerd,
+    Portable,
+}
+
 /// Which timestamp long listings show and `-t` sorts by.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Time {
@@ -103,6 +111,7 @@ pub struct Options {
     pub no_images: bool,
     pub color: When,
     pub icons: When,
+    pub icon_style: IconStyle,
     pub hyperlink: When,
     pub protocol: Protocol,
     pub preview_limit: usize,
@@ -173,8 +182,9 @@ Appearance:
   --color=auto|always|never
                         Auto on terminals; honors NO_COLOR and LS_COLORS
   --icons=auto|always|never
-                        Auto: Nerd icons in Ghostty, portable symbols elsewhere
-                        Always: Nerd icons (requires font support)
+                        Auto on terminals; always also enables icons in pipes
+  --icon-style=nerd|portable
+                        Nerd Font glyphs (default), or basic Unicode symbols
   --no-icons            Disable icons
   --hyperlink=auto|always|never
                         Auto: clickable names on local terminals (OSC 8)
@@ -410,6 +420,20 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                 opts.color = When::parse(s.split_once('=').unwrap().1, "color")?;
             }
             _ if s.starts_with("--icons=") => opts.icons = When::parse(&s[8..], "icons")?,
+            _ if s == "--icon-style" || s.starts_with("--icon-style=") => {
+                let value = match s.split_once('=') {
+                    Some((_, value)) => value.to_owned(),
+                    None => args
+                        .next()
+                        .and_then(|v| v.into_string().ok())
+                        .ok_or("--icon-style requires nerd or portable")?,
+                };
+                opts.icon_style = match value.as_str() {
+                    "nerd" => IconStyle::Nerd,
+                    "portable" => IconStyle::Portable,
+                    _ => return Err("icon-style must be nerd or portable".into()),
+                };
+            }
             _ if s.starts_with("--hyperlink=") => {
                 opts.hyperlink = When::parse(&s[12..], "hyperlink")?;
             }
@@ -749,6 +773,9 @@ mod tests {
             "--thumbnail-size=1.5",
             "--color=wat",
             "--icons=wat",
+            "--icon-style=wat",
+            "--icon-style=",
+            "--icon-style",
             "--sort=wat",
             "--time=wat",
         ] {
@@ -767,6 +794,13 @@ mod tests {
             args(&["--no-icons", "--icons=auto"]).unwrap().icons,
             When::Auto
         );
+        assert_eq!(args(&[]).unwrap().icon_style, IconStyle::Nerd);
+        let o = args(&["--icon-style", "portable", "--icons=always"]).unwrap();
+        assert_eq!(o.icon_style, IconStyle::Portable);
+        assert_eq!(o.icons, When::Always);
+        let o = args(&["--no-icons", "--icon-style=portable", "--icon-style=nerd"]).unwrap();
+        assert_eq!(o.icon_style, IconStyle::Nerd);
+        assert_eq!(o.icons, When::Never);
     }
     #[test]
     fn metadata_options() {

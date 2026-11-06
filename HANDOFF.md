@@ -4,33 +4,22 @@ Recheck Git state before relying on this snapshot. Keep this file short: current
 state and next step. History belongs in the [changelog](CHANGELOG.md), decisions
 in [docs/decisions.md](docs/decisions.md).
 
-## 2026-11-06 — v0.6.0 compatibility pass
+## 2026-11-06 — v0.7.0 terminal-independent icons
 
-The user requested practical drop-in `ls` behavior, including symlink controls,
-richer metadata and recursion, with PRs merged when confident and a new release
-published afterward. [PR #2](https://github.com/yungibly/lsa/pull/2) merged at
-`5823fe1`; [v0.6.0](https://github.com/yungibly/lsa/releases/tag/v0.6.0) tags that
-commit and is published. The Homebrew tap is on 0.6.0.
+The user completed the v0.6.0 checks successfully, but reported missing Nerd
+Font icons in Rex and requested a new minor release. Exact terminal version,
+font, geometry and transport were not supplied. v0.6.0 is already released.
 
-Implemented: format precedence, columns in pipes, sorted operands, distinct
-`-a`/`-A`, compact inode/allocation prefixes, `-H`/`-L`/`-P`, iterative `-R` with
-cycle detection and shared image budgets, fuller explicit long output, bounded
-xattr/ACL/flags/context details, and common option aliases. Automatic compact
-details and plain output retain their fast paths.
+Branch: `codex/terminal-independent-icons`. Nerd Font icons now default on for
+normal TTY output regardless of terminal brand, multiplexer or SSH. The new
+`--icon-style=nerd|portable` selects glyphs independently of `--icons` visibility.
+Pipes and dumb terminals stay plain by default. No graphics or decoder changes.
 
-Local validation: formatting/Clippy, 110 Rust tests, 257 headless scenarios,
-9 Ghostty VT text checks, release-tool tests and extracted-package smoke tests
-pass. Before/after measurements are in `benchmarks/drop-in.json`; ordinary
-listing/gallery costs are essentially unchanged, explicit `-l` adds metadata
-query work. The prior binary is `target/lsa-before-v060`.
+Local validation: formatting/Clippy, 111 Rust tests, 115 headless layout/style
+checks and release-tool tests pass. The terminal matrix simulates environment
+variables and does not verify Rex rendering. Details are in
+[compatibility](docs/compatibility.md).
 
-Hosted validation: all five PR CI jobs and all eleven
-[release jobs](https://github.com/yungibly/lsa/actions/runs/42305020841) passed,
-including Homebrew installs on Apple Silicon, Intel Mac and Linux. One ARM Mac
-gallery-memory sample failed; investigation and an unchanged retry passed.
-Details are in [compatibility](docs/compatibility.md). The public Apple Silicon
-archive passed checksum and CLI smoke checks, and its hash matches the tap.
-
-**Next:** a real Ghostty visual pass is optional user follow-up and remains
-unverified; no computer use. See the roadmap for cases to check. The practical
-compatibility implementation, merge and release are complete.
+**Next:** merge the PR after hosted CI, then tag v0.7.0 and follow publication,
+Homebrew tests and the tap update through completion. Rex icon appearance is
+user follow-up; no computer use.

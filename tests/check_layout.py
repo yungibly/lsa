@@ -235,9 +235,23 @@ def main():
             cases += 1
         assert SGR.search(run(["--no-images", styled], decorated=True, environment={"NO_COLOR": ""}))
         cases += 1
-        data = run(["--no-images", styled], decorated=True, environment={"TERM_PROGRAM": "other", "TERM": "xterm-256color"})
-        assert "▸ folder".encode() in data and "\uf07b".encode() not in data
-        cases += 1
+        # Icon glyphs depend on the chosen font, not the terminal's brand,
+        # graphics protocol, multiplexer or connection type.
+        for env in [
+            {"TERM_PROGRAM": "rex", "TERM": "xterm-256color"},
+            {"TERM_PROGRAM": "kitty", "TERM": "xterm-kitty"},
+            {"TERM_PROGRAM": "other", "TERM": "xterm-256color"},
+            {"TERM_PROGRAM": None, "TERM": "xterm-256color"},
+            {"TERM_PROGRAM": "rex", "TERM": "tmux-256color", "TMUX": "test"},
+            {"TERM_PROGRAM": None, "TERM": "screen-256color", "STY": "test"},
+            {"TERM_PROGRAM": "other", "TERM": "xterm-256color", "ZELLIJ": "test"},
+            {"TERM_PROGRAM": "rex", "TERM": "xterm-256color", "SSH_TTY": "/dev/pts/1", "NO_COLOR": "1"},
+        ]:
+            data = run(["--no-images", styled], decorated=True, environment=env)
+            assert "\uf07b folder".encode() in data and "▸ folder".encode() not in data
+            data = run(["--no-images", "--icon-style=portable", styled], decorated=True, environment=env)
+            assert "▸ folder".encode() in data and "\uf07b".encode() not in data
+            cases += 2
         data = run(["--no-images", styled], decorated=True, environment={"TERM": "dumb"})
         assert b"\x1b" not in data and "\uf07b".encode() not in data
         cases += 1

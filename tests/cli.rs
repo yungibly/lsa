@@ -304,6 +304,23 @@ fn defaults_are_plain_and_natural_and_classification_is_explicit() {
 }
 
 #[test]
+fn icon_style_does_not_force_icons_in_pipes() {
+    let f = Fixture::new();
+    fs::create_dir(f.0.join("folder")).unwrap();
+    for (style, icon) in [("nerd", "\u{f07b}"), ("portable", "▸")] {
+        let option = format!("--icon-style={style}");
+        for visibility in ["--icons=auto", "--icons=never"] {
+            let out = f.run(&[&option, visibility]);
+            assert!(out.status.success());
+            assert_eq!(out.stdout, b"folder/\n");
+        }
+        let out = f.run(&[&option, "--icons=always"]);
+        assert!(out.status.success());
+        assert_eq!(out.stdout, format!("{icon} folder/\n").as_bytes());
+    }
+}
+
+#[test]
 fn hyperlinks_keep_pipes_and_redirected_files_plain_unless_forced() {
     let f = Fixture::new();
     f.touch("entry.txt", b"");

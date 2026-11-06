@@ -17,6 +17,27 @@ terminal or library is not lsa validation; record real terminal evidence here.
 | SSH | Links off by default | Text by default since v0.5.0 | Forced graphics and remote file URIs unverified |
 | Other terminals | Unverified | Text | Unknown terminals never get graphics automatically |
 
+### User follow-up (2026-11-06)
+
+The user reported completing the v0.6.0 checks successfully and then reported
+that Nerd Font icons were missing while using Rex. Terminal version, geometry,
+font and transport details were not supplied, so this report is not assigned
+to a particular row or protocol above. v0.7.0 removes the terminal-name icon
+restriction; actual Rex rendering still needs confirmation after the fix.
+
+### v0.7.0 local verification (2026-11-06)
+
+- Formatting, Clippy with warnings denied, and 111 Rust tests pass on arm64
+  macOS. CLI checks cover style selection, invalid options, icon visibility in
+  pipes and explicit forced output.
+- 115 headless layout/style checks pass, including Nerd/portable glyph output
+  under Rex-like, Kitty, unknown-terminal, absent `TERM_PROGRAM`, tmux, screen,
+  zellij and SSH environments. These simulate environment variables; they do
+  not establish actual rendering support in those terminals.
+- Graphics selection and image processing are unchanged. The fix removes a
+  terminal-name comparison; it adds no font probing, subprocesses or per-entry
+  queries. Release-tool tests pass.
+
 ### v0.6.0 local verification (2026-11-06)
 
 - Formatting and Clippy with warnings denied pass; 110 Rust tests pass on
@@ -38,9 +59,9 @@ terminal or library is not lsa validation; record real terminal evidence here.
   retired the macOS 14 image on November 2. Build and Homebrew jobs now use
   macOS 15; `MACOSX_DEPLOYMENT_TARGET=14.0` still sets the binary's minimum.
 
-The latest real-renderer evidence remains the v0.5.0 Ghostty demo above.
-v0.6.0's changed long columns, optional metadata rows and recursive output
-still need a human visual pass. Application measurements are in
+The latest recorded real-renderer evidence remains the v0.5.0 Ghostty demo
+above; the subsequent v0.6.0 user pass is noted separately with its limits.
+Application measurements are in
 [benchmarks](../benchmarks/README.md).
 
 ### v0.6.0 hosted results (2026-11-06)
