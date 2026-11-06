@@ -1,48 +1,27 @@
 # Session handoff
 
-Recheck Git state before relying on this snapshot. Keep this file short: the
-current state and next step. History belongs in the [changelog](CHANGELOG.md),
-decisions in [docs/decisions.md](docs/decisions.md).
+Recheck Git state before relying on this snapshot. Keep this file short: current
+state and next step. History belongs in the [changelog](CHANGELOG.md), decisions
+in [docs/decisions.md](docs/decisions.md).
 
-## 2026-09-28 — v0.5.0
+## 2026-11-06 — v0.6.0 compatibility pass
 
-The user asked for the full set of recommendations from a whole-program review,
-committed at a sensible cadence and released. The work landed as separate
-commits:
+The user requested practical drop-in `ls` behavior, including symlink controls,
+richer metadata and recursion, with PRs merged when confident and a new release
+published afterward. Branch: `codex/ls-drop-in`.
 
-- JPEG memory growth fix.
-- Name-only entries with classification computed once.
-- Appearance fixes: default foreground for plain files, dangling links,
-  directory sizes, LS_COLORS, hyperlink paths, SSH graphics policy, `--grid`
-  notices.
-- `ls` flags, with column-major `-C` and a new `-x`.
-- zlib-compressed payloads and reused artwork.
-- Parallel decoding.
-- macOS ImageIO previews.
-- An optional Ghostty VT check.
-- Documentation restructure and release.
+Implemented: format precedence, columns in pipes, sorted operands, distinct
+`-a`/`-A`, compact inode/allocation prefixes, `-H`/`-L`/`-P`, iterative `-R` with
+cycle detection and shared image budgets, fuller explicit long output, bounded
+xattr/ACL/flags/context details, and common option aliases. Automatic compact
+details and plain output retain their fast paths.
 
-Evidence for each commit is in its message and in
-[benchmarks/README.md](benchmarks/README.md).
+Local validation: formatting/Clippy, 110 Rust tests, 257 headless scenarios,
+9 Ghostty VT text checks, release-tool tests and extracted-package smoke tests
+pass. Before/after measurements are in `benchmarks/drop-in.json`; ordinary
+listing/gallery costs are essentially unchanged, explicit `-l` adds metadata
+query work. The prior binary is `target/lsa-before-v060`.
 
-Published:
-
-- Tag `v0.5.0` is on `eadbdc0`; the tap formula is at `f91b934`.
-- CI passed all 5 jobs; the release workflow passed all 11, without retries.
-- The public Apple Silicon archive and the tap formula were verified; links are
-  in [compatibility](docs/compatibility.md).
-- The first CI run exposed ImageIO stderr noise in a macOS VM; it is fixed and
-  tested.
-- Watch logs and the downloaded public artifacts are under
-  `target/automation/v0.5.0/`.
-
-Tools under the ignored `target/` directory:
-
-- `target/tools/tui-test/tui-test`: the microsoft/tui-test 0.1.0-beta.5 release
-  binary (checksum-verified), suggested by the user. Run it with
-  `HOME=target/tools/tui-test/home`. `tests/check_ghostty_vt.py` uses it.
-- `target/lsa-before-v050`: the v0.4.0 release binary, used for comparisons.
-
-Unix-socket CLI fixtures ran without sandbox escalation this session.
-
-**Next:** the user's Ghostty pass (see [roadmap](ROADMAP.md)), then daily use.
+**Next:** open/merge the implementation PR after hosted CI, then push `v0.6.0`
+and follow the release/Homebrew workflow through completion. A real Ghostty
+visual pass is optional user follow-up and remains unverified; no computer use.

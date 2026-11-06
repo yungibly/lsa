@@ -1,6 +1,6 @@
 # Product and implementation decisions
 
-Updated 2026-09-28 for v0.5.0. The priority is an `ls` alias that feels right
+Updated 2026-11-06 for v0.6.0. The priority is an `ls` alias that feels right
 immediately, with useful previews and bounded work.
 
 | Decision | Reason |
@@ -8,9 +8,13 @@ immediately, with useful previews and bounded work.
 | Always print and exit | A listing belongs in shell scrollback. Removed paging, selection, terminal-mode handling and image residency management. |
 | One mixed ordering | A preview represents an entry. Files, folders and links stay beside images; no separate gallery section, no hidden failures. |
 | Long terminal default; automatic grids | Details suit everyday directories. Image-heavy and single-row listings still switch to grids (threshold: half the entries are images; open question in the roadmap). Pipes print plain names. |
-| Familiar flags where cheap | `-C` fills columns downward like `ls`; `-x` fills rows (and continues exhausted galleries). `-p -v -i -s -o -g -c -u` exist because muscle memory hit exit code 2. `-i`/`-s` imply the long view rather than prefixing every layout. `-o` follows POSIX (no group), not macOS BSD (file flags); `-v` means natural order. `-R` is refused with an explanation. |
+| Practical command compatibility | Last text format wins; explicit columns work in pipes, and operands sort before directory sections. `-i`/`-s` prefix compact text without changing its format. `-a` includes dot entries; `-A` does not. `-U` means unsorted, `-G` means color and `-v` means natural order; exact platform parity is not a goal. |
+| Explicit long output is fuller | `-l` adds links, groups, allocation totals and attribute/ACL indicators. Automatic compact details keep their smaller output and avoid attribute/ACL syscalls. Device major/minor numbers replace meaningless byte counts. |
+| Recursive sections, not a browser | Requested by the user for everyday replacement coverage. `-R` uses iterative depth-first traversal, retaining pending directory names rather than the whole tree or open descriptors. Ancestor device/inode identities catch cycles while allowing sibling aliases. All recursive output shares the invocation's image budgets. |
+| Explicit symlink policies | `-H` follows operands, `-L` follows all links, `-P` preserves links; the last policy wins. Default directory operands follow unless `-l`/`-d`/`-F` applies. Followed targets keep the supplied path and share sorting, styling and metadata behavior with other entries. |
+| Bounded optional metadata | `-@` shows attribute names/sizes; `-e` expands native macOS or Linux POSIX ACLs; `-O` shows macOS flags; `-Z` shows SELinux context. Queries open no file contents. Buffers cap at 64 KiB, expansions at 256 entries (Darwin ACLs at 128). Errors and limits stay visible without hiding files. |
 | Readable details | Size, owner, permissions and local time. Directory sizes show `-`: the byte count describes the directory index. With `-S`, directories follow sized entries. |
-| Compact metadata | 64 bytes of listing and sorting fields per record on 64-bit targets (now including inode and allocated blocks), plus civil-time state only when times are shown. One local-time conversion per entry. |
+| Compact metadata | Retain listing/sorting fields rather than a full platform stat structure, now including device numbers and file flags. Civil-time state exists only when times are shown; one local-time conversion per entry. |
 | Name-only entries, classified once | Entries keep their name; paths are rebuilt from the listing directory when a file is opened or stat'ed. Filename classification happens once per entry, and not at all for plain pipe output. |
 | Default foreground for ordinary files | Palette white (37) was nearly invisible on light themes. Categories and kinds keep palette colors. |
 | Visible dangling links | One extra stat per symlink, only when output is styled or previewable. They are red (LS_COLORS `or`/`mi`), get broken-link artwork and spend no preview attempt. |
