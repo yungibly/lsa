@@ -4,6 +4,38 @@ User-facing changes per release. The release workflow publishes each version's
 section as its GitHub release notes. Measurements and their conditions are in
 [benchmarks/README.md](benchmarks/README.md).
 
+## v0.6.0 — 2026-11-06
+
+**A more familiar `ls` replacement: recursion, symlink controls and fuller details.**
+
+- `-R` prints recursive directory sections in listing order. Traversal is
+  iterative, detects ancestor cycles, continues after inaccessible directories,
+  and shares preview attempts, image bytes and placement limits across the
+  whole command. `-d` still lists just the directory operands.
+- `-H`, `-L` and `-P` control whether operand links, all links or no links are
+  followed. Dangling links remain visible even when their targets cannot be
+  listed. Repeated directory aliases are allowed; ancestor loops report errors.
+- Explicit file operands sort together before directory sections, including
+  `-t`, `-S`, `-r` and `--dirs-first`. `-a` now includes `.` and `..`; `-A`
+  includes other hidden entries only.
+- The last text format wins (`-l`, `-C`, `-x`, `-1`, `-m`), and forced columns
+  work in pipes. `-i` and `-s` add prefixes without replacing that format.
+  Added comma output, `-f`, `-q`/`-b`, `-k`, `-w`/`--width`, and common long aliases.
+- Explicit `-l` adds link counts, groups, allocation totals and extended
+  metadata indicators. Devices show major/minor numbers. Automatic compact
+  details keep the existing columns and skip extra attribute queries.
+- `-@` lists extended attribute names/sizes, `-e` shows macOS or Linux POSIX
+  ACLs, `-O` shows macOS file flags, and `-Z` shows Linux SELinux contexts.
+  Optional metadata buffers and expansions are bounded and safely escaped.
+- Natural sorting, readable sizes, automatic images, complete safe filenames,
+  terminal scrollback and plain default pipe output remain the defaults.
+
+The release adds regression coverage for format combinations, recursive image
+budgets, deep trees, symlink cycles and extended metadata. Headless verification
+checks protocol output and text; a real Ghostty visual pass for the new output
+remains pending. See [usage](docs/usage.md) for intentional differences from
+GNU/macOS `ls` and [measurements](benchmarks/README.md) for application costs.
+
 ## v0.5.0 — 2026-09-28
 
 **Faster, leaner galleries; iPhone photos on macOS; familiar `ls` flags.**

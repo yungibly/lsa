@@ -35,7 +35,8 @@ def tt(*args):
 
 def run(argv, *, cols=122, rows=40, env=None):
     """Run lsa to exit in a Ghostty-backed PTY; return the full text."""
-    environment = {"TERM": "xterm-ghostty", "TERM_PROGRAM": "ghostty", "TZ": "UTC0", **(env or {})}
+    environment = {"TERM": "xterm-ghostty", "TERM_PROGRAM": "ghostty", "TZ": "UTC0",
+                   "NO_COLOR": "", "LS_COLORS": "", **(env or {})}
     tt("run", "--backend", "ghostty", "--session", SESSION, "--cols", cols, "--rows", rows,
        "--cwd", ROOT, *[f"--env={k}={v}" for k, v in environment.items()], "--restart", "--",
        BIN, *argv)

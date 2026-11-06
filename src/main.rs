@@ -4,6 +4,7 @@ mod cli;
 mod columns;
 mod display;
 mod entry;
+mod extended;
 mod filetype;
 mod grid;
 #[cfg(target_os = "macos")]
@@ -19,9 +20,22 @@ mod svg;
 mod terminal;
 
 use std::{
+    collections::HashSet,
+    ffi::OsString,
+    fs,
     io::{self, BufWriter, Write},
-    path::Path,
+    os::unix::fs::MetadataExt,
+    path::{Path, PathBuf},
 };
+
+/// Only active ancestor directories retain pending child names. A deep tree
+/// never consumes the call stack, and completed listings are released before
+/// reading the next directory.
+struct DirectoryFrame {
+    path: PathBuf,
+    children: std::vec::IntoIter<OsString>,
+    identity: (u64, u64),
+}
 
 fn main() -> std::process::ExitCode {
     // A decoder panic on a preview worker becomes error artwork, like any
@@ -132,7 +146,6 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
     let mut budget = preview::Budget::new(opts.preview_limit);
     let mut cache = cache::Cache::new(opts.cache_path());
     let mut art = preview::Artwork::default();
-    let mut operands = Vec::new();
     let mut explained = opts.layout_notice().is_some();
     // `dir` holds the entries (empty for file operands); `path` names the
     // listing in diagnostics.
@@ -214,15 +227,95 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
                 }),
             ),
             layout::Layout::Lines => entry::write_text(out, dir, entries, &style),
+            layout::Layout::Commas => columns::write_commas(out, dir, entries, term.cols, &style),
         }
     };
     // Classification serves styling, layout and previews; plain pipes use none.
     let classify = term.tty || opts.diagnose || style.needs_mode();
+    // Resolve every explicit operand before reading directory contents. Files
+    // print together first, in the requested ordering, followed by directories.
+    let mut files = entry::Listing::default();
+    let mut directories = Vec::new();
+    let mut report = |errors: &[String]| {
+        for error in errors {
+            let _ = writeln!(io::stderr().lock(), "lsa: {error}");
+            failed = true;
+        }
+    };
     for path in &opts.paths {
-        let mut listing = entry::list(path, opts, classify);
+        let listing = entry::operand(path, opts, classify);
+        report(&listing.errors);
         if listing.directory {
+            directories.extend(listing.entries);
+        } else {
+            files.entries.extend(listing.entries);
+        }
+    }
+    if !files.entries.is_empty() {
+        let long = layout::choose(&files.entries, &term, opts).layout == layout::Layout::Long;
+        entry::prepare(
+            &mut files,
+            opts,
+            long,
+            !opts.diagnose && style.needs_mode(),
+            style.needs_mode() || term.kitty,
+        );
+        report(&files.errors);
+        render(
+            out,
+            Path::new(""),
+            &files.entries,
+            if files.entries.len() == 1 {
+                &files.entries[0].name
+            } else {
+                std::ffi::OsStr::new("(file operands)")
+            },
+        )?;
+        printed = true;
+    }
+    drop(files);
+    entry::sort(&mut directories, opts);
+    let mut directories = directories.into_iter();
+    let mut frames: Vec<DirectoryFrame> = Vec::new();
+    let mut ancestors = HashSet::new();
+    'walk: loop {
+        let path = loop {
+            if let Some(frame) = frames.last_mut() {
+                if let Some(name) = frame.children.next() {
+                    break frame.path.join(name);
+                }
+                let finished = frames.pop().unwrap();
+                ancestors.remove(&finished.identity);
+            } else if let Some(directory) = directories.next() {
+                break PathBuf::from(directory.name);
+            } else {
+                break 'walk;
+            }
+        };
+        let identity = if opts.recursive {
+            match fs::metadata(&path) {
+                Ok(meta) => {
+                    let identity = (meta.dev(), meta.ino());
+                    if ancestors.contains(&identity) {
+                        report(&[format!(
+                            "{}: recursive directory cycle",
+                            display::escape(path.as_os_str())
+                        )]);
+                        continue;
+                    }
+                    Some(identity)
+                }
+                Err(error) => {
+                    report(&[format!("{}: {error}", display::escape(path.as_os_str()))]);
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+        let mut listing = entry::read_directory(&path, opts, classify);
+        if listing.valid {
             let long = layout::choose(&listing.entries, &term, opts).layout == layout::Layout::Long;
-            // Dangling links matter where they are styled or could be previewed.
             entry::prepare(
                 &mut listing,
                 opts,
@@ -231,32 +324,11 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
                 style.needs_mode() || term.kitty,
             );
         }
-        for error in &listing.errors {
-            let _ = writeln!(io::stderr().lock(), "lsa: {error}");
-            failed = true;
-        }
+        report(&listing.errors);
         if !listing.valid {
             continue;
         }
-        if !listing.directory {
-            operands.extend(listing.entries);
-            continue;
-        }
-        if !operands.is_empty() {
-            render(
-                out,
-                Path::new(""),
-                &operands,
-                if operands.len() == 1 {
-                    &operands[0].name
-                } else {
-                    std::ffi::OsStr::new("(file operands)")
-                },
-            )?;
-            operands.clear();
-            printed = true;
-        }
-        if opts.paths.len() > 1 && !opts.diagnose {
+        if (opts.paths.len() > 1 || opts.recursive) && !opts.diagnose {
             if printed {
                 writeln!(out)?;
             }
@@ -265,18 +337,24 @@ fn run<W: Write>(opts: &cli::Options, out: &mut W) -> io::Result<u8> {
         }
         render(out, &listing.dir, &listing.entries, path.as_os_str())?;
         printed = true;
-    }
-    if !operands.is_empty() {
-        render(
-            out,
-            Path::new(""),
-            &operands,
-            if operands.len() == 1 {
-                &operands[0].name
-            } else {
-                std::ffi::OsStr::new("(file operands)")
-            },
-        )?;
+        if let Some(identity) = identity {
+            let children: Vec<_> = listing
+                .entries
+                .into_iter()
+                .filter(|entry| {
+                    entry.kind == entry::Kind::Directory && entry.name != "." && entry.name != ".."
+                })
+                .map(|entry| entry.name)
+                .collect();
+            if !children.is_empty() {
+                ancestors.insert(identity);
+                frames.push(DirectoryFrame {
+                    path,
+                    children: children.into_iter(),
+                    identity,
+                });
+            }
+        }
     }
     if opts.cache_stats {
         out.flush()?;

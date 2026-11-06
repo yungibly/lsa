@@ -77,6 +77,9 @@ impl Terminal {
                 }
             }
         }
+        if let Some(width) = opts.width {
+            result.cols = width;
+        }
         result
     }
 }

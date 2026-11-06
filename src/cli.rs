@@ -51,16 +51,37 @@ pub enum Sort {
     None,
 }
 
+/// Which symbolic links supply target information and directory contents.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Dereference {
+    #[default]
+    Default,
+    CommandLine,
+    All,
+    Never,
+}
+
 #[derive(Debug, Default)]
 pub struct Options {
     pub paths: Vec<PathBuf>,
     pub all: bool,
+    pub dot_entries: bool,
+    pub recursive: bool,
+    pub dereference: Dereference,
     pub long: bool,
     pub columns: bool,
+    pub commas: bool,
+    pub width: Option<usize>,
     /// `-x`: fill compact columns across rows instead of down columns.
     pub across: bool,
     pub twelve_hour: bool,
     pub human: bool,
+    pub kibibytes: bool,
+    pub quote_controls: bool,
+    pub xattrs: bool,
+    pub acl: bool,
+    pub flags: bool,
+    pub context: bool,
     pub numeric: bool,
     /// `-g` / `-o`: long listing without the owner / group column.
     pub no_owner: bool,
@@ -108,32 +129,47 @@ Examples:
                         Preview more images in a large directory
 
 Everyday options:
-  -a, -A, --all         Include hidden entries (without . and ..)
-  -l, --long            Always show details; tiny previews on graphics terminals
+  -a, --all             Include hidden entries, including . and ..
+  -A, --almost-all      Include hidden entries, except . and ..
+  -l, --long            Show details; tiny previews on graphics terminals
   -C, --columns         Compact columns sorted down; no automatic image grid
   -x                    Compact columns sorted across rows
+  -m                    Comma-separated names, wrapped to the available width
+  -w, --width=N         Set output width in columns (1..65535)
   --12-hour             Show modification times with AM/PM (default: 24-hour)
-  -h                    Human-readable sizes (the default); --bytes uses bytes
+  -h, --human-readable  Human-readable sizes (the default); --bytes uses bytes
+  -k                    Show allocated space in 1,024-byte units; file sizes in bytes
   -n                    Long listing with numeric uid/gid and link count
   -o / -g               Long listing without group / without owner
-  -i / -s               Long listing with inode numbers / allocated size
+  -i / -s               Prepend inode numbers / allocated size in text listings
   -c / -u               Show and sort (-t) by status change / access time
   -1, --oneline         One entry per line; no images
   -d, --directory       List directory operands themselves
+  -R, --recursive       List subdirectories recursively; detect directory loops
+  -H / -L / -P          Follow operand links / all links / no links
+                        Default: follow directory operands unless -l, -d or -F
   -F, --classify        Append / @ * | = type indicators
   -p                    Append / to directories only
   -t / -S               Sort newest / largest first
   -r, --reverse         Reverse the order within directory groups
   -U                    Keep filesystem order (skip sorting)
+  -f                    Include hidden entries and . / .., skip sorting
   -v                    Natural name order (already the default)
   --sort=name|size|time|none
                         Natural, case-insensitive name order is the default
   --dirs-first          Group directories before other entries
   --header              Long output with column headings (implies -l)
   --fields=LIST         Choose long columns (implies -l): mode,links,user,
-                        group,uid,gid,size,allocated,inode,modified
+                        group,uid,gid,size,allocated,inode,modified,flags
+  -@, --xattrs          List extended attribute names and sizes (implies -l)
+  -e, --acl             Show access control lists (implies -l)
+  -O, --flags           Show filesystem flags where supported (implies -l)
+  -Z, --context         Show security context where supported (implies -l)
+  --time=mtime|ctime|atime
+                        Select modification, status-change or access time
 
 Appearance:
+  -q / -b               Replace control characters with ? / escape them (default)
   --color=auto|always|never
                         Auto on terminals; honors NO_COLOR and LS_COLORS
   --icons=auto|always|never
@@ -168,9 +204,10 @@ images preview automatically. Up to four decoders work ahead in listing order.
 Output is capped at 128 MiB of image commands / 4096 placements, including
 artwork; remaining names print as compact text. Terminal text defaults to long
 details; -l uses one-row thumbnails; -1 and --no-images keep text. No pager or
-input handling. Long options (-l, -n, --header, --fields) select details over
---grid; -C, -x, -1 and image-disabling flags also override --grid, regardless of
-order. A notice explains this. Pipes default to plain names, one per line;
+input handling. The last text format (-l, -C, -x, -1 or -m) wins; options that
+imply long output also select that format. Explicit text formats override --grid,
+as do image-disabling flags. A notice explains this. Pipes default to plain
+names, one per line; explicit columns and comma-separated output still apply;
 --grid never sends images to pipes. Unknown terminals, multiplexers and SSH
 sessions use text. On macOS, HEIC/HEIF, AVIF, TIFF, JPEG XL, PSD and camera RAW
 previews use the system image decoders. Preview failures are quiet and never
@@ -180,9 +217,28 @@ Exit: 0 success (including closed pipes), 1 listing/output/cache-clear error,
 2 invalid options. See README.md for details and resource limits.
 ";
 
-const RECURSIVE: &str = "-R: recursive listings are not supported; lsa lists one directory level";
-
 impl Options {
+    /// The most recent explicit text format wins. Decorations and metadata
+    /// selections survive so a later -l can use them again.
+    fn format(&mut self, format: char) {
+        self.long = format == 'l';
+        self.columns = matches!(format, 'C' | 'x');
+        self.across = format == 'x';
+        self.one = format == '1';
+        self.commas = format == 'm';
+    }
+    fn hidden(&mut self, dots: bool) {
+        self.all = true;
+        self.dot_entries = dots;
+    }
+    fn readable_sizes(&mut self) {
+        self.human = true;
+        self.kibibytes = false;
+    }
+    fn byte_sizes(&mut self) {
+        self.human = false;
+        self.kibibytes = false;
+    }
     /// Explain explicit requests that cannot affect the selected layout once,
     /// without turning familiar text overrides into option errors.
     pub fn layout_notice(&self) -> Option<String> {
@@ -198,6 +254,10 @@ impl Options {
             Some("-1 / --oneline selects text lines")
         } else if self.columns {
             Some("-C / -x / --columns selects compact text columns")
+        } else if self.commas {
+            Some("-m selects comma-separated text")
+        } else if self.inode || self.blocks {
+            Some("-i / -s selects text with metadata prefixes")
         } else {
             None
         };
@@ -234,8 +294,16 @@ impl Options {
         self.cache_dir.as_deref().filter(|_| !self.no_cache)
     }
     pub fn needs_metadata(&self) -> bool {
-        self.long || matches!(self.sort, Sort::Time | Sort::Size)
+        self.long || self.inode || self.blocks || matches!(self.sort, Sort::Time | Sort::Size)
     }
+}
+
+fn parse_width(value: &str) -> Result<usize, String> {
+    value
+        .parse::<usize>()
+        .ok()
+        .filter(|n| (1..=65535).contains(n))
+        .ok_or_else(|| "width must be an integer from 1 to 65535".into())
 }
 
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String> {
@@ -259,23 +327,47 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             "--help" => opts.help = true,
             "--version" => opts.version = true,
             "--grid" => opts.grid = true,
-            "--long" => opts.long = true,
-            "--columns" => {
-                opts.columns = true;
-                opts.across = false;
-            }
-            "--recursive" => return Err(RECURSIVE.into()),
+            "--long" => opts.format('l'),
+            "--columns" => opts.format('C'),
+            "--recursive" => opts.recursive = true,
+            "--dereference-command-line" => opts.dereference = Dereference::CommandLine,
+            "--dereference" => opts.dereference = Dereference::All,
+            "--no-dereference" => opts.dereference = Dereference::Never,
             "--12-hour" => opts.twelve_hour = true,
-            "--all" | "--almost-all" => opts.all = true,
-            "--oneline" => opts.one = true,
+            "--all" => opts.hidden(true),
+            "--almost-all" => opts.hidden(false),
+            "--oneline" => opts.format('1'),
+            "--human-readable" => opts.readable_sizes(),
+            "--numeric-uid-gid" => {
+                opts.numeric = true;
+                opts.format('l');
+            }
+            "--inode" => opts.inode = true,
+            "--size" => opts.blocks = true,
+            "--no-group" => opts.no_group = true,
+            "--hide-control-chars" => opts.quote_controls = true,
+            "--escape" => opts.quote_controls = false,
+            "--xattrs" | "--acl" | "--flags" | "--context" => {
+                match s {
+                    "--xattrs" => opts.xattrs = true,
+                    "--acl" => opts.acl = true,
+                    "--flags" => opts.flags = true,
+                    "--context" => opts.context = true,
+                    _ => unreachable!(),
+                }
+                opts.format('l');
+            }
             "--directory" | "--list-dirs" => opts.directory = true,
-            "--classify" => opts.classify = true,
+            "--classify" => {
+                opts.classify = true;
+                opts.slash = false;
+            }
             "--reverse" => opts.reverse = true,
             "--dirs-first" | "--group-directories-first" => opts.dirs_first = true,
-            "--bytes" => opts.human = false,
+            "--bytes" => opts.byte_sizes(),
             "--header" => {
                 opts.header = true;
-                opts.long = true;
+                opts.format('l');
             }
             "--no-images" => opts.no_images = true,
             "--color" | "--colour" => opts.color = When::Always,
@@ -300,9 +392,19 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                 }
                 opts.cache_dir = Some(s[12..].into());
             }
+            _ if s == "--width" || s.starts_with("--width=") => {
+                let value = match s.split_once('=') {
+                    Some((_, value)) => value.to_owned(),
+                    None => args
+                        .next()
+                        .and_then(|v| v.into_string().ok())
+                        .ok_or("--width requires an integer")?,
+                };
+                opts.width = Some(parse_width(&value)?);
+            }
             _ if s.starts_with("--fields=") => {
                 opts.fields = crate::metadata::parse_fields(&s[9..])?;
-                opts.long = true;
+                opts.format('l');
             }
             _ if s.starts_with("--color=") || s.starts_with("--colour=") => {
                 opts.color = When::parse(s.split_once('=').unwrap().1, "color")?;
@@ -311,9 +413,17 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
             _ if s.starts_with("--hyperlink=") => {
                 opts.hyperlink = When::parse(&s[12..], "hyperlink")?;
             }
+            _ if s.starts_with("--time=") => {
+                opts.time = match &s[7..] {
+                    "mtime" | "modified" | "modification" => Time::Modified,
+                    "ctime" | "changed" | "status" => Time::Changed,
+                    "atime" | "accessed" | "access" | "use" => Time::Accessed,
+                    _ => return Err("time must be mtime, ctime, or atime".into()),
+                };
+            }
             _ if s.starts_with("--sort=") => {
                 opts.sort = match &s[7..] {
-                    "name" => Sort::Name,
+                    "name" | "version" => Sort::Name,
                     "size" => Sort::Size,
                     "time" | "modified" => Sort::Time,
                     "none" => Sort::None,
@@ -361,48 +471,79 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options, String
                 return Err(format!("unknown option: {}", crate::display::escape(&arg)));
             }
             _ => {
-                for c in s[1..].chars() {
+                let mut flags = s[1..].chars();
+                while let Some(c) = flags.next() {
                     match c {
-                        'a' | 'A' => opts.all = true,
-                        'l' => opts.long = true,
-                        'C' | 'x' => {
-                            opts.columns = true;
-                            opts.across = c == 'x';
+                        'a' => opts.hidden(true),
+                        'A' => opts.hidden(false),
+                        'l' | 'C' | 'x' | '1' | 'm' => opts.format(c),
+                        'h' => opts.readable_sizes(),
+                        'k' => {
+                            opts.human = false;
+                            opts.kibibytes = true;
                         }
-                        'h' => opts.human = true,
+                        'w' => {
+                            let value = if flags.as_str().is_empty() {
+                                args.next()
+                                    .and_then(|v| v.into_string().ok())
+                                    .ok_or("-w requires an integer")?
+                            } else {
+                                flags.by_ref().collect()
+                            };
+                            opts.width = Some(parse_width(&value)?);
+                        }
+                        'q' => opts.quote_controls = true,
+                        'b' => opts.quote_controls = false,
+                        'H' => opts.dereference = Dereference::CommandLine,
+                        'L' => opts.dereference = Dereference::All,
+                        'P' => opts.dereference = Dereference::Never,
+                        '@' | 'e' | 'O' | 'Z' => {
+                            match c {
+                                '@' => opts.xattrs = true,
+                                'e' => opts.acl = true,
+                                'O' => opts.flags = true,
+                                'Z' => opts.context = true,
+                                _ => unreachable!(),
+                            }
+                            opts.format('l');
+                        }
                         'n' => {
-                            opts.long = true;
+                            opts.format('l');
                             opts.numeric = true;
                         }
                         'o' => {
-                            opts.long = true;
+                            opts.format('l');
                             opts.no_group = true;
                         }
                         'g' => {
-                            opts.long = true;
+                            opts.format('l');
                             opts.no_owner = true;
                         }
-                        'i' => {
-                            opts.long = true;
-                            opts.inode = true;
-                        }
-                        's' => {
-                            opts.long = true;
-                            opts.blocks = true;
-                        }
+                        'i' => opts.inode = true,
+                        's' => opts.blocks = true,
                         'c' => opts.time = Time::Changed,
                         'u' => opts.time = Time::Accessed,
-                        '1' => opts.one = true,
                         'd' => opts.directory = true,
-                        'F' => opts.classify = true,
-                        'p' => opts.slash = true,
+                        'F' => {
+                            opts.classify = true;
+                            opts.slash = false;
+                        }
+                        'p' => {
+                            opts.slash = true;
+                            opts.classify = false;
+                        }
                         'G' => opts.color = When::Auto,
                         'r' => opts.reverse = true,
                         't' => opts.sort = Sort::Time,
                         'S' => opts.sort = Sort::Size,
                         'U' => opts.sort = Sort::None,
                         'v' => opts.sort = Sort::Name,
-                        'R' => return Err(RECURSIVE.into()),
+                        'R' => opts.recursive = true,
+                        'f' => {
+                            opts.hidden(true);
+                            opts.sort = Sort::None;
+                            opts.reverse = false;
+                        }
                         _ if s.len() > 2 => {
                             return Err(format!(
                                 "unknown option -{} in {}",
@@ -467,7 +608,7 @@ mod tests {
         assert!(o.slash && !o.classify && o.sort == Sort::Name);
         assert_eq!(args(&["-tv"]).unwrap().sort, Sort::Name);
         let o = args(&["-is"]).unwrap();
-        assert!(o.long && o.inode && o.blocks);
+        assert!(!o.long && o.inode && o.blocks && o.needs_metadata());
         let o = args(&["-o"]).unwrap();
         assert!(o.long && o.no_group && !o.no_owner);
         let o = args(&["-g"]).unwrap();
@@ -477,18 +618,121 @@ mod tests {
         assert_eq!(args(&["-cu"]).unwrap().time, Time::Accessed);
         assert!(!args(&["-c"]).unwrap().long);
         for flags in [&["-R"][..], &["-lR"], &["--recursive"]] {
-            assert!(
-                args(flags)
-                    .unwrap_err()
-                    .contains("recursive listings are not supported")
-            );
+            assert!(args(flags).unwrap().recursive);
         }
-        assert_eq!(args(&["-lZ"]).unwrap_err(), "unknown option -Z in -lZ");
-        assert_eq!(args(&["-Z"]).unwrap_err(), "unknown option: -Z");
+        assert_eq!(args(&["-lz"]).unwrap_err(), "unknown option -z in -lz");
+        assert_eq!(args(&["-z"]).unwrap_err(), "unknown option: -z");
         assert_eq!(
             args(&["-l\u{1b}"]).unwrap_err(),
             "unknown option -\\u{1b} in -l\\u{1b}"
         );
+    }
+    #[test]
+    fn final_text_format_wins_and_prefixes_do_not_change_it() {
+        for (flags, expected) in [
+            (vec!["-l1"], '1'),
+            (vec!["-1l"], 'l'),
+            (vec!["-lC"], 'C'),
+            (vec!["-Cx"], 'x'),
+            (vec!["-xm"], 'm'),
+            (vec!["-m", "--long"], 'l'),
+            (vec!["--header", "-1"], '1'),
+            (vec!["--fields=size", "--columns"], 'C'),
+            (vec!["-C", "-n"], 'l'),
+            (vec!["-1", "-@"], 'l'),
+            (vec!["-O", "-m"], 'm'),
+            (vec!["-Cis"], 'C'),
+            (vec!["-is1"], '1'),
+        ] {
+            let o = args(&flags).unwrap();
+            assert_eq!(o.long, expected == 'l', "{flags:?}");
+            assert_eq!(o.columns, matches!(expected, 'C' | 'x'), "{flags:?}");
+            assert_eq!(o.across, expected == 'x', "{flags:?}");
+            assert_eq!(o.one, expected == '1', "{flags:?}");
+            assert_eq!(o.commas, expected == 'm', "{flags:?}");
+        }
+    }
+    #[test]
+    fn link_hidden_and_size_policies_follow_argument_order() {
+        for (flags, expected) in [
+            (vec![], Dereference::Default),
+            (vec!["-H"], Dereference::CommandLine),
+            (vec!["-HL"], Dereference::All),
+            (vec!["-LP"], Dereference::Never),
+            (
+                vec!["--no-dereference", "--dereference-command-line"],
+                Dereference::CommandLine,
+            ),
+            (vec!["-P", "--dereference"], Dereference::All),
+        ] {
+            assert_eq!(args(&flags).unwrap().dereference, expected);
+        }
+        assert!(args(&["-a"]).unwrap().dot_entries);
+        assert!(!args(&["-aA"]).unwrap().dot_entries);
+        assert!(args(&["-Aa"]).unwrap().dot_entries);
+        let o = args(&["-ltrf"]).unwrap();
+        assert!(o.all && o.dot_entries && o.long && !o.reverse);
+        assert_eq!(o.sort, Sort::None);
+        assert_eq!(args(&["-ft"]).unwrap().sort, Sort::Time);
+        assert!(args(&["-hk"]).unwrap().kibibytes);
+        assert!(!args(&["-hk"]).unwrap().human);
+        assert!(!args(&["-k", "--bytes"]).unwrap().kibibytes);
+        assert!(args(&["-kh"]).unwrap().human);
+        assert!(!args(&["-kh"]).unwrap().kibibytes);
+        assert!(args(&["-bq"]).unwrap().quote_controls);
+        assert!(!args(&["-qb"]).unwrap().quote_controls);
+        assert!(args(&["-Fp"]).unwrap().slash);
+        assert!(!args(&["-Fp"]).unwrap().classify);
+    }
+    #[test]
+    fn common_long_aliases_and_extended_metadata() {
+        let o = args(&[
+            "--human-readable",
+            "--numeric-uid-gid",
+            "--inode",
+            "--size",
+            "--no-group",
+        ])
+        .unwrap();
+        assert!(o.long && o.human && o.numeric && o.inode && o.blocks && o.no_group);
+        for flag in [
+            "-@",
+            "-e",
+            "-O",
+            "-Z",
+            "--xattrs",
+            "--acl",
+            "--flags",
+            "--context",
+        ] {
+            assert!(args(&[flag]).unwrap().long);
+        }
+        let o = args(&["-@eOZ"]).unwrap();
+        assert!(o.xattrs && o.acl && o.flags && o.context);
+        assert_eq!(args(&["--time=atime"]).unwrap().time, Time::Accessed);
+        assert_eq!(args(&["--time=ctime"]).unwrap().time, Time::Changed);
+        assert_eq!(args(&["-c", "--time=mtime"]).unwrap().time, Time::Modified);
+    }
+    #[test]
+    fn output_width_accepts_long_and_short_values() {
+        for flags in [
+            vec!["--width=40"],
+            vec!["--width", "40"],
+            vec!["-w", "40"],
+            vec!["-w40"],
+            vec!["-Cw40"],
+        ] {
+            assert_eq!(args(&flags).unwrap().width, Some(40));
+        }
+        for flags in [
+            vec!["--width"],
+            vec!["-w"],
+            vec!["--width=0"],
+            vec!["-w65536"],
+            vec!["-wxyz"],
+        ] {
+            assert!(args(&flags).is_err());
+        }
     }
     #[test]
     fn rejects_unknown_and_unbounded_options() {
@@ -506,6 +750,7 @@ mod tests {
             "--color=wat",
             "--icons=wat",
             "--sort=wat",
+            "--time=wat",
         ] {
             assert!(args(&[a]).is_err(), "{a}");
         }
@@ -567,6 +812,7 @@ mod tests {
             "-l",
             "-n",
             "-1",
+            "-m",
             "--no-images",
             "--protocol=none",
             "--preview-limit=0",

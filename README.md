@@ -30,6 +30,9 @@ lsa                                   # details, or a grid where images dominate
 lsa -la --header                      # hidden files, details and column headings
 lsa -C                                # compact columns filled downward (-x: across)
 lsa -lt                               # newest first
+lsa -R src                            # recursive sections, in listing order
+lsa -lL linked-folder                  # follow symlinks and show target details
+lsa -le@                              # ACLs and extended attribute names/sizes
 lsa photos                            # automatic previews in Ghostty / Kitty
 lsa --grid --thumbnail-size=6 photos   # larger thumbnails
 lsa --no-images                       # text only
@@ -61,8 +64,10 @@ real Ghostty rendering; Kitty rendering is still unverified. Other terminals,
 SSH and multiplexers get text by default. `--protocol=kitty` can force graphics,
 but those paths need their own testing. [Verified environments →](docs/compatibility.md)
 
-lsa lists one directory level and returns to your shell. Recursive listing
-(`-R`) and exact GNU/BSD scripting parity are outside its scope.
+`-R` prints recursive directory sections with cycle detection and a shared
+preview budget. Familiar flags follow normal shell expectations; natural
+sorting, readable sizes and safe filename escaping remain intentional defaults.
+Exact GNU/BSD scripting parity is outside its scope.
 
 ## Feedback
 
@@ -79,7 +84,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked --all-targets
 cargo build --release --locked --examples --bins
 ./target/release/examples/fixtures          # once: creates img-test/generated
-for check in pty layout cache thumbnails gallery; do python3 tests/check_$check.py; done
+for check in pty layout cache thumbnails gallery recursive; do python3 tests/check_$check.py; done
 python3 -m unittest discover -s tests -p 'test_release.py'
 python3 scripts/package.py
 ```

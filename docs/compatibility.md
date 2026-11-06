@@ -17,6 +17,32 @@ terminal or library is not lsa validation; record real terminal evidence here.
 | SSH | Links off by default | Text by default since v0.5.0 | Forced graphics and remote file URIs unverified |
 | Other terminals | Unverified | Text | Unknown terminals never get graphics automatically |
 
+### v0.6.0 local verification (2026-11-06)
+
+- Formatting and Clippy with warnings denied pass; 110 Rust tests pass on
+  arm64 macOS, including real xattrs, macOS ACLs/file flags, symlink policies,
+  deep recursion, cycle/error continuation and dot-entry metadata.
+- 257 headless PTY scenarios pass. Nine new recursive cases verify one shared
+  preview budget across directory sections, complete names after exhaustion,
+  cycle handling, cursor limits and unchanged terminal modes.
+- Nine Ghostty terminal-core checks pass via tui-test 0.1.0-beta.5:
+  long-column alignment, colors, links, wrapping, scrollback and fallback.
+  This backend parses but does not draw Kitty images.
+- Release packaging validates the archive checksum and runs the extracted
+  binary's version and mixed-listing smoke tests. Release-tool unit tests pass.
+- Some local system-format fixture conversions (HEIC, AVIF, PSD) were unavailable
+  to `sips`; the gallery checks reported those skips. This pass does not add
+  new visual evidence for those formats. Hosted platform results are recorded
+  after CI and release completion.
+- The first hosted attempt could not start its ARM Mac job because GitHub
+  retired the macOS 14 image on November 2. Build and Homebrew jobs now use
+  macOS 15; `MACOSX_DEPLOYMENT_TARGET=14.0` still sets the binary's minimum.
+
+The latest real-renderer evidence remains the v0.5.0 Ghostty demo above.
+v0.6.0's changed long columns, optional metadata rows and recursive output
+still need a human visual pass. Application measurements are in
+[benchmarks](../benchmarks/README.md).
+
 ### v0.5.0 hosted results (2026-09-28/29)
 
 - [CI at eadbdc0](https://github.com/yungibly/lsa/actions/runs/36502914797)
@@ -38,7 +64,7 @@ terminal or library is not lsa validation; record real terminal evidence here.
 
 Earlier versions' results are linked from their tags' workflow runs on GitHub.
 
-## Ghostty check for v0.5.0
+## Ghostty check for v0.6.0
 
 Run from this repository in Ghostty and record Ghostty version, OS, cell/pixel
 geometry and transport (direct, multiplexer, SSH):
@@ -49,6 +75,9 @@ geometry and transport (direct, multiplexer, SSH):
 ./target/release/lsa -l img-test/generated            # miniatures, red dangling link, "-" sizes
 ./target/release/lsa -C img-test/generated            # columns filled downward
 ./target/release/lsa -x img-test/generated            # rows filled across
+./target/release/lsa -la img-test/generated           # dots, full details and total
+./target/release/lsa -R --preview-limit=3 img-test/generated  # shared recursive budget
+./target/release/lsa -le@ src                         # optional metadata rows
 TERM=xterm-256color ./target/release/lsa --grid img-test         # prints a --grid notice
 ```
 

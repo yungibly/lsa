@@ -1,24 +1,33 @@
 # Roadmap
 
-Updated 2026-09-30, after the README demo. lsa prints into scrollback, returns to the
-shell and keeps one mixed ordering with complete names. History lives in the
+Updated 2026-11-06 for the v0.6.0 compatibility pass. lsa prints into scrollback,
+returns to the shell and keeps one mixed ordering with complete names. History lives in the
 [changelog](CHANGELOG.md); evidence in [compatibility](docs/compatibility.md)
 and [measurements](benchmarks/README.md).
 
 ## Status
 
-[v0.5.0](https://github.com/yungibly/lsa/releases/tag/v0.5.0) is published and
-the Homebrew tap points to it. CI and the release workflow passed on four native
-targets plus Rust 1.88 ([evidence](docs/compatibility.md)). The text layer was
-also checked in Ghostty's terminal core (libghostty-vt). A limited real Ghostty 1.3.1 Linux check now has a
-[recorded demo](docs/demo.md): long-view miniatures, an eight-image gallery and
-plain pipe output. The full v0.5.0 visual pass below remains open. The README
-now includes the recording as an inline GIF with the original MP4 linked.
+v0.6.0 implements practical `ls` replacement coverage: ordinary format/option
+precedence, operand sorting, distinct `-a`/`-A`, recursive sections, explicit
+symlink policies, and fuller long metadata. Natural ordering, readable sizes,
+safe filename text and automatic previews remain product defaults. Recursion
+shares the invocation's existing preview limits and detects ancestor cycles.
+See [usage](docs/usage.md) for supported behavior and intentional differences.
+
+Local tests, headless terminal checks, Ghostty's text core and packaging pass;
+hosted CI and publication are next. Evidence is recorded in
+[compatibility](docs/compatibility.md) and application cost in
+[measurements](benchmarks/README.md). The [v0.5.0 Ghostty demo](docs/demo.md)
+remains the latest recorded image rendering evidence; it does not validate
+the new long columns, optional metadata or recursive output visually.
 
 ## Next
 
-1. **Ghostty pass for v0.5.0.** Record Ghostty version, geometry and transport,
+1. **Ghostty pass for v0.6.0.** Record Ghostty version, geometry and transport,
    and check:
+   - fuller `-l` columns and totals beside miniatures, including narrow widths;
+   - recursive sections and budget fallback, with earlier images in scrollback;
+   - `-H`/`-L`/`-P`, `-a`/`-A`, and optional ACL/xattr rows;
    - HEIC/AVIF/TIFF/RAW thumbnails;
    - progressive rows in a large photo gallery;
    - compressed images, including older placements after scrolling back;
@@ -47,5 +56,5 @@ now includes the recording as an inline GIF with the original MP4 linked.
 
 ## Not planned
 
-Recursive trees, Git status, file operations, a configuration file, a pager or
+Interactive trees, Git status, file operations, a configuration file, a pager or
 browser, a plugin system, or background services.

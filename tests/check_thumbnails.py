@@ -118,8 +118,8 @@ def main():
                 assert all(int(c[b's'])==24 and int(c[b'v'])==17 for c in frames)
                 assert check_cursor(data,122,8,7)==4
                 lines=replay(data)
-                assert len(lines)==(7 if fields=='--header' else 6), lines
-                body=lines[1:] if fields=='--header' else lines
+                assert len(lines)==(6 if fields=='--fields=size' else 7), lines
+                body=lines if fields=='--fields=size' else lines[1:]
                 names=sorted(p.name for p in entries.iterdir())
                 offsets=[line.index(name) for name,line in zip(names,body)]
                 assert len(set(offsets))==1, body
@@ -150,7 +150,7 @@ def main():
             assert not images(data) and b'\x1b' not in data
             cases+=1
         piped=subprocess.run([str(BIN),'-l',str(entries)],capture_output=True,check=True)
-        assert b'\x1b' not in piped.stdout and len(piped.stdout.splitlines())==6
+        assert b'\x1b' not in piped.stdout and len(piped.stdout.splitlines())==7
         cases+=1
         # Warm cache keeps exact tiny pixels and text, and uses its own geometry
         # key rather than accidentally reusing a full grid thumbnail.

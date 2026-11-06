@@ -9,6 +9,32 @@ binary hashes. Fixtures and fresh reports stay under the ignored
 `benchmarks/local/`; committed reports are copied explicitly. None of these
 measure terminal rendering time or terminal image memory.
 
+## v0.6.0 — 2026-11-06
+
+[Report](drop-in.json), [harness](drop_in.py). Local arm64 macOS release builds,
+two warmups and seven paired/interleaved runs; OS caches warm, thumbnail cache
+off. PTY output was drained without a renderer. Elapsed medians:
+
+| Case | v0.5.0 | v0.6.0 | Output |
+| --- | ---: | ---: | --- |
+| 10,000 plain names, pipe | 7.31 ms | 7.44 ms | identical |
+| 10,000 compact entries, terminal | 35.81 ms | 35.89 ms | identical |
+| 10,000 automatic detail entries, terminal | 51.39 ms | 51.26 ms | identical |
+| 10,000 explicit `-l` entries, pipe | 26.58 ms | 47.20 ms | adds links/group, totals and extended-metadata probes |
+| 40 generated PNG thumbnails, terminal | 8.12 ms | 8.14 ms | identical |
+| Recursive pipe: 50 directories, 5,000 files | unsupported | 6.56 ms | 2.56 MiB peak RSS |
+
+Ordinary names/columns, automatic details and graphics retain their previous
+cost in this sample. Explicit long output does more filesystem work; its CPU
+rose from 24.86 to 45.55 ms per 10,000 entries and peak RSS from 4.02 to 4.34
+MiB. These are application costs on a warm local filesystem, not predictions
+for network filesystems or terminal rendering. No image decoder/cache change
+was made; this comparison does not measure cold source reads or cache hits.
+
+```sh
+python3 benchmarks/drop_in.py --before target/lsa-before-v060 --runs 7
+```
+
 ## v0.5.0 — 2026-09-28
 
 [Report](previews-0.5.0.json), [harness](previews.py). Before: the v0.4.0 release
