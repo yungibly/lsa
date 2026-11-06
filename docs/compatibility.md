@@ -38,6 +38,25 @@ restriction; actual Rex rendering still needs confirmation after the fix.
   terminal-name comparison; it adds no font probing, subprocesses or per-entry
   queries. Release-tool tests pass.
 
+### v0.7.0 hosted results (2026-11-06)
+
+- [PR #4](https://github.com/yungibly/lsa/pull/4) merged after
+  [all five CI jobs](https://github.com/yungibly/lsa/actions/runs/42311139648)
+  passed, covering native ARM64/x86-64 macOS and musl Linux plus Rust 1.88.
+  Each platform runs the complete headless suite, including the new icon matrix.
+- The v0.7.0 tag points to merge commit `99c282a`, whose source tree matches the
+  checked PR head. The
+  [release workflow](https://github.com/yungibly/lsa/actions/runs/42311685398)
+  built and published all four platform archives with individual checksums and
+  `SHA256SUMS`.
+- The public Apple Silicon archive passed checksum, version, Nerd/portable
+  icon output, multiplexer-environment, visibility and pipe smoke checks.
+  SHA-256: `fc6dfb8614f7ef33610a09392ff495469251a53e7699f89aac19c9ee5c8f22d3`.
+  This verifies emitted glyphs, not Rex's font rendering.
+- All eleven release jobs passed on the first attempt, including Homebrew
+  installs on Apple Silicon, Intel Mac and Linux, and the automatic tap update.
+  The tap's version and Apple Silicon archive hash match the public release.
+
 ### v0.6.0 local verification (2026-11-06)
 
 - Formatting and Clippy with warnings denied pass; 110 Rust tests pass on

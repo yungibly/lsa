@@ -10,8 +10,10 @@ and [measurements](benchmarks/README.md).
 v0.7.0 removes the Ghostty-only choice of Nerd Font glyphs. Normal TTY output
 uses Nerd Font icons across terminal brands, multiplexers and SSH sessions;
 `--icon-style=portable` selects basic Unicode symbols. Visibility and graphics
-detection remain independent. Formatting, Clippy, 111 Rust tests and 115 headless
-layout/style checks pass locally; hosted CI and release publication are next.
+detection remain independent. Released as
+[v0.7.0](https://github.com/yungibly/lsa/releases/tag/v0.7.0), with the Homebrew
+tap updated. Formatting, Clippy, 111 local Rust tests, 115 local layout/style
+checks, four-platform CI, public-archive checks and Homebrew installs pass.
 
 v0.6.0 implements practical `ls` replacement coverage: ordinary format/option
 precedence, operand sorting, distinct `-a`/`-A`, recursive sections, explicit
