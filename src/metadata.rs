@@ -27,21 +27,30 @@ pub enum Field {
     Allocated,
     Inode,
     Modified,
+    Flags,
 }
-const FIELD_COUNT: usize = 10;
+const FIELD_COUNT: usize = 11;
 
 /// Columns for this listing: `--fields`, or a preset shaped by -n, -g and -o,
 /// then -s and -i prepend allocated size and inode (ls order).
 fn selected(opts: &Options) -> Vec<Field> {
     let mut fields = if !opts.fields.is_empty() {
         opts.fields.clone()
-    } else if opts.numeric {
+    } else if opts.long || opts.numeric {
         let mut fields = vec![Field::Mode, Field::Links];
         if !opts.no_owner {
-            fields.push(Field::Uid);
+            fields.push(if opts.numeric {
+                Field::Uid
+            } else {
+                Field::User
+            });
         }
         if !opts.no_group {
-            fields.push(Field::Gid);
+            fields.push(if opts.numeric {
+                Field::Gid
+            } else {
+                Field::Group
+            });
         }
         fields.extend([Field::Size, Field::Modified]);
         fields
@@ -56,6 +65,13 @@ fn selected(opts: &Options) -> Vec<Field> {
         fields.push(Field::Modified);
         fields
     };
+    if opts.flags && !fields.contains(&Field::Flags) {
+        let position = fields
+            .iter()
+            .position(|f| *f == Field::Size)
+            .unwrap_or(fields.len());
+        fields.insert(position, Field::Flags);
+    }
     for (wanted, field) in [(opts.blocks, Field::Allocated), (opts.inode, Field::Inode)] {
         if wanted && !fields.contains(&field) {
             fields.insert(0, field);
@@ -189,10 +205,20 @@ impl Field {
             Self::Gid => write!(out, "{}", m.gid).unwrap(),
             // A directory's byte count describes its index, not its contents.
             Self::Size if entry.kind == Kind::Directory => out.push('-'),
+            Self::Size if entry.kind == Kind::Device => {
+                write!(
+                    out,
+                    "{},{}",
+                    libc::major(m.rdev as libc::dev_t),
+                    libc::minor(m.rdev as libc::dev_t)
+                )
+                .unwrap();
+            }
             Self::Size => size(out, m.len, opts.human),
-            Self::Allocated => size(out, m.blocks.saturating_mul(512), opts.human),
+            Self::Allocated => allocated(out, m.blocks, opts.human, opts.kibibytes),
             Self::Inode => write!(out, "{}", m.inode).unwrap(),
             Self::Modified => format_time(out, time, opts.twelve_hour),
+            Self::Flags => file_flags(out, m.flags),
         }
     }
 }
@@ -204,8 +230,8 @@ pub fn parse_fields(list: &str) -> Result<Vec<Field>, String> {
             "mode" => Field::Mode, "links" => Field::Links, "uid" => Field::Uid,
             "user" => Field::User, "group" => Field::Group,
             "gid" => Field::Gid, "size" => Field::Size, "modified" => Field::Modified,
-            "allocated" => Field::Allocated, "inode" => Field::Inode,
-            _ => return Err("fields must be a comma-separated list of mode, links, user, group, uid, gid, size, allocated, inode, or modified; names are always shown".into()),
+            "allocated" => Field::Allocated, "inode" => Field::Inode, "flags" => Field::Flags,
+            _ => return Err("fields must be a comma-separated list of mode, links, user, group, uid, gid, size, allocated, inode, modified, or flags; names are always shown".into()),
         };
         if fields.contains(&field) {
             return Err(format!("duplicate metadata field: {name}"));
@@ -240,11 +266,26 @@ pub fn write(
         Field::Size => "Size",
         Field::Allocated => "Allocated",
         Field::Inode => "Inode",
+        Field::Flags => "Flags",
         Field::Modified => match opts.time {
             Time::Modified => "Modified",
             Time::Changed => "Changed",
             Time::Accessed => "Accessed",
         },
+    };
+    // Fuller, explicitly requested listings include optional metadata markers;
+    // the automatic compact long view keeps its original stat-only cost.
+    let markers: Vec<_> = if opts.long && fields.contains(&Field::Mode) {
+        entries
+            .iter()
+            .map(|entry| {
+                entry.metadata.as_ref().and_then(|_| {
+                    crate::extended::marker(&entry.path(dir), entry.kind == Kind::Link)
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
     };
     // Convert each timestamp at most once across width and output passes. Keep
     // compact civil components (24 bytes including Option), not formatted strings.
@@ -268,10 +309,24 @@ pub fn write(
                 time_width(times[row], opts.twelve_hour)
             } else {
                 field.value(&mut value, entry, opts, &mut owners, None);
+                if *field == Field::Mode
+                    && let Some(marker) = markers.get(row).copied().flatten()
+                {
+                    value.push(marker);
+                }
                 value.width()
             };
             widths[i] = widths[i].max(width);
         }
+    }
+    if opts.long && !dir.as_os_str().is_empty() && opts.fields.is_empty() && !opts.header {
+        let blocks = entries
+            .iter()
+            .filter_map(|e| e.metadata.as_ref())
+            .fold(0_u64, |total, details| total.saturating_add(details.blocks));
+        value.clear();
+        allocated(&mut value, blocks, opts.human, opts.kibibytes);
+        writeln!(out, "total {value}")?;
     }
     if opts.header {
         for (i, field) in fields.iter().enumerate() {
@@ -362,6 +417,11 @@ pub fn write(
                             &mut owners,
                             times.get(row).copied().flatten(),
                         );
+                        if *field == Field::Mode
+                            && let Some(marker) = markers.get(row).copied().flatten()
+                        {
+                            value.push(marker);
+                        }
                         let padding = widths[i] - value.width();
                         let right = matches!(
                             field,
@@ -439,16 +499,76 @@ pub fn write(
                     }
                     if entry.kind == Kind::Link {
                         let target = fs::read_link(entry.path(dir))
-                            .map(|p| escape(p.as_os_str()))
+                            .map(|p| {
+                                crate::display::filename(p.as_os_str(), opts.quote_controls)
+                                    .into_owned()
+                            })
                             .unwrap_or_else(|_| "?".into());
                         style.paint(out, style.target_code(entry), &format!(" -> {target}"))?;
                     }
                     writeln!(out)?;
+                    if opts.xattrs || opts.acl || opts.context {
+                        crate::extended::write(
+                            out,
+                            &entry.path(dir),
+                            entry.kind == Kind::Link,
+                            opts,
+                        )?;
+                    }
                 }
                 Ok(())
             },
         )
     })
+}
+
+/// Allocated blocks arrive in the kernel's 512-byte units. Keep readable bytes
+/// by default, explicit bytes for --bytes, and rounded KiB for -k.
+pub fn allocated(out: &mut String, blocks: u64, human: bool, kibibytes: bool) {
+    if kibibytes {
+        write!(out, "{}", blocks.div_ceil(2)).unwrap();
+    } else {
+        size(out, blocks.saturating_mul(512), human);
+    }
+}
+
+fn file_flags(out: &mut String, flags: u32) {
+    if flags == 0 {
+        out.push('-');
+        return;
+    }
+    let mut remaining = flags;
+    for (bit, name) in [
+        (0x1, "nodump"),
+        (0x2, "uchg"),
+        (0x4, "uappnd"),
+        (0x8, "opaque"),
+        (0x20, "compressed"),
+        (0x40, "tracked"),
+        (0x80, "datavault"),
+        (0x8000, "hidden"),
+        (0x10000, "arch"),
+        (0x20000, "schg"),
+        (0x40000, "sappnd"),
+        (0x80000, "restricted"),
+        (0x100000, "nounlink"),
+        (0x800000, "firmlink"),
+        (0x40000000, "dataless"),
+    ] {
+        if flags & bit != 0 {
+            if !out.is_empty() {
+                out.push(',');
+            }
+            out.push_str(name);
+            remaining &= !bit;
+        }
+    }
+    if remaining != 0 {
+        if !out.is_empty() {
+            out.push(',');
+        }
+        write!(out, "0x{remaining:x}").unwrap();
+    }
 }
 
 fn size(out: &mut String, n: u64, human: bool) {
@@ -630,10 +750,11 @@ mod tests {
         use Field::*;
         let fields =
             |flags: &[&str]| selected(&crate::cli::parse(flags.iter().map(Into::into)).unwrap());
-        assert_eq!(fields(&["-l"]), [Mode, Size, User, Modified]);
-        assert_eq!(fields(&["-o"]), [Mode, Size, User, Modified]);
-        assert_eq!(fields(&["-g"]), [Mode, Size, Group, Modified]);
-        assert_eq!(fields(&["-og"]), [Mode, Size, Modified]);
+        assert_eq!(fields(&[]), [Mode, Size, User, Modified]);
+        assert_eq!(fields(&["-l"]), [Mode, Links, User, Group, Size, Modified]);
+        assert_eq!(fields(&["-o"]), [Mode, Links, User, Size, Modified]);
+        assert_eq!(fields(&["-g"]), [Mode, Links, Group, Size, Modified]);
+        assert_eq!(fields(&["-og"]), [Mode, Links, Size, Modified]);
         assert_eq!(fields(&["-n"]), [Mode, Links, Uid, Gid, Size, Modified]);
         assert_eq!(fields(&["-ng"]), [Mode, Links, Gid, Size, Modified]);
         assert_eq!(fields(&["-no"]), [Mode, Links, Uid, Size, Modified]);
@@ -655,6 +776,8 @@ mod tests {
                 links: 1,
                 inode: 0,
                 blocks: 0,
+                rdev: 0,
+                flags: 0,
                 modified: 0,
                 modified_nsec: 0,
             }))
@@ -745,6 +868,8 @@ mod tests {
             links: u64::MAX,
             inode: u64::MAX,
             blocks: u64::MAX,
+            rdev: 0,
+            flags: 0,
             modified: 0,
             modified_nsec: 0,
         }));
@@ -768,5 +893,57 @@ mod tests {
         assert_eq!(value, "?");
         assert_eq!(owners.users.len(), 64);
         assert_eq!(owners.groups.len(), 64);
+    }
+
+    #[test]
+    fn allocated_units_and_file_flags_preserve_useful_information() {
+        let mut value = String::new();
+        for (blocks, human, kibibytes, expected) in [
+            (3, true, false, "1.5K"),
+            (3, false, false, "1536"),
+            (3, false, true, "2"),
+            (0, false, true, "0"),
+            (u64::MAX, false, true, "9223372036854775808"),
+        ] {
+            value.clear();
+            allocated(&mut value, blocks, human, kibibytes);
+            assert_eq!(value, expected);
+        }
+        value.clear();
+        file_flags(&mut value, 0);
+        assert_eq!(value, "-");
+        value.clear();
+        file_flags(&mut value, 0x8003);
+        assert_eq!(value, "nodump,uchg,hidden");
+        value.clear();
+        file_flags(&mut value, 0x10);
+        assert_eq!(value, "0x10");
+    }
+
+    #[test]
+    fn devices_show_major_minor_numbers_instead_of_size() {
+        let mut device = Entry::new("device", Kind::Device);
+        device.metadata = Some(Box::new(crate::entry::Details {
+            mode: 0,
+            uid: 0,
+            gid: 0,
+            len: 999,
+            links: 1,
+            inode: 0,
+            blocks: 0,
+            rdev: libc::makedev(12, 34) as u64,
+            flags: 0,
+            modified: 0,
+            modified_nsec: 0,
+        }));
+        let mut value = String::new();
+        Field::Size.value(
+            &mut value,
+            &device,
+            &Options::default(),
+            &mut FormatCache::default(),
+            None,
+        );
+        assert_eq!(value, "12,34");
     }
 }

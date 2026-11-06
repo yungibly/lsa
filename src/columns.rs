@@ -62,7 +62,7 @@ impl Plan {
     }
 
     fn with(entries: &[Entry], terminal_cols: usize, style: &Style, across: bool) -> Self {
-        let widths: Vec<_> = entries.iter().map(|e| style.label_width(e)).collect();
+        let widths: Vec<_> = entries.iter().map(|e| style.entry_width(e)).collect();
         let (cells, rows) = plan(&widths, terminal_cols, across);
         Self {
             widths,
@@ -90,7 +90,7 @@ impl Plan {
                 let Some(entry) = entries.get(index) else {
                     break;
                 };
-                style.write_name(out, dir, entry)?;
+                style.write_entry(out, dir, entry)?;
                 if column + 1 < columns && next < entries.len() {
                     let padding = self.cells[column] - self.widths[index] + 2;
                     write!(out, "{:padding$}", "")?;
@@ -100,6 +100,36 @@ impl Plan {
         }
         Ok(())
     }
+}
+
+/// Comma-separated output wraps between complete names, never inside them.
+pub fn write_commas(
+    out: &mut impl Write,
+    dir: &Path,
+    entries: &[Entry],
+    terminal_cols: usize,
+    style: &Style,
+) -> io::Result<()> {
+    let available = terminal_cols.saturating_sub(1);
+    let mut used = 0usize;
+    for (index, entry) in entries.iter().enumerate() {
+        let width = style.entry_width(entry);
+        if index > 0 {
+            if used.saturating_add(2).saturating_add(width) > available {
+                writeln!(out, ",")?;
+                used = 0;
+            } else {
+                write!(out, ", ")?;
+                used += 2;
+            }
+        }
+        style.write_entry(out, dir, entry)?;
+        used = used.saturating_add(width);
+    }
+    if !entries.is_empty() {
+        writeln!(out)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

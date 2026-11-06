@@ -10,6 +10,7 @@ pub enum Layout {
     Long,
     Lines,
     Columns,
+    Commas,
     Grid(Geometry),
 }
 impl Layout {
@@ -18,6 +19,7 @@ impl Layout {
             Self::Long => "long",
             Self::Lines => "lines",
             Self::Columns => "columns",
+            Self::Commas => "commas",
             Self::Grid(_) => "grid",
         }
     }
@@ -47,6 +49,16 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
             unavailable: false,
         };
     }
+    if opts.columns {
+        return text("compact columns requested");
+    }
+    if opts.commas {
+        return Choice {
+            layout: Layout::Commas,
+            reason: "comma-separated text requested",
+            unavailable: false,
+        };
+    }
     if !term.tty || opts.one {
         return Choice {
             layout: Layout::Lines,
@@ -58,8 +70,8 @@ pub fn choose(entries: &[Entry], term: &Terminal, opts: &Options) -> Choice {
             unavailable: false,
         };
     }
-    if opts.columns {
-        return text("compact columns requested");
+    if opts.inode || opts.blocks {
+        return text("metadata prefixes requested");
     }
     if opts.no_images || opts.protocol == Protocol::None {
         return text("images disabled");
@@ -149,10 +161,39 @@ mod tests {
         ));
     }
     #[test]
+    fn explicit_text_formats_apply_to_pipes_and_respect_argument_order() {
+        let mut term = term();
+        term.tty = false;
+        for (args, expected) in [
+            (vec!["-C"], Layout::Columns),
+            (vec!["-x"], Layout::Columns),
+            (vec!["-m"], Layout::Commas),
+            (vec!["-l1"], Layout::Lines),
+            (vec!["-1l"], Layout::Long),
+            (vec!["-Cl"], Layout::Long),
+            (vec!["-lC"], Layout::Columns),
+            (vec!["-mx"], Layout::Columns),
+            (vec!["-xm"], Layout::Commas),
+            (vec!["-i"], Layout::Lines),
+            (vec!["-s"], Layout::Lines),
+            (vec!["-Ci"], Layout::Columns),
+        ] {
+            let opts = cli::parse(args.iter().map(Into::into)).unwrap();
+            assert_eq!(
+                choose(&entries(4, 0), &term, &opts).layout,
+                expected,
+                "{args:?}"
+            );
+        }
+    }
+    #[test]
     fn explicit_text_and_zero_budget_never_decode() {
         for (flag, layout) in [
             ("-1", Layout::Lines),
             ("-C", Layout::Columns),
+            ("-m", Layout::Commas),
+            ("-i", Layout::Long),
+            ("-s", Layout::Long),
             ("-l", Layout::Long),
             ("--no-images", Layout::Long),
             ("--protocol=none", Layout::Long),

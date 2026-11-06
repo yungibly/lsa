@@ -34,6 +34,30 @@ pub fn escaped(name: &OsStr) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// `-q` keeps ordinary Unicode readable and replaces terminal controls and
+/// invalid bytes with `?`. The default retains their unambiguous escapes.
+pub fn filename(name: &OsStr, question_marks: bool) -> Cow<'_, str> {
+    if !question_marks {
+        return escaped(name);
+    }
+    let unsafe_char = |c| c != '\\' && needs_escape(c);
+    if let Some(text) = name.to_str()
+        && !text.chars().any(unsafe_char)
+    {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(name.len());
+    for chunk in name.as_encoded_bytes().utf8_chunks() {
+        for c in chunk.valid().chars() {
+            out.push(if unsafe_char(c) { '?' } else { c });
+        }
+        for _ in chunk.invalid() {
+            out.push('?');
+        }
+    }
+    Cow::Owned(out)
+}
+
 fn needs_escape(c: char) -> bool {
     c == '\\'
         || c.is_control()
@@ -68,6 +92,13 @@ mod tests {
         );
         assert_eq!(escape(OsStr::new("桃👩‍💻")), "桃👩‍💻");
         assert_eq!(escape(OsStr::new("a\u{202e}b")), "a\\u{202e}b");
+    }
+    #[test]
+    fn question_marks_never_pass_terminal_controls() {
+        let name = OsStr::from_bytes(b"a\x1b[31m\n\\\xff");
+        assert_eq!(filename(name, true), "a?[31m?\\?");
+        assert_eq!(filename(name, false), escape(name));
+        assert_eq!(filename(OsStr::new("桃\u{202e}b"), true), "桃?b");
     }
     #[test]
     fn wrap_preserves_graphemes_and_content() {

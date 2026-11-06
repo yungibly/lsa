@@ -115,19 +115,22 @@ def main():
             assert plain(data) == expected, data
             assert check_cursor(data, width, 24, 23) == 0
             cases += 1
-        # Default terminal details agree with explicit -l; compact/pipe overrides
-        # keep familiar names and the default does not imply -l for symlink operands.
+        # Automatic details remain compact; explicit -l adds ownership/link
+        # fields and allocation totals. Both retain every name.
         for environment in [{}, {"TERM_PROGRAM": "other"}, {"TMUX": "test"}, {"TERM": "dumb"}]:
             automatic = run([text], environment=environment)
-            assert automatic == run(["-l", text], environment=environment)
+            detailed = plain(run(["-l", text], environment=environment))
+            assert detailed.startswith(b"total ") and detailed.count(b"-rw") == 5
             assert plain(automatic).count(b"-rw") == 5
+            assert [line.split()[-1] for line in detailed.splitlines()[1:]] == [b"a", b"bb", b"ccc", b"d", b"ee"]
             cases += 1
         assert plain(run(["--columns", text], cols=11)) == b"a    d\nbb   ee\nccc\n"
         assert plain(run(["-x", "--columns", text], cols=11)) == b"a    d\nbb   ee\nccc\n"
         assert plain(run(["--columns", "-x", text], cols=11)) == b"a  bb  ccc\nd  ee\n"
         cases += 1
         link = root / "directory-link"; link.symlink_to(text)
-        assert run([link]) == run([text])
+        # The capture helper requests -F, which keeps operand links unless -H.
+        assert run(["-H", link]) == run([text])
         assert b"directory-link@ ->" in plain(run(["-l", link]))
         cases += 1
         for args in [["-1"], ["--grid", "-1"], ["-1", "--grid"]]:
@@ -157,7 +160,8 @@ def main():
         (mixed / ".extra").touch()
         assert len(images(run(["-a", mixed], **geometry))) == 4
         cases += 1
-        assert run(["-a", mixed], **geometry) == run(["-la", mixed], **geometry)
+        detailed = run(["-la", mixed], **geometry)
+        assert len(images(detailed)) == 4 and plain(detailed).startswith(b"total ")
         cases += 1
         for flags in [["-C"], ["--columns"], ["--grid", "-C"], ["-C", "--grid"]]:
             data = run([*flags, mixed], notice="--grid" in flags, **geometry)

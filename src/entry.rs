@@ -1,5 +1,5 @@
 use crate::{
-    cli::{Options, Sort, Time},
+    cli::{Dereference, Options, Sort, Time},
     display::escape,
     filetype::{self, Classification},
 };
@@ -50,6 +50,10 @@ pub struct Details {
     pub len: u64,
     pub links: u64,
     pub inode: u64,
+    /// Device number for character/block devices.
+    pub rdev: u64,
+    /// BSD file flags; zero on platforms without st_flags.
+    pub flags: u32,
     // 512-byte units, as st_blocks reports on Linux and macOS.
     pub blocks: u64,
     /// The selected timestamp (`-c` / `-u`), shown and used by `-t`.
@@ -70,6 +74,17 @@ impl Details {
             len: meta.len(),
             links: meta.nlink(),
             inode: meta.ino(),
+            rdev: meta.rdev(),
+            flags: {
+                #[cfg(target_os = "macos")]
+                {
+                    std::os::macos::fs::MetadataExt::st_flags(meta)
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    0
+                }
+            },
             blocks: meta.blocks(),
             modified,
             modified_nsec,
@@ -163,8 +178,10 @@ pub struct Listing {
     pub valid: bool,
 }
 
-/// `classify` is false when nothing will style or preview the entries.
-pub fn list(path: &Path, opts: &Options, classify: bool) -> Listing {
+/// Classify one command-line operand without opening any directory contents.
+/// This allows file operands to be sorted and printed before directories while
+/// retaining only one directory listing at a time.
+pub fn operand(path: &Path, opts: &Options, classify: bool) -> Listing {
     let mut result = Listing::default();
     let meta = match fs::symlink_metadata(path) {
         Ok(m) => m,
@@ -175,23 +192,56 @@ pub fn list(path: &Path, opts: &Options, classify: bool) -> Listing {
             return result;
         }
     };
-    // Match everyday ls behavior: a directory-link operand lists its contents,
-    // while -l/-d and links inside a directory retain the link itself.
-    let target = meta.is_symlink().then(|| fs::metadata(path));
-    result.directory = meta.is_dir()
-        || (!opts.long
-            && !opts.directory
-            && matches!(&target, Some(Ok(target)) if target.is_dir()));
-    if !result.directory || opts.directory {
-        result.directory = false;
-        let mut entry = Entry::new(path.as_os_str(), Kind::from_type(meta.file_type()));
-        entry.executable = meta.is_file() && meta.mode() & 0o111 != 0;
-        entry.broken = matches!(target, Some(Err(_)));
-        entry.metadata = Some(Box::new(Details::new(&meta, opts.time)));
-        result.entries.push(entry);
-        result.valid = true;
-        return result;
-    }
+    let mut entry = if classify {
+        Entry::new(path.as_os_str(), Kind::from_type(meta.file_type()))
+    } else {
+        Entry::unclassified(path.as_os_str().into(), Kind::from_type(meta.file_type()))
+    };
+    let follow = match opts.dereference {
+        Dereference::All | Dereference::CommandLine => true,
+        Dereference::Never => false,
+        Dereference::Default => !opts.long && !opts.directory && !opts.classify,
+    };
+    let target = if meta.is_symlink() && (follow || classify) {
+        match fs::metadata(path) {
+            Ok(target) => Some(target),
+            Err(error) => {
+                entry.broken = true;
+                if follow && opts.dereference != Dereference::Default {
+                    result
+                        .errors
+                        .push(format!("{}: {error}", escape(path.as_os_str())));
+                }
+                None
+            }
+        }
+    } else {
+        None
+    };
+    // Default behavior follows directory-link operands only. -H/-L also use
+    // target metadata for file-link operands, retaining the operand's name.
+    let meta = target
+        .as_ref()
+        .filter(|m| follow && (opts.dereference != Dereference::Default || m.is_dir()))
+        .unwrap_or(&meta);
+    entry.kind = Kind::from_type(meta.file_type());
+    entry.executable = meta.is_file() && meta.mode() & 0o111 != 0;
+    entry.metadata = Some(Box::new(Details::new(meta, opts.time)));
+    result.directory = meta.is_dir() && !opts.directory;
+    result.entries.push(entry);
+    result.valid = true;
+    result
+}
+
+/// Read one directory. `-L` resolves links before layout selection so a linked
+/// directory is both represented and traversed as a directory. Other policies
+/// retain link identity inside listings. Plain names need no per-file stats.
+pub fn read_directory(path: &Path, opts: &Options, classify: bool) -> Listing {
+    let mut result = Listing {
+        dir: path.into(),
+        directory: true,
+        ..Listing::default()
+    };
     let iter = match fs::read_dir(path) {
         Ok(iter) => iter,
         Err(e) => {
@@ -201,8 +251,16 @@ pub fn list(path: &Path, opts: &Options, classify: bool) -> Listing {
             return result;
         }
     };
-    result.dir = path.into();
     result.valid = true;
+    if opts.dot_entries {
+        for name in [".", ".."] {
+            result.entries.push(if classify {
+                Entry::new(name, Kind::Directory)
+            } else {
+                Entry::unclassified(name.into(), Kind::Directory)
+            });
+        }
+    }
     for item in iter {
         let item = match item {
             Ok(item) => item,
@@ -226,11 +284,28 @@ pub fn list(path: &Path, opts: &Options, classify: bool) -> Listing {
                 Kind::Unknown
             }
         };
-        result.entries.push(if classify {
+        let mut entry = if classify {
             Entry::new(name, kind)
         } else {
             Entry::unclassified(name, kind)
-        });
+        };
+        if opts.dereference == Dereference::All && kind == Kind::Link {
+            match fs::metadata(item.path()) {
+                Ok(meta) => {
+                    entry.kind = Kind::from_type(meta.file_type());
+                    entry.executable = meta.is_file() && meta.mode() & 0o111 != 0;
+                    // Preserve this stat for long output or time/size ordering.
+                    entry.metadata = Some(Box::new(Details::new(&meta, opts.time)));
+                }
+                Err(error) => {
+                    entry.broken = true;
+                    result
+                        .errors
+                        .push(format!("{}: {error}", escape(item.path().as_os_str())));
+                }
+            }
+        }
+        result.entries.push(entry);
     }
     result
 }
@@ -249,13 +324,23 @@ pub fn prepare(
     // One reusable path buffer: no per-entry path allocation for stats.
     let mut path = listing.dir.clone();
     for entry in &mut listing.entries {
-        if resolve_links && entry.kind == Kind::Link {
-            path.push(&entry.name);
-            entry.broken = fs::metadata(&path).is_err();
-            path.pop();
+        let check_link =
+            resolve_links && entry.kind == Kind::Link && !entry.broken && entry.metadata.is_none();
+        let read_metadata =
+            entry.metadata.is_none() && (need_metadata || (need_mode && entry.kind == Kind::File));
+        if !check_link && !read_metadata {
+            continue;
         }
-        if need_metadata || (need_mode && entry.kind == Kind::File) {
-            path.push(&entry.name);
+        // push/pop is not reversible for "." or multi-component operands.
+        // Restore the base while retaining the buffer allocation instead.
+        path.clone_from(&listing.dir);
+        path.push(&entry.name);
+        if check_link {
+            entry.broken = fs::metadata(&path).is_err();
+        }
+        if read_metadata {
+            // Resolved -L links already have target metadata. All remaining
+            // entries intentionally use lstat, including broken links.
             match fs::symlink_metadata(&path) {
                 Ok(meta) => {
                     entry.executable = entry.kind == Kind::File && meta.mode() & 0o111 != 0;
@@ -267,19 +352,23 @@ pub fn prepare(
                     .push(format!("{}: {error}", escape(path.as_os_str()))),
                 Err(_) => (),
             }
-            path.pop();
         }
     }
+    sort(&mut listing.entries, opts);
+}
+
+/// The same ordering applies to directory entries and explicit operands.
+pub fn sort(entries: &mut [Entry], opts: &Options) {
     if opts.sort == Sort::None {
         if opts.reverse {
-            listing.entries.reverse();
+            entries.reverse();
         }
         if opts.dirs_first {
-            listing.entries.sort_by_key(|e| e.kind != Kind::Directory);
+            entries.sort_by_key(|e| e.kind != Kind::Directory);
         }
         return;
     }
-    listing.entries.sort_unstable_by(|a, b| {
+    entries.sort_unstable_by(|a, b| {
         let primary = match opts.sort {
             Sort::Name | Sort::None => std::cmp::Ordering::Equal,
             // Directories have no displayed size; they follow sized entries.
@@ -321,7 +410,7 @@ pub fn write_text(
     style: &crate::style::Style,
 ) -> io::Result<()> {
     for e in entries {
-        style.write_name(out, dir, e)?;
+        style.write_entry(out, dir, e)?;
         writeln!(out)?;
     }
     Ok(())

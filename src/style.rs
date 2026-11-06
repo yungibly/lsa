@@ -1,6 +1,6 @@
 use crate::{
     cli::{Options, When},
-    display::escaped,
+    display::filename,
     entry::{Entry, Kind},
     filetype::Category,
     terminal::Terminal,
@@ -30,8 +30,18 @@ pub struct Style {
     pub classify: bool,
     /// `-p`: mark only directories with `/`.
     pub slash: bool,
+    quote_controls: bool,
+    prefix: Prefix,
     hyperlinks: Option<Hyperlinks>,
     colors: Colors,
+}
+
+#[derive(Default)]
+struct Prefix {
+    inode: bool,
+    blocks: bool,
+    human: bool,
+    kibibytes: bool,
 }
 
 /// Validated LS_COLORS rules. Type keys map directly; `*suffix` rules are
@@ -145,6 +155,13 @@ impl Style {
             },
             classify: opts.classify,
             slash: opts.slash,
+            quote_controls: opts.quote_controls,
+            prefix: Prefix {
+                inode: opts.inode,
+                blocks: opts.blocks,
+                human: opts.human,
+                kibibytes: opts.kibibytes,
+            },
             // A remote file need not exist on the machine displaying the
             // terminal. Force remains available, with a hostname in every URI.
             hyperlinks: opts
@@ -245,7 +262,7 @@ impl Style {
     // The separating space and ASCII classifier reset Unicode width state, so
     // combining/emoji sequences cannot cross these component boundaries.
     pub fn label_width(&self, entry: &Entry) -> usize {
-        escaped(&entry.name).width()
+        filename(&entry.name, self.quote_controls).width()
             + self.suffix(entry).len()
             + if self.icons == Icons::None {
                 0
@@ -257,7 +274,7 @@ impl Style {
     /// Names below a thumbnail retain classification and links, without a
     /// redundant font glyph. Long-view thumbnails use the same text path.
     pub fn name<'a>(&self, entry: &'a Entry) -> Cow<'a, str> {
-        let mut name = escaped(&entry.name);
+        let mut name = filename(&entry.name, self.quote_controls);
         let suffix = self.suffix(entry);
         if !suffix.is_empty() {
             name.to_mut().push_str(suffix);
@@ -332,13 +349,49 @@ impl Style {
     /// Write a complete label. `dir` is the listing directory (empty for file
     /// operands); it locates the entry for clickable links.
     pub fn write_name(&self, out: &mut impl Write, dir: &Path, entry: &Entry) -> io::Result<()> {
-        let name = escaped(&entry.name);
+        let name = filename(&entry.name, self.quote_controls);
         let (icon, space) = if self.icons == Icons::None {
             ("", "")
         } else {
             (self.icon(entry), " ")
         };
         self.write_parts(out, dir, entry, &[icon, space, &name, self.suffix(entry)])
+    }
+
+    fn prefix(&self, entry: &Entry) -> String {
+        use std::fmt::Write as _;
+        let mut prefix = String::new();
+        if self.prefix.inode {
+            match &entry.metadata {
+                Some(meta) => write!(prefix, "{} ", meta.inode).unwrap(),
+                None => prefix.push_str("? "),
+            }
+        }
+        if self.prefix.blocks {
+            if let Some(meta) = &entry.metadata {
+                crate::metadata::allocated(
+                    &mut prefix,
+                    meta.blocks,
+                    self.prefix.human,
+                    self.prefix.kibibytes,
+                );
+                prefix.push(' ');
+            } else {
+                prefix.push_str("? ");
+            }
+        }
+        prefix
+    }
+
+    /// Compact formats carry inode/allocation prefixes without selecting long
+    /// output. Long listings write those fields themselves before the name.
+    pub fn entry_width(&self, entry: &Entry) -> usize {
+        self.prefix(entry).len() + self.label_width(entry)
+    }
+
+    pub fn write_entry(&self, out: &mut impl Write, dir: &Path, entry: &Entry) -> io::Result<()> {
+        out.write_all(self.prefix(entry).as_bytes())?;
+        self.write_name(out, dir, entry)
     }
 
     // Width calculation and wrapping always operate on plain text, before SGR

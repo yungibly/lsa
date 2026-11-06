@@ -61,8 +61,8 @@ fn mixed_entries_hidden_and_raw_names() {
         "A.txt\nbad\\n\\u{1b}[31m\nbroken.png@\nfolder/\nsocket=\n桃.txt\n".as_bytes()
     );
     assert!(o.stderr.is_empty());
-    assert!(f.run(&["-a"]).stdout.starts_with(b".hidden\n"));
-    assert_eq!(f.run(&["-A"]).stdout, f.run(&["-a"]).stdout);
+    assert!(f.run(&["-a"]).stdout.starts_with(b"./\n../\n.hidden\n"));
+    assert!(f.run(&["-A"]).stdout.starts_with(b".hidden\n"));
     drop(socket);
 }
 
@@ -113,7 +113,8 @@ fn sizes_times_reverse_and_long_symlinks() {
     symlink("a", f.0.join("link")).unwrap();
     let out = String::from_utf8(f.run(&["-l"]).stdout).unwrap();
     assert!(out.contains("link@ -> a\n"));
-    assert_eq!(out.lines().count(), 4);
+    assert!(out.starts_with("total "));
+    assert_eq!(out.lines().count(), 5);
 }
 
 #[test]
@@ -159,8 +160,8 @@ fn directories_first_preserves_groups_under_reverse_and_other_sorts() {
         f.run(&["--dirs-first", "-t"]).stdout,
         b"y-dir/\nb-dir/\nc-link@\na\nz\n"
     );
-    // Sorting applies inside directory listings; explicit operands retain order.
-    assert_eq!(f.run(&["--dirs-first", "z", "a"]).stdout, b"z\na\n");
+    // Explicit operands use the same ordering as directory entries.
+    assert_eq!(f.run(&["--dirs-first", "z", "a"]).stdout, b"a\nz\n");
 }
 
 #[test]
@@ -174,9 +175,21 @@ fn selected_metadata_aligns_and_preserves_names_and_links() {
         f.run(&["--fields=size", "--bytes"]).stdout,
         b"   1 a\n1536 large\n"
     );
+    let modes = String::from_utf8(f.run(&["--fields=size,mode", "-h"]).stdout).unwrap();
+    let rows: Vec<Vec<_>> = modes
+        .lines()
+        .map(|line| {
+            line.split_whitespace()
+                .map(|field| field.trim_end_matches(['@', '+']))
+                .collect()
+        })
+        .collect();
     assert_eq!(
-        f.run(&["--fields=size,mode", "-h"]).stdout,
-        b"   1 -rw-r----- a\n1.5K -rw------- large\n"
+        rows,
+        vec![
+            vec!["1", "-rw-r-----", "a"],
+            vec!["1.5K", "-rw-------", "large"]
+        ]
     );
     assert_eq!(f.run(&["--long"]).stdout, f.run(&["-l"]).stdout);
     symlink("target\n\x1b", f.0.join("link")).unwrap();
@@ -198,7 +211,8 @@ fn operands_and_partial_errors() {
     f.touch("dir/inside", b"");
     symlink("dir", f.0.join("linkdir")).unwrap();
     assert_eq!(f.run(&["--", "-name"]).stdout, b"-name\n");
-    assert_eq!(f.run(&["linkdir"]).stdout, b"inside\n");
+    assert_eq!(f.run(&["linkdir"]).stdout, b"linkdir@\n");
+    assert_eq!(f.run(&["-H", "linkdir"]).stdout, b"inside\n");
     assert_eq!(f.run(&["-d", "linkdir"]).stdout, b"linkdir@\n");
     assert!(
         String::from_utf8(f.run(&["-l", "linkdir"]).stdout)
@@ -207,7 +221,7 @@ fn operands_and_partial_errors() {
     );
     let out = f.run(&["missing", "dir", "--", "-name"]);
     assert_eq!(out.status.code(), Some(1));
-    assert_eq!(out.stdout, b"dir:\ninside\n-name\n");
+    assert_eq!(out.stdout, b"-name\n\ndir:\ninside\n");
     assert!(String::from_utf8_lossy(&out.stderr).contains("missing:"));
     assert_eq!(f.run(&["--unknown"]).status.code(), Some(2));
     assert_eq!(f.run(&["dir"]).stdout, b"inside\n");
@@ -418,12 +432,15 @@ fn ls_compatible_flags() {
         line,
         format!("{} {} 5000 data\n", meta.ino(), meta.blocks() * 512)
     );
-    // -g replaces the owner with the group; -o matches the readable default.
+    // Explicit long output contains links and ownership; -g/-o omit one owner.
     assert_eq!(
-        plain(&["-g"]),
-        plain(&["--fields=mode,size,group,modified"])
+        plain(&["-g", "data"]),
+        plain(&["--fields=mode,links,group,size,modified", "data"])
     );
-    assert_eq!(plain(&["-o"]), plain(&["-l"]));
+    assert_eq!(
+        plain(&["-o", "data"]),
+        plain(&["--fields=mode,links,user,size,modified", "data"])
+    );
     // -u and -c select access and status-change times for display and -t.
     let past = |secs| std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
     fs::File::options()
@@ -448,18 +465,10 @@ fn ls_compatible_flags() {
     assert!(plain(&["-u", "--header", "data"]).contains("Accessed"));
     assert!(plain(&["-c", "--header", "data"]).contains("Changed"));
     assert_eq!(plain(&["-tu"]).lines().last(), Some("data"));
-    // Unsupported recursion explains itself; unknown flags name the letter.
-    for (flag, message) in [
-        ("-R", "recursive listings are not supported"),
-        ("-lQ", "unknown option -Q in -lQ"),
-    ] {
-        let out = f.run(&[flag]);
-        assert_eq!(out.status.code(), Some(2));
-        assert!(
-            String::from_utf8_lossy(&out.stderr).contains(message),
-            "{out:?}"
-        );
-    }
+    // Unknown flags name the letter even in combined options.
+    let out = f.run(&["-lQ"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("unknown option -Q in -lQ"));
 }
 
 #[test]
