@@ -4,6 +4,19 @@ User-facing changes per release. The release workflow publishes each version's
 section as its GitHub release notes. Measurements and their conditions are in
 [benchmarks/README.md](benchmarks/README.md).
 
+## v0.7.0 — 2026-11-06
+
+**Nerd Font icons across terminals and multiplexers.**
+
+- Automatic icons now use Nerd Font glyphs on every normal terminal, including
+  Rex and other multiplexers, instead of requiring a Ghostty identity. Glyph
+  rendering requires a font with the corresponding symbols.
+- Added `--icon-style=nerd|portable` to choose Nerd Font glyphs (default) or
+  basic Unicode symbols. Icon visibility remains controlled separately by
+  `--icons=auto|always|never` and `--no-icons`.
+- Pipes and dumb terminals remain plain by default. Graphics detection and
+  preview budgets are unchanged; enabling icons does not enable image protocols.
+
 ## v0.6.0 — 2026-11-06
 
 **A more familiar `ls` replacement: recursion, symlink controls and fuller details.**

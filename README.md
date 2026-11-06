@@ -59,6 +59,10 @@ camera RAW formats. See [formats, options and resource limits](docs/usage.md).
 
 ## Terminal support
 
+Nerd Font icons are enabled on normal terminals regardless of terminal name,
+including multiplexers. Use a font with Nerd Font glyphs, choose
+`--icon-style=portable` for basic Unicode symbols, or hide icons with `--no-icons`.
+
 Automatic graphics target direct **Ghostty and Kitty** sessions. The demo shows
 real Ghostty rendering; Kitty rendering is still unverified. Other terminals,
 SSH and multiplexers get text by default. `--protocol=kitty` can force graphics,

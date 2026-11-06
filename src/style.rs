@@ -1,5 +1,5 @@
 use crate::{
-    cli::{Options, When},
+    cli::{IconStyle, Options},
     display::filename,
     entry::{Entry, Kind},
     filetype::Category,
@@ -145,13 +145,13 @@ impl Style {
             color: opts.color.enabled(interactive && !no_color),
             icons: if !opts.icons.enabled(interactive) {
                 Icons::None
-            } else if opts.icons == When::Always
-                || term.name == "ghostty"
-                || env::var_os("TERM").is_some_and(|v| v == "xterm-ghostty")
-            {
-                Icons::Nerd
             } else {
-                Icons::Portable
+                // Fonts belong to the user's terminal configuration. Terminal
+                // names (including multiplexers) cannot tell us glyph support.
+                match opts.icon_style {
+                    IconStyle::Nerd => Icons::Nerd,
+                    IconStyle::Portable => Icons::Portable,
+                }
             },
             classify: opts.classify,
             slash: opts.slash,
