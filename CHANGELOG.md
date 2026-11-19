@@ -4,6 +4,22 @@ User-facing changes per release. The release workflow publishes each version's
 section as its GitHub release notes. Measurements and their conditions are in
 [benchmarks/README.md](benchmarks/README.md).
 
+## v0.7.1 — 2026-11-18
+
+**Automatic image previews in Rex.**
+
+- Rex sessions (`TERM_PROGRAM=rex` or `TERM=xterm-rex`) now enable Kitty
+  graphics automatically. Image grids, `--grid` and long-view miniatures no
+  longer need `--protocol=kitty` there. Previously Rex was treated as an unknown
+  terminal, so `--grid` printed a notice and fell back to text.
+- Rex is a multiplexer, but unlike tmux, screen and zellij it supports Kitty
+  graphics. Rendering and scrollback were checked by the user on Rex 0.1.0
+  (preview) on macOS with the protocol forced; the automatic path emits the
+  same bytes.
+- tmux, screen, zellij, SSH sessions, dumb terminals and unknown terminals still
+  use text by default, including when nested inside Rex. Detection still reads
+  environment hints only: no terminal queries, input handling or added latency.
+
 ## v0.7.0 — 2026-11-06
 
 **Nerd Font icons across terminals and multiplexers.**

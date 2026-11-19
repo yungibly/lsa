@@ -198,7 +198,7 @@ Images:
                         Long output keeps its one-row miniatures
   --no-images           Text only; never open image contents
   --protocol=auto|kitty|none
-                        Auto recognizes direct Ghostty/Kitty sessions
+                        Auto recognizes Ghostty, Kitty and Rex sessions
   --preview-limit=N     Preview attempts across all paths (0..4096; default 256)
   --cache-dir=PATH      Opt-in, bounded thumbnail cache (also accepts a space)
   --no-cache            Disable caching regardless of option order
@@ -218,10 +218,11 @@ input handling. The last text format (-l, -C, -x, -1 or -m) wins; options that
 imply long output also select that format. Explicit text formats override --grid,
 as do image-disabling flags. A notice explains this. Pipes default to plain
 names, one per line; explicit columns and comma-separated output still apply;
---grid never sends images to pipes. Unknown terminals, multiplexers and SSH
-sessions use text. On macOS, HEIC/HEIF, AVIF, TIFF, JPEG XL, PSD and camera RAW
-previews use the system image decoders. Preview failures are quiet and never
-hide names. Filenames are complete, with terminal controls escaped.
+--grid never sends images to pipes. Unknown terminals, SSH sessions and
+multiplexers other than Rex use text. On macOS, HEIC/HEIF, AVIF, TIFF, JPEG XL,
+PSD and camera RAW previews use the system image decoders. Preview failures are
+quiet and never hide names. Filenames are complete, with terminal controls
+escaped.
 
 Exit: 0 success (including closed pipes), 1 listing/output/cache-clear error,
 2 invalid options. See README.md for details and resource limits.
