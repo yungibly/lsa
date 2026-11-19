@@ -12,9 +12,12 @@ graphics terminal. In Rex, `--grid` had been ignored as an "unknown terminal".
 The user verified rendering and scrollback in Rex 0.1.0 (preview) on macOS with
 `--protocol=kitty`; headless checks show the automatic path emits identical
 bytes. Other multiplexers, SSH and unknown terminals keep text. Detection
-remains environment-only, with no terminal queries. Implemented and checked
-locally; hosted CI and release results are recorded in
-[compatibility](docs/compatibility.md).
+remains environment-only, with no terminal queries. Released as
+[v0.7.1](https://github.com/yungibly/lsa/releases/tag/v0.7.1), with the Homebrew
+tap updated. Local checks, four-platform CI, all eleven release jobs and the
+public Linux archive in a Rex session pass; see
+[compatibility](docs/compatibility.md). Automatic previews in the user's Rex
+still await a quick visual confirmation.
 
 v0.7.0 removes the Ghostty-only choice of Nerd Font glyphs. Normal TTY output
 uses Nerd Font icons across terminal brands, multiplexers and SSH sessions;
