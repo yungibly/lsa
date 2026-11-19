@@ -53,6 +53,31 @@ Run on x86-64 Linux, in a shell session that itself ran inside Rex
 - Release-tool tests pass. This is environment-variable simulation; real Rex
   rendering evidence is the user report above.
 
+### v0.7.1 hosted results (2026-11-18)
+
+- [PR #6](https://github.com/yungibly/lsa/pull/6) merged after
+  [all five CI jobs](https://github.com/yungibly/lsa/actions/runs/44437218553)
+  passed, covering native ARM64/x86-64 macOS and musl Linux plus Rust 1.88.
+  Each platform ran the complete headless suite, including the new Rex cases.
+- The v0.7.1 tag points to merge commit `7215b06`, whose source tree matches the
+  checked PR head `c297997`. All eleven
+  [release jobs](https://github.com/yungibly/lsa/actions/runs/44437842850)
+  passed on the first attempt: four platform archives with individual
+  checksums and `SHA256SUMS`, Homebrew installs on Apple Silicon, Intel Mac and
+  Linux, and the automatic tap update.
+- The tap formula reports 0.7.1, and all four archive hashes match the
+  published `SHA256SUMS`. Apple Silicon SHA-256:
+  `e0a015deb65479da3324e6f2c053d92088bfb51b71385c2f52685ede35dd33b5`.
+- The public x86-64 Linux archive passed its checksum, version, plain pipe
+  output and help-text checks. SHA-256:
+  `b6df61492e3aba9201a62cc7b79877076a6a17b0c537fa27bfb31b4795b5e6f2`. It ran in
+  the agent's shell inside a Linux Rex build (`TERM_PROGRAM=rex`,
+  `TERM=xterm-rex`, `TERM_PROGRAM_VERSION=0.0.1794859600-g40b90d`). Without an
+  override it reported `kitty=true`, chose the grid for `--grid` and emitted
+  Kitty image commands automatically. Simulated tmux and SSH inside that session
+  kept text, each with one notice. This checks detection and emitted bytes on a
+  second Rex build, not visible rendering.
+
 ### User follow-up (2026-11-06)
 
 The user reported completing the v0.6.0 checks successfully and then reported

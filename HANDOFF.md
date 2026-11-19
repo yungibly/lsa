@@ -24,4 +24,14 @@ Local validation (x86-64 Linux, inside Rex): formatting/Clippy, 109 Rust tests,
 release-tool tests pass. `check_layout.py` (115) passes with umask 022 but has a
 pre-existing umask-002 false failure; see [compatibility](docs/compatibility.md).
 
-**Next:** user confirms automatic Rex previews and Nerd Font icons on v0.7.1.
+[PR #6](https://github.com/yungibly/lsa/pull/6) merged after all five CI jobs
+passed. [v0.7.1](https://github.com/yungibly/lsa/releases/tag/v0.7.1) tags merge
+commit `7215b06`, whose tree matches the tested PR head. All eleven
+[release jobs](https://github.com/yungibly/lsa/actions/runs/44437842850) passed
+on the first attempt, including Homebrew installs and the tap update. The tap
+formula's hashes match `SHA256SUMS`. The public x86-64 Linux archive enabled
+graphics automatically in the agent's own Linux Rex session (bytes only).
+
+**Next:** the user runs `brew upgrade lsa` and confirms that `lsa img-test` and
+`lsa --grid` preview in Rex without `--protocol=kitty`. Nerd Font icon rendering
+in Rex is also still unconfirmed. No computer use.
