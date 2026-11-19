@@ -17,7 +17,8 @@ remains environment-only, with no terminal queries. Released as
 tap updated. Local checks, four-platform CI, all eleven release jobs and the
 public Linux archive in a Rex session pass; see
 [compatibility](docs/compatibility.md). After upgrading, the user confirmed
-automatic previews, `--grid` and the default Nerd Font icons in Rex.
+automatic previews, `--grid`, the default Nerd Font icons and
+`--icon-style=portable` in Rex.
 
 v0.7.0 removes the Ghostty-only choice of Nerd Font glyphs. Normal TTY output
 uses Nerd Font icons across terminal brands, multiplexers and SSH sessions;
@@ -57,9 +58,7 @@ Font icons in Rex. Exact version, geometry and transport were not supplied.
    - `-C` versus `-x`;
    - red dangling links and `-` directory sizes;
    - plain files on a light theme;
-   - the `--grid` notices;
-   - `--icon-style=portable` glyphs (▸ folders, ≡ documents/config, λ code,
-     ↗ links, · other files) in Ghostty or Rex: no empty boxes, aligned columns.
+   - the `--grid` notices.
 
    The steps are in [compatibility](docs/compatibility.md).
 2. **Carried over:** the v0.4.0 link click and scrollback check, and the v0.3.0

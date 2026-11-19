@@ -33,7 +33,7 @@ formula's hashes match `SHA256SUMS`. The public x86-64 Linux archive enabled
 graphics automatically in the agent's own Linux Rex session (bytes only).
 
 After upgrading, the user confirmed that `lsa img-test` and `lsa --grid`
-preview in Rex without `--protocol=kitty`, and that the default Nerd Font icons
-render. This closes the Rex follow-ups.
+preview in Rex without `--protocol=kitty`, and that both the default Nerd Font
+icons and `--icon-style=portable` symbols render. This closes the Rex follow-ups.
 
 **Next:** see the roadmap's detailed terminal evidence list. No computer use.
