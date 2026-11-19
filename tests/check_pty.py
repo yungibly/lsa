@@ -248,6 +248,24 @@ def main():
         code, data, err, _ = capture(["--protocol=kitty", "--grid", many], environment={name: "remote"})
         assert code == 0 and not err and len(images(data)) == 40
         runs += 1
+    # Rex supports Kitty graphics (user-verified), so either of its hints
+    # enables graphics without an override. A nested multiplexer, SSH or a dumb
+    # TERM still selects text, with the usual single --grid notice.
+    for env in [{"TERM_PROGRAM": "rex", "TERM": "xterm-rex"}, {"TERM_PROGRAM": "rex", "TERM": "xterm-256color"},
+                {"TERM_PROGRAM": None, "TERM": "xterm-rex"}]:
+        for args in [[], ["--grid"]]:
+            code, data, err, _ = capture([*args, many], environment=env)
+            assert code == 0 and not err and len(images(data)) == 40, (env, args, err)
+            # The automatic path emits exactly what the user checked with the override.
+            assert data == capture(["--protocol=kitty", *args, many], environment=env)[1]
+            runs += 1
+    for env, reason in [({"TERM_PROGRAM": "rex", "TERM": "tmux-256color", "TMUX": "test"}, b"multiplexer"),
+                        ({"TERM_PROGRAM": "rex", "TERM": "xterm-rex", "SSH_TTY": "/dev/pts/1"}, b"SSH session"),
+                        ({"TERM_PROGRAM": "rex", "TERM": "dumb"}, b"unknown terminal")]:
+        code, data, err, _ = capture(["--grid", many], environment=env)
+        assert code == 0 and not images(data) and b"image-00.png" in data, env
+        assert err.startswith(b"lsa: --grid ignored:") and reason in err and err.count(b"\n") == 1, err
+        runs += 1
     code, data, err, _ = capture(["--grid", ROOT / "img-test/generated"])
     assert code == 0 and len(images(data)) == 15 and not err, err
     runs += 1

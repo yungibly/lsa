@@ -4,6 +4,7 @@ use crate::{
 };
 use std::{
     env,
+    ffi::OsStr,
     io::{self, IsTerminal},
 };
 
@@ -32,11 +33,7 @@ impl Terminal {
             .any(|key| env::var_os(key).is_some())
             || term.as_encoded_bytes().starts_with(b"screen")
             || term.as_encoded_bytes().starts_with(b"tmux");
-        let known = term != "dumb"
-            && (name == "ghostty"
-                || name == "kitty"
-                || term == "xterm-kitty"
-                || term == "xterm-ghostty");
+        let known = known_graphics(&name, &term);
         let ssh = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]
             .iter()
             .any(|key| env::var_os(key).is_some());
@@ -84,6 +81,17 @@ impl Terminal {
     }
 }
 
+/// Environment hints that enable Kitty graphics automatically. Rex is a
+/// multiplexer, but unlike tmux/screen/zellij its Kitty graphics were
+/// user-verified (0.1.0 preview). Add terminals only with real evidence.
+fn known_graphics(name: &OsStr, term: &OsStr) -> bool {
+    term != "dumb"
+        && (["ghostty", "kitty", "rex"].iter().any(|n| name == *n)
+            || ["xterm-ghostty", "xterm-kitty", "xterm-rex"]
+                .iter()
+                .any(|t| term == *t))
+}
+
 // SSH follows the hyperlink policy: a forwarded TERM=xterm-ghostty would
 // otherwise stream up to the whole image budget over the connection unasked.
 fn select(tty: bool, opts: &Options, mux: bool, ssh: bool, known: bool) -> (bool, &'static str) {
@@ -98,7 +106,7 @@ fn select(tty: bool, opts: &Options, mux: bool, ssh: bool, known: bool) -> (bool
     } else if ssh {
         (false, "SSH session: graphics not auto-enabled")
     } else if known {
-        (true, "Kitty/Ghostty environment hint")
+        (true, "Ghostty/Kitty/Rex environment hint")
     } else {
         (false, "unknown terminal")
     }
@@ -125,5 +133,30 @@ mod tests {
         assert!(!select(false, &opts, false, false, true).0);
         opts.no_images = true;
         assert!(!select(true, &opts, false, false, true).0);
+    }
+    #[test]
+    fn graphics_hints_name_verified_terminals() {
+        let known = |name: &str, term: &str| known_graphics(name.as_ref(), term.as_ref());
+        for (name, term) in [
+            ("ghostty", "xterm-256color"),
+            ("kitty", "xterm-256color"),
+            ("rex", "xterm-256color"),
+            ("", "xterm-ghostty"),
+            ("", "xterm-kitty"),
+            ("rex", "xterm-rex"),
+            ("other", "xterm-rex"),
+        ] {
+            assert!(known(name, term), "{name} {term}");
+        }
+        for (name, term) in [
+            ("", "xterm-256color"),
+            ("rex", "dumb"),
+            ("Rex", "xterm-256color"),
+            ("rexterm", "xterm-256color"),
+            ("tmux", "tmux-256color"),
+            ("WezTerm", "xterm-256color"),
+        ] {
+            assert!(!known(name, term), "{name} {term}");
+        }
     }
 }

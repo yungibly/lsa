@@ -12,10 +12,46 @@ terminal or library is not lsa validation; record real terminal evidence here.
 | Ghostty terminal core (libghostty-vt) via tui-test 0.1.0-beta.5, headless | v0.5.0 checked: name alignment beside miniatures and icons, colors, parsed OSC 8 targets, `-C`/`-x`, wrapped grid labels, scrollback, budget fallback, no leaked payload bytes | Parsed, not drawn | `tests/check_ghostty_vt.py`; text layer only |
 | Headless PTY, 4 native CI targets (arm64/x86-64 macOS, arm64/x86-64 musl Linux) | Byte and cursor models | Protocol bytes, decoded RGBA payloads, placements and budgets | 248 scenarios for v0.5.0, plus unit and CLI tests |
 | macOS ImageIO, arm64 macOS (Darwin 27) | — | HEIC/HEIF, AVIF, TIFF (alpha), PSD, 18-48 MP JPEG/HEIC/AVIF, EXIF orientations checked by pixels | Fixtures made with `sips`; real camera RAW and iPhone HEIC files not yet tried |
+| Rex 0.1.0 preview (`TERM_PROGRAM_VERSION=0.1.0-preview.20`), macOS, no SSH or other multiplexer variables, 121×45 cells at 8×18 px | Nerd Font icon rendering not yet confirmed | User pass with `--protocol=kitty` (2026-11-18): images drew correctly and stayed in scrollback | Multiplexer with Kitty graphics support. Auto-enabled since v0.7.1 by `TERM_PROGRAM=rex` or `TERM=xterm-rex`; the automatic path emits the same bytes as the checked override (headless). Preview builds keep the version number, so the exact build is unknown |
 | Kitty | Unverified | Unverified | Auto-enabled by `TERM=xterm-kitty` or `TERM_PROGRAM=kitty` |
-| tmux, screen, zellij | Unverified | Text by default | `--protocol=kitty` forcing is unverified |
+| tmux, screen, zellij (also inside Rex) | Unverified | Text by default | `--protocol=kitty` forcing is unverified |
 | SSH | Links off by default | Text by default since v0.5.0 | Forced graphics and remote file URIs unverified |
 | Other terminals | Unverified | Text | Unknown terminals never get graphics automatically |
+
+### Rex graphics (2026-11-18, v0.7.1)
+
+In Rex, `lsa --grid` printed a notice and fell back to the long text view.
+`--diagnose` showed `terminal=rex`, `version=0.1.0-preview.20`, `kitty=false`
+and `reason=unknown terminal`: detection only recognized Ghostty and Kitty names.
+Rex is a new multiplexer, still in preview. The user then ran
+`lsa --protocol=kitty img-test` and reported that images drew correctly and
+remained in scrollback. Rex preview builds update without changing the version
+number, so the exact build is not recorded; the macOS version and
+architecture were not supplied. This report is about graphics only; Nerd Font
+icon rendering in Rex is still unconfirmed.
+
+v0.7.1 adds `TERM_PROGRAM=rex` and `TERM=xterm-rex` to the recognized hints.
+The user agreed not to query terminal capabilities: it would add a round trip
+to every listing, and the project already rules out input handling.
+
+### v0.7.1 local verification (2026-11-18)
+
+Run on x86-64 Linux, in a shell session that itself ran inside Rex
+(`TERM=xterm-rex`):
+
+- Formatting, Clippy with warnings denied, and 109 Rust tests pass. A new unit
+  test covers the recognized hints, including case and prefix mismatches and
+  `TERM=dumb`.
+- 30 headless PTY checks pass, 9 of them new. Rex hints (either variable alone
+  or both) produce grids automatically and with `--grid`, byte-identical to
+  `--protocol=kitty`. tmux inside Rex, SSH from Rex and `TERM=dumb` keep text
+  and print one `--grid` notice naming the reason.
+- Cache, thumbnail, gallery and recursive checks pass. Layout/style checks
+  (115) pass with umask 022. Under this machine's umask 002, a long-view
+  permission count in `check_layout.py` fails, both before and after this
+  change: `-rw-rw-r--` contains `-rw` twice. CI uses umask 022.
+- Release-tool tests pass. This is environment-variable simulation; real Rex
+  rendering evidence is the user report above.
 
 ### User follow-up (2026-11-06)
 

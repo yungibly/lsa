@@ -1,6 +1,6 @@
 # Product and implementation decisions
 
-Updated 2026-11-06 for v0.6.0. The priority is an `ls` alias that feels right
+Updated 2026-11-18 for v0.7.1. The priority is an `ls` alias that feels right
 immediately, with useful previews and bounded work.
 
 | Decision | Reason |
@@ -20,7 +20,7 @@ immediately, with useful previews and bounded work.
 | Visible dangling links | One extra stat per symlink, only when output is styled or previewable. They are red (LS_COLORS `or`/`mi`), get broken-link artwork and spend no preview attempt. |
 | Bounded LS_COLORS | Up to 4,096 rules and 64-byte keys/values, SGR digits only. Suffixes are hash-indexed; the last matching rule wins; case-insensitive only when no exact match. |
 | Hyperlinks without `.` components | `/cwd/./name` looked odd and some consumers may not normalize it. `..` and symlink identity are preserved; nothing is canonicalized. |
-| Conservative protocol detection | Direct Ghostty/Kitty hints enable Kitty graphics. Multiplexers, SSH sessions and unknown terminals use text. SSH matches the link policy, because a forwarded `TERM` could stream the whole image budget unasked. An explicit `--grid` that cannot apply prints one notice. |
+| Conservative protocol detection | Direct Ghostty/Kitty hints enable Kitty graphics, as do Rex hints: Rex is a multiplexer, but its Kitty graphics were user-verified on its 0.1.0 preview (v0.7.1). Other multiplexers, SSH sessions and unknown terminals use text. Detection reads environment hints only; querying the terminal would need input handling and a round trip per listing. SSH matches the link policy, because a forwarded `TERM` could stream the whole image budget unasked. An explicit `--grid` that cannot apply prints one notice. |
 | Font choice is independent of terminal identity | Nerd Font icons default on for normal TTY output, including multiplexers and SSH. A terminal name cannot reveal the configured font. `--icon-style=portable` preserves the basic Unicode alternative; `--icons` controls visibility independently. Pipes and dumb terminals stay undecorated automatically. Graphics detection remains separate. |
 | Anonymous inline Kitty placements | Image IDs could collide with other programs and change earlier scrollback images; anonymous placements preserve history. No terminal queries, raw mode or stdin handling. |
 | Compressed payloads (`o=z`) | zlib level 1 (miniz_oxide, already built for PNG) when it shortens the command: artwork shrinks ~30×, photos ~15-20%. Budgets count the uncompressed length, so limits stay exact. Ghostty decodes `o=z` for chunked direct transmission. |

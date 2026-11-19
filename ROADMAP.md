@@ -1,11 +1,20 @@
 # Roadmap
 
-Updated 2026-11-06 for v0.7.0 terminal-independent icons. lsa prints into scrollback,
+Updated 2026-11-18 for v0.7.1 Rex graphics detection. lsa prints into scrollback,
 returns to the shell and keeps one mixed ordering with complete names. History lives in the
 [changelog](CHANGELOG.md); evidence in [compatibility](docs/compatibility.md)
 and [measurements](benchmarks/README.md).
 
 ## Status
+
+v0.7.1 recognizes Rex (`TERM_PROGRAM=rex` or `TERM=xterm-rex`) as a Kitty
+graphics terminal. In Rex, `--grid` had been ignored as an "unknown terminal".
+The user verified rendering and scrollback in Rex 0.1.0 (preview) on macOS with
+`--protocol=kitty`; headless checks show the automatic path emits identical
+bytes. Other multiplexers, SSH and unknown terminals keep text. Detection
+remains environment-only, with no terminal queries. Implemented and checked
+locally; hosted CI and release results are recorded in
+[compatibility](docs/compatibility.md).
 
 v0.7.0 removes the Ghostty-only choice of Nerd Font glyphs. Normal TTY output
 uses Nerd Font icons across terminal brands, multiplexers and SSH sessions;
@@ -34,8 +43,9 @@ Font icons in Rex. Exact version, geometry and transport were not supplied.
 
 ## Next
 
-1. **Rex icon follow-up for v0.7.0.** Verify the default glyphs and the portable
-   alternative in the user's font, and record terminal version and transport.
+1. **Rex follow-up for v0.7.1.** Confirm that a plain `lsa img-test` and
+   `lsa --grid` show images in Rex without `--protocol=kitty`. Also confirm the
+   v0.7.0 default Nerd Font glyphs and `--icon-style=portable` in the user's font.
 2. **Detailed terminal evidence.** The user reports the v0.6.0 checks work well;
    record version, geometry and transport when repeating or documenting:
    - fuller `-l` columns and totals beside miniatures, including narrow widths;
@@ -63,7 +73,7 @@ Font icons in Rex. Exact version, geometry and transport were not supplied.
   folders there, and would lift the 16 MP limit for JPEG.
 - **Other terminals.** WezTerm and Konsole implement Kitty graphics; iTerm2 has
   its own protocol; Sixel is widespread. Add any of them only with real-terminal
-  evidence.
+  evidence, as Rex was added in v0.7.1.
 - **Video frames.** WebM/MP4 thumbnails remain deferred: they need a codec stack
   or an external process.
 

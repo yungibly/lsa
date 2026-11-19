@@ -112,7 +112,7 @@ def prepare(tag, version, repository, packages, output, changelog=CHANGELOG):
         "`shasum -a 256 --ignore-missing -c SHA256SUMS` on macOS or "
         "`sha256sum --ignore-missing -c SHA256SUMS` on Linux, then extract and "
         "copy `bin/lsa` onto your PATH.\n\n"
-        "Automatic thumbnails target direct Ghostty/Kitty terminals. "
+        "Automatic thumbnails target direct Ghostty/Kitty sessions and Rex. "
         "Headless CI checks protocol bytes, not terminal rendering; "
         "see [compatibility notes](" + homepage + f"/blob/{tag}/docs/compatibility.md).\n"
     )

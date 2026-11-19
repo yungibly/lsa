@@ -286,6 +286,8 @@ fn defaults_are_plain_and_natural_and_classification_is_explicit() {
     let run = |args: &[&str]| {
         Command::new(env!("CARGO_BIN_EXE_lsa"))
             .current_dir(&f.0)
+            .env_remove("LS_COLORS")
+            .env_remove("NO_COLOR")
             .args(args)
             .output()
             .unwrap()

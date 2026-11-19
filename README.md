@@ -63,10 +63,11 @@ Nerd Font icons are enabled on normal terminals regardless of terminal name,
 including multiplexers. Use a font with Nerd Font glyphs, choose
 `--icon-style=portable` for basic Unicode symbols, or hide icons with `--no-icons`.
 
-Automatic graphics target direct **Ghostty and Kitty** sessions. The demo shows
-real Ghostty rendering; Kitty rendering is still unverified. Other terminals,
-SSH and multiplexers get text by default. `--protocol=kitty` can force graphics,
-but those paths need their own testing. [Verified environments →](docs/compatibility.md)
+Automatic graphics target direct **Ghostty and Kitty** sessions and **Rex**. The
+demo shows real Ghostty rendering; Rex rendering was checked by the user, and
+Kitty rendering is still unverified. Other terminals, SSH and other multiplexers
+get text by default. `--protocol=kitty` can force graphics, but those paths need
+their own testing. [Verified environments →](docs/compatibility.md)
 
 `-R` prints recursive directory sections with cycle detection and a shared
 preview budget. Familiar flags follow normal shell expectations; natural

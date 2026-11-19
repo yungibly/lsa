@@ -83,10 +83,11 @@ compatibility or a raw filename protocol for scripts.
 Images, files, folders and links share one ordering: a thumbnail represents its
 entry, and a failed preview never hides a name.
 
-- In a direct Ghostty or Kitty session, listings where at least half the entries
-  are images, or that fit one row, become a thumbnail grid. Other listings show
-  one-row miniatures beside names in the long view. Multiplexers, SSH sessions
-  and unknown terminals use text unless `--protocol=kitty` forces graphics.
+- In a direct Ghostty or Kitty session, or in Rex, listings where at least half
+  the entries are images, or that fit one row, become a thumbnail grid. Other
+  listings show one-row miniatures beside names in the long view. Other
+  multiplexers (tmux, screen, zellij), SSH sessions and unknown terminals use
+  text unless `--protocol=kitty` forces graphics.
 - Every tile has pixels: a thumbnail, or built-in folder, file, media, link,
   broken-link or error artwork.
 - Formats: PNG, JPEG (with EXIF orientation), GIF (first frame), WebP, BMP, ICO
