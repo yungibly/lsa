@@ -16,8 +16,8 @@ remains environment-only, with no terminal queries. Released as
 [v0.7.1](https://github.com/yungibly/lsa/releases/tag/v0.7.1), with the Homebrew
 tap updated. Local checks, four-platform CI, all eleven release jobs and the
 public Linux archive in a Rex session pass; see
-[compatibility](docs/compatibility.md). Automatic previews in the user's Rex
-still await a quick visual confirmation.
+[compatibility](docs/compatibility.md). After upgrading, the user confirmed
+automatic previews, `--grid` and the default Nerd Font icons in Rex.
 
 v0.7.0 removes the Ghostty-only choice of Nerd Font glyphs. Normal TTY output
 uses Nerd Font icons across terminal brands, multiplexers and SSH sessions;
@@ -46,10 +46,7 @@ Font icons in Rex. Exact version, geometry and transport were not supplied.
 
 ## Next
 
-1. **Rex follow-up for v0.7.1.** Confirm that a plain `lsa img-test` and
-   `lsa --grid` show images in Rex without `--protocol=kitty`. Also confirm the
-   v0.7.0 default Nerd Font glyphs and `--icon-style=portable` in the user's font.
-2. **Detailed terminal evidence.** The user reports the v0.6.0 checks work well;
+1. **Detailed terminal evidence.** The user reports the v0.6.0 checks work well;
    record version, geometry and transport when repeating or documenting:
    - fuller `-l` columns and totals beside miniatures, including narrow widths;
    - recursive sections and budget fallback, with earlier images in scrollback;
@@ -60,10 +57,12 @@ Font icons in Rex. Exact version, geometry and transport were not supplied.
    - `-C` versus `-x`;
    - red dangling links and `-` directory sizes;
    - plain files on a light theme;
-   - the `--grid` notices.
+   - the `--grid` notices;
+   - `--icon-style=portable` glyphs (▸ folders, ≡ documents/config, λ code,
+     ↗ links, · other files) in Ghostty or Rex: no empty boxes, aligned columns.
 
    The steps are in [compatibility](docs/compatibility.md).
-3. **Carried over:** the v0.4.0 link click and scrollback check, and the v0.3.0
+2. **Carried over:** the v0.4.0 link click and scrollback check, and the v0.3.0
    default-details and AM/PM appearance.
 
 ## Open questions

@@ -32,6 +32,8 @@ on the first attempt, including Homebrew installs and the tap update. The tap
 formula's hashes match `SHA256SUMS`. The public x86-64 Linux archive enabled
 graphics automatically in the agent's own Linux Rex session (bytes only).
 
-**Next:** the user runs `brew upgrade lsa` and confirms that `lsa img-test` and
-`lsa --grid` preview in Rex without `--protocol=kitty`. Nerd Font icon rendering
-in Rex is also still unconfirmed. No computer use.
+After upgrading, the user confirmed that `lsa img-test` and `lsa --grid`
+preview in Rex without `--protocol=kitty`, and that the default Nerd Font icons
+render. This closes the Rex follow-ups.
+
+**Next:** see the roadmap's detailed terminal evidence list. No computer use.

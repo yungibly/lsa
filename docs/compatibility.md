@@ -12,7 +12,7 @@ terminal or library is not lsa validation; record real terminal evidence here.
 | Ghostty terminal core (libghostty-vt) via tui-test 0.1.0-beta.5, headless | v0.5.0 checked: name alignment beside miniatures and icons, colors, parsed OSC 8 targets, `-C`/`-x`, wrapped grid labels, scrollback, budget fallback, no leaked payload bytes | Parsed, not drawn | `tests/check_ghostty_vt.py`; text layer only |
 | Headless PTY, 4 native CI targets (arm64/x86-64 macOS, arm64/x86-64 musl Linux) | Byte and cursor models | Protocol bytes, decoded RGBA payloads, placements and budgets | 248 scenarios for v0.5.0, plus unit and CLI tests |
 | macOS ImageIO, arm64 macOS (Darwin 27) | — | HEIC/HEIF, AVIF, TIFF (alpha), PSD, 18-48 MP JPEG/HEIC/AVIF, EXIF orientations checked by pixels | Fixtures made with `sips`; real camera RAW and iPhone HEIC files not yet tried |
-| Rex 0.1.0 preview (`TERM_PROGRAM_VERSION=0.1.0-preview.20`), macOS, no SSH or other multiplexer variables, 121×45 cells at 8×18 px | Nerd Font icon rendering not yet confirmed | User pass with `--protocol=kitty` (2026-11-18): images drew correctly and stayed in scrollback | Multiplexer with Kitty graphics support. Auto-enabled since v0.7.1 by `TERM_PROGRAM=rex` or `TERM=xterm-rex`; the automatic path emits the same bytes as the checked override (headless). Preview builds keep the version number, so the exact build is unknown |
+| Rex 0.1.0 preview (`TERM_PROGRAM_VERSION=0.1.0-preview.20`), macOS, no SSH or other multiplexer variables, 121×45 cells at 8×18 px | User pass for v0.7.1 default Nerd Font icons (2026-11-18); font not recorded; `--icon-style=portable` runs, glyphs not yet compared with the expected symbols | User pass (2026-11-18): with `--protocol=kitty`, images drew correctly and stayed in scrollback; with v0.7.1, `lsa img-test` and `lsa --grid` previewed without an override | Multiplexer with Kitty graphics support. Auto-enabled since v0.7.1 by `TERM_PROGRAM=rex` or `TERM=xterm-rex`. Preview builds keep the version number, so the exact build is unknown |
 | Kitty | Unverified | Unverified | Auto-enabled by `TERM=xterm-kitty` or `TERM_PROGRAM=kitty` |
 | tmux, screen, zellij (also inside Rex) | Unverified | Text by default | `--protocol=kitty` forcing is unverified |
 | SSH | Links off by default | Text by default since v0.5.0 | Forced graphics and remote file URIs unverified |
@@ -33,6 +33,12 @@ icon rendering in Rex is still unconfirmed.
 v0.7.1 adds `TERM_PROGRAM=rex` and `TERM=xterm-rex` to the recognized hints.
 The user agreed not to query terminal capabilities: it would add a round trip
 to every listing, and the project already rules out input handling.
+
+After upgrading to v0.7.1, the user confirmed that `lsa img-test` and
+`lsa --grid` show images in Rex without `--protocol=kitty`, and that the default
+Nerd Font icons render there. The font was not recorded.
+`--icon-style=portable` also ran without problems, but its glyphs were not
+compared with the expected symbols. This closes the 2026-11-06 Rex icon report below.
 
 ### v0.7.1 local verification (2026-11-18)
 
@@ -84,7 +90,7 @@ The user reported completing the v0.6.0 checks successfully and then reported
 that Nerd Font icons were missing while using Rex. Terminal version, geometry,
 font and transport details were not supplied, so this report is not assigned
 to a particular row or protocol above. v0.7.0 removes the terminal-name icon
-restriction; actual Rex rendering still needs confirmation after the fix.
+restriction; the user confirmed Rex icon rendering on v0.7.1 (2026-11-18).
 
 ### v0.7.0 local verification (2026-11-06)
 
